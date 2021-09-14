@@ -172,6 +172,14 @@ public:
         Error Open(otUdpReceive aHandler, void *aContext);
 
         /**
+         * This method returns if the UDP socket is open.
+         *
+         * @returns If the UDP socket is open.
+         *
+         */
+        bool IsOpen(void) const;
+
+        /**
          * This method binds the UDP socket.
          *
          * @param[in]  aSockAddr            A reference to the socket address.
@@ -323,13 +331,10 @@ public:
     class Header
     {
     public:
-        enum : uint8_t
-        {
-            kSourcePortFieldOffset = 0, ///< The byte offset of Source Port field in UDP header.
-            kDestPortFieldOffset   = 2, ///< The byte offset of Destination Port field in UDP header.
-            kLengthFieldOffset     = 4, ///< The byte offset of Length field in UDP header.
-            kChecksumFieldOffset   = 6, ///< The byte offset of Checksum field in UDP header.
-        };
+        static constexpr uint16_t kSourcePortFieldOffset = 0; ///< Byte offset of Source Port field in UDP header.
+        static constexpr uint16_t kDestPortFieldOffset   = 2; ///< Byte offset of Destination Port field in UDP header.
+        static constexpr uint16_t kLengthFieldOffset     = 4; ///< Byte offset of Length field in UDP header.
+        static constexpr uint16_t kChecksumFieldOffset   = 6; ///< Byte offset of Checksum field in UDP header.
 
         /**
          * This method returns the UDP Source Port.
@@ -445,6 +450,16 @@ public:
      *
      */
     Error Open(SocketHandle &aSocket, otUdpReceive aHandler, void *aContext);
+
+    /**
+     * This method returns if a UDP socket is open.
+     *
+     * @param[in]  aSocket   A reference to the socket.
+     *
+     * @returns If the UDP socket is open.
+     *
+     */
+    bool IsOpen(const SocketHandle &aSocket) const { return mSockets.Contains(aSocket); }
 
     /**
      * This method binds a UDP socket.
@@ -574,6 +589,18 @@ public:
 #endif
 
     /**
+     * This method returns whether a udp port is being used by OpenThread or any of it's optional
+     * features, e.g. CoAP API.
+     *
+     * @param[in]   aPort       The udp port
+     *
+     * @retval True when port is used by the OpenThread.
+     * @retval False when the port is not used by OpenThread.
+     *
+     */
+    bool IsPortInUse(uint16_t aPort) const;
+
+    /**
      * This method returns whether a udp port belongs to the platform or the stack.
      *
      * @param[in]   aPort       The udp port
@@ -585,11 +612,14 @@ public:
     bool ShouldUsePlatformUdp(uint16_t aPort) const;
 
 private:
-    enum
-    {
-        kDynamicPortMin = 49152, ///< Service Name and Transport Protocol Port Number Registry
-        kDynamicPortMax = 65535, ///< Service Name and Transport Protocol Port Number Registry
-    };
+    static constexpr uint16_t kDynamicPortMin = 49152; // Service Name and Transport Protocol Port Number Registry
+    static constexpr uint16_t kDynamicPortMax = 65535; // Service Name and Transport Protocol Port Number Registry
+
+    // Reserved range for use by SRP server
+    static constexpr uint16_t kSrpServerPortMin = OPENTHREAD_CONFIG_SRP_SERVER_UDP_PORT_MIN;
+    static constexpr uint16_t kSrpServerPortMax = OPENTHREAD_CONFIG_SRP_SERVER_UDP_PORT_MAX;
+
+    static bool IsPortReserved(uint16_t aPort);
 
     void AddSocket(SocketHandle &aSocket);
     void RemoveSocket(SocketHandle &aSocket);

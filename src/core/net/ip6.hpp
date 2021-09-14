@@ -53,6 +53,7 @@
 #include "net/ip6_mpl.hpp"
 #include "net/netif.hpp"
 #include "net/socket.hpp"
+#include "net/tcp6.hpp"
 #include "net/udp6.hpp"
 
 namespace ot {
@@ -107,20 +108,17 @@ class Ip6 : public InstanceLocator, private NonCopyable
     friend class Mpl;
 
 public:
-    enum : uint16_t
-    {
-        /**
-         * The max datagram length (in bytes) of an IPv6 message.
-         *
-         */
-        kMaxDatagramLength = OPENTHREAD_CONFIG_IP6_MAX_DATAGRAM_LENGTH,
+    /**
+     * The max datagram length (in bytes) of an IPv6 message.
+     *
+     */
+    static constexpr uint16_t kMaxDatagramLength = OPENTHREAD_CONFIG_IP6_MAX_DATAGRAM_LENGTH;
 
-        /**
-         * The max datagram length (in bytes) of an unfragmented IPv6 message.
-         *
-         */
-        kMaxAssembledDatagramLength = OPENTHREAD_CONFIG_IP6_MAX_ASSEMBLED_DATAGRAM,
-    };
+    /**
+     * The max datagram length (in bytes) of an unfragmented IPv6 message.
+     *
+     */
+    static constexpr uint16_t kMaxAssembledDatagramLength = OPENTHREAD_CONFIG_IP6_MAX_ASSEMBLED_DATAGRAM;
 
     /**
      * This constructor initializes the object.
@@ -289,7 +287,7 @@ public:
      * @returns A pointer to the selected IPv6 source address or nullptr if no source address was found.
      *
      */
-    const NetifUnicastAddress *SelectSourceAddress(MessageInfo &aMessageInfo);
+    const Netif::UnicastAddress *SelectSourceAddress(MessageInfo &aMessageInfo);
 
     /**
      * This method returns a reference to the send queue.
@@ -300,29 +298,22 @@ public:
     const PriorityQueue &GetSendQueue(void) const { return mSendQueue; }
 
     /**
-     * This static method converts an `IpProto` enumeration to a string.
+     * This static method converts an IP protocol number to a string.
      *
-     * @returns The string representation of an IP protocol enumeration.
+     * @param[in] aIpPorto  An IP protocol number.
+     *
+     * @returns The string representation of @p aIpProto.
      *
      */
     static const char *IpProtoToString(uint8_t aIpProto);
 
 private:
-    enum : uint8_t
-    {
-        kDefaultHopLimit      = OPENTHREAD_CONFIG_IP6_HOP_LIMIT_DEFAULT,
-        kIp6ReassemblyTimeout = OPENTHREAD_CONFIG_IP6_REASSEMBLY_TIMEOUT,
-    };
+    static constexpr uint8_t kDefaultHopLimit      = OPENTHREAD_CONFIG_IP6_HOP_LIMIT_DEFAULT;
+    static constexpr uint8_t kIp6ReassemblyTimeout = OPENTHREAD_CONFIG_IP6_REASSEMBLY_TIMEOUT;
 
-    enum : uint16_t
-    {
-        kMinimalMtu = 1280,
-    };
+    static constexpr uint16_t kMinimalMtu = 1280;
 
-    enum : uint32_t
-    {
-        kStateUpdatePeriod = 1000,
-    };
+    static constexpr uint32_t kStateUpdatePeriod = 1000;
 
     static void HandleSendQueue(Tasklet &aTasklet);
     void        HandleSendQueue(void);
@@ -357,7 +348,8 @@ private:
     Error InsertMplOption(Message &aMessage, Header &aHeader, MessageInfo &aMessageInfo);
     Error RemoveMplOption(Message &aMessage);
     Error HandleOptions(Message &aMessage, Header &aHeader, bool aIsOutbound, bool &aReceive);
-    Error HandlePayload(Message &          aMessage,
+    Error HandlePayload(Header &           aIp6Header,
+                        Message &          aMessage,
                         MessageInfo &      aMessageInfo,
                         uint8_t            aIpProto,
                         Message::Ownership aMessageOwnership);
@@ -375,6 +367,10 @@ private:
     Icmp mIcmp;
     Udp  mUdp;
     Mpl  mMpl;
+
+#if OPENTHREAD_CONFIG_TCP_ENABLE
+    Tcp mTcp;
+#endif
 
 #if OPENTHREAD_CONFIG_IP6_FRAGMENTATION_ENABLE
     MessageQueue mReassemblyList;

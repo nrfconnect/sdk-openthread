@@ -71,7 +71,7 @@ SubMac::SubMac(Instance &aInstance)
     , mCslChannel(0)
     , mIsCslChannelSpecified(false)
     , mCslLastSync(0)
-    , mCslParentDrift(kCslWorstCrystalPpm)
+    , mCslParentAccuracy(kCslWorstCrystalPpm)
     , mCslParentUncert(kCslWorstUncertainty)
     , mCslState(kCslIdle)
     , mCslTimer(aInstance, SubMac::HandleCslTimer)
@@ -105,15 +105,15 @@ otRadioCaps SubMac::GetCaps(void) const
     caps |= OT_RADIO_CAPS_ENERGY_SCAN;
 #endif
 
-#if OPENTHREAD_CONFIG_MAC_SOFTWARE_TX_SECURITY_ENABLE
+#if OPENTHREAD_CONFIG_MAC_SOFTWARE_TX_SECURITY_ENABLE && (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
     caps |= OT_RADIO_CAPS_TRANSMIT_SEC;
 #endif
 
-#if OPENTHREAD_CONFIG_MAC_SOFTWARE_TX_TIMING_ENABLE
+#if OPENTHREAD_CONFIG_MAC_SOFTWARE_TX_TIMING_ENABLE && (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
     caps |= OT_RADIO_CAPS_TRANSMIT_TIMING;
 #endif
 
-#if OPENTHREAD_CONFIG_MAC_SOFTWARE_RX_TIMING_ENABLE
+#if OPENTHREAD_CONFIG_MAC_SOFTWARE_RX_TIMING_ENABLE && (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
     caps |= OT_RADIO_CAPS_RECEIVE_TIMING;
 #endif
 
@@ -331,19 +331,19 @@ void SubMac::ProcessTransmitSecurity(void)
     VerifyOrExit(mTransmitFrame.GetSecurityEnabled());
     VerifyOrExit(!mTransmitFrame.IsSecurityProcessed());
 
-    if (!mTransmitFrame.IsARetransmission())
+    SuccessOrExit(mTransmitFrame.GetKeyIdMode(keyIdMode));
+
+    if (!mTransmitFrame.IsHeaderUpdated())
     {
         mTransmitFrame.SetKeyId(mKeyId);
     }
 
     VerifyOrExit(ShouldHandleTransmitSecurity());
-
-    SuccessOrExit(mTransmitFrame.GetKeyIdMode(keyIdMode));
     VerifyOrExit(keyIdMode == Frame::kKeyIdMode1);
 
     mTransmitFrame.SetAesKey(GetCurrentMacKey());
 
-    if (!mTransmitFrame.IsARetransmission())
+    if (!mTransmitFrame.IsHeaderUpdated())
     {
         uint32_t frameCounter = GetFrameCounter();
 
@@ -406,7 +406,7 @@ void SubMac::StartCsmaBackoff(void)
     }
 
     backoff = Random::NonCrypto::GetUint32InRange(0, static_cast<uint32_t>(1UL << backoffExponent));
-    backoff *= (static_cast<uint32_t>(kUnitBackoffPeriod) * OT_RADIO_SYMBOL_TIME);
+    backoff *= (kUnitBackoffPeriod * OT_RADIO_SYMBOL_TIME);
 
     if (mRxOnWhenBackoff)
     {
@@ -1058,18 +1058,19 @@ void SubMac::GetCslWindowEdges(uint32_t &ahead, uint32_t &after)
 {
     uint32_t semiPeriod = mCslPeriod * kUsPerTenSymbols / 2;
     uint64_t curTime    = otPlatRadioGetNow(&GetInstance());
-    uint32_t elapsed, semiWindow;
+    uint64_t elapsed;
+    uint32_t semiWindow;
 
     if (mCslLastSync.GetValue() > curTime)
     {
-        elapsed = static_cast<uint32_t>(UINT64_MAX - mCslLastSync.GetValue() + curTime);
+        elapsed = UINT64_MAX - mCslLastSync.GetValue() + curTime;
     }
     else
     {
-        elapsed = static_cast<uint32_t>(curTime - mCslLastSync.GetValue());
+        elapsed = curTime - mCslLastSync.GetValue();
     }
 
-    semiWindow = elapsed * (Get<Radio>().GetCslAccuracy() + mCslParentDrift) / 1000000;
+    semiWindow = static_cast<uint32_t>(elapsed * (Get<Radio>().GetCslAccuracy() + mCslParentAccuracy) / 1000000);
     semiWindow += mCslParentUncert * kUsPerUncertUnit;
 
     ahead = (semiWindow + kCslReceiveTimeAhead > semiPeriod) ? semiPeriod : semiWindow + kCslReceiveTimeAhead;

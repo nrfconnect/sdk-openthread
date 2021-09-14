@@ -36,13 +36,14 @@ import unittest
 import otci
 from otci import OTCI
 from otci.errors import CommandError
+from otci import NetifIdentifier
 
 logging.basicConfig(level=logging.DEBUG)
 
 TEST_CHANNEL = 22
 TEST_NETWORK_NAME = 'OT CI'
 TEST_PANID = 0xeeee
-TEST_MASTERKEY = 'ffeeddccbbaa99887766554433221100'
+TEST_NETWORKKEY = 'ffeeddccbbaa99887766554433221100'
 
 REAL_DEVICE = int(os.getenv('REAL_DEVICE', '0'))
 
@@ -130,7 +131,7 @@ class TestOTCI(unittest.TestCase):
 
         logging.info('leader eui64 = %r', leader.get_eui64())
         logging.info('leader extpanid = %r', leader.get_extpanid())
-        logging.info('leader masterkey = %r', leader.get_master_key())
+        logging.info('leader networkkey = %r', leader.get_network_key())
 
         extaddr = leader.get_extaddr()
         self.assertEqual(16, len(extaddr))
@@ -141,8 +142,8 @@ class TestOTCI(unittest.TestCase):
 
         leader.set_network_name(TEST_NETWORK_NAME)
 
-        leader.set_master_key(TEST_MASTERKEY)
-        self.assertEqual(TEST_MASTERKEY, leader.get_master_key())
+        leader.set_network_key(TEST_NETWORKKEY)
+        self.assertEqual(TEST_NETWORKKEY, leader.get_network_key())
 
         leader.set_panid(TEST_PANID)
         self.assertEqual(TEST_PANID, leader.get_panid())
@@ -303,13 +304,14 @@ class TestOTCI(unittest.TestCase):
         leader.wait(1)
         leader.coap_stop()
 
-        leader.udp_open()
-        leader.udp_bind("::", 1234)
-        leader.udp_send(leader.get_ipaddr_rloc(), 1234, text='hello')
-        leader.udp_send(leader.get_ipaddr_rloc(), 1234, random_bytes=3)
-        leader.udp_send(leader.get_ipaddr_rloc(), 1234, hex='112233')
-        leader.wait(1)
-        leader.udp_close()
+        for netif in (NetifIdentifier.THERAD, NetifIdentifier.UNSPECIFIED, NetifIdentifier.BACKBONE):
+            leader.udp_open()
+            leader.udp_bind("::", 1234, netif=netif)
+            leader.udp_send(leader.get_ipaddr_rloc(), 1234, text='hello')
+            leader.udp_send(leader.get_ipaddr_rloc(), 1234, random_bytes=3)
+            leader.udp_send(leader.get_ipaddr_rloc(), 1234, hex='112233')
+            leader.wait(1)
+            leader.udp_close()
 
         logging.info('dataset: %r', leader.get_dataset())
         logging.info('dataset active: %r', leader.get_dataset('active'))
@@ -365,6 +367,7 @@ class TestOTCI(unittest.TestCase):
         logging.info('dns resolve: %r', client.dns_resolve('host1.default.service.arpa.'))
 
     def _test_otci_srp(self, client: OTCI, server: OTCI):
+        self.assertEqual('disabled', server.srp_server_get_state())
         self.assertEqual('default.service.arpa.', server.srp_server_get_domain())
         server.srp_server_set_domain('example1.com')
         self.assertEqual('example1.com.', server.srp_server_get_domain())
@@ -392,8 +395,9 @@ class TestOTCI(unittest.TestCase):
         server.srp_server_disable()
         client.wait(3)
         server.srp_server_enable()
-        client.wait(3)
+        client.wait(10)
         self.assertEqual([], server.srp_server_get_hosts())
+        self.assertEqual('running', server.srp_server_get_state())
 
         self.assertFalse(client.srp_client_get_autostart())
         client.srp_client_enable_autostart()
@@ -507,7 +511,7 @@ class TestOTCI(unittest.TestCase):
     def _test_otci_example(self, node1, node2):
         node1.dataset_init_buffer()
         node1.dataset_set_buffer(network_name='test',
-                                 master_key='00112233445566778899aabbccddeeff',
+                                 network_key='00112233445566778899aabbccddeeff',
                                  panid=0xface,
                                  channel=11)
         node1.dataset_commit_buffer('active')
@@ -540,7 +544,7 @@ class TestOTCI(unittest.TestCase):
 
         logging.info('leader eui64 = %r', leader.get_eui64())
         logging.info('leader extpanid = %r', leader.get_extpanid())
-        logging.info('leader masterkey = %r', leader.get_master_key())
+        logging.info('leader networkkey = %r', leader.get_network_key())
 
         extaddr = leader.get_extaddr()
         self.assertEqual(16, len(extaddr))
@@ -551,8 +555,8 @@ class TestOTCI(unittest.TestCase):
 
         leader.set_network_name(TEST_NETWORK_NAME)
 
-        leader.set_master_key(TEST_MASTERKEY)
-        self.assertEqual(TEST_MASTERKEY, leader.get_master_key())
+        leader.set_network_key(TEST_NETWORKKEY)
+        self.assertEqual(TEST_NETWORKKEY, leader.get_network_key())
 
         leader.set_panid(TEST_PANID)
         self.assertEqual(TEST_PANID, leader.get_panid())
@@ -579,7 +583,7 @@ class TestOTCI(unittest.TestCase):
         commissioner.set_panid(TEST_PANID)
         commissioner.set_network_name(TEST_NETWORK_NAME)
         commissioner.set_router_selection_jitter(1)
-        commissioner.set_master_key(TEST_MASTERKEY)
+        commissioner.set_network_key(TEST_NETWORKKEY)
         commissioner.thread_start()
 
         commissioner.wait(5)

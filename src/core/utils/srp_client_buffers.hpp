@@ -60,44 +60,47 @@ namespace Utils {
 class SrpClientBuffers : public InstanceLocator, private NonCopyable
 {
 public:
-    enum : uint16_t
-    {
-        /**
-         * Maximum number of service entries in the pool.
-         *
-         */
-        kMaxServices = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_MAX_SERVICES,
+    /**
+     * Maximum number of service entries in the pool.
+     *
+     */
+    static constexpr uint16_t kMaxServices = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_MAX_SERVICES;
 
-        /**
-         * Max number of host address entries.
-         *
-         */
-        kMaxHostAddresses = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_MAX_HOST_ADDRESSES,
+    /**
+     * Max number of host address entries.
+     *
+     */
+    static constexpr uint16_t kMaxHostAddresses = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_MAX_HOST_ADDRESSES;
 
-        /**
-         * Size (number of char) of host name string (includes null `\0` termination char).
-         *
-         */
-        kHostNameSize = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_HOST_NAME_SIZE,
+    /**
+     * Size (number of char) of host name string (includes null `\0` termination char).
+     *
+     */
+    static constexpr uint16_t kHostNameSize = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_HOST_NAME_SIZE;
 
-        /**
-         * Size (number of char) of service name string (includes null `\0` termination char).
-         *
-         */
-        kServiceNameSize = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_SERVICE_NAME_SIZE,
+    /**
+     * Size (number of char) of service name string (includes null `\0` termination char).
+     *
+     */
+    static constexpr uint16_t kServiceNameSize = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_SERVICE_NAME_SIZE;
 
-        /**
-         * Size (number of char) of service instance name string (includes null `\0` termination char).
-         *
-         */
-        kInstanceNameSize = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_SERVICE_INSTANCE_NAME_SIZE,
+    /**
+     * Array length for service subtype label.
+     *
+     */
+    static constexpr uint16_t kServiceMaxSubTypes = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_SERVICE_MAX_SUB_TYPES;
 
-        /**
-         * Size (number of bytes) of TXT record buffer.
-         *
-         */
-        kTxtBufferSize = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_TXT_BUFFER_SIZE,
-    };
+    /**
+     * Size (number of char) of service instance name string (includes null `\0` termination char).
+     *
+     */
+    static constexpr uint16_t kInstanceNameSize = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_SERVICE_INSTANCE_NAME_SIZE;
+
+    /**
+     * Size (number of bytes) of TXT record buffer.
+     *
+     */
+    static constexpr uint16_t kTxtBufferSize = OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_TXT_BUFFER_SIZE;
 
     /**
      * This class represents a SRP client service entry from the pool.
@@ -151,14 +154,29 @@ public:
             return mTxtBuffer;
         }
 
+        /**
+         * This method gets the array for service subtype labels from the service entry.
+         *
+         * @param[out] aArrayLength    Reference to a variable to return the array length.
+         *
+         * @returns A pointer to the array.
+         *
+         */
+        const char **GetSubTypeLabelsArray(uint16_t &aArrayLength)
+        {
+            aArrayLength = OT_ARRAY_LENGTH(mSubTypeLabels);
+            return mSubTypeLabels;
+        }
+
     private:
         ServiceEntry *      GetNext(void) { return reinterpret_cast<ServiceEntry *>(mService.mNext); }
         const ServiceEntry *GetNext(void) const { return reinterpret_cast<const ServiceEntry *>(mService.mNext); }
         void SetNext(ServiceEntry *aEntry) { mService.mNext = reinterpret_cast<Srp::Client::Service *>(aEntry); }
 
-        char    mServiceName[kServiceNameSize];
-        char    mInstanceName[kInstanceNameSize];
-        uint8_t mTxtBuffer[kTxtBufferSize];
+        char        mServiceName[kServiceNameSize];
+        char        mInstanceName[kInstanceNameSize];
+        uint8_t     mTxtBuffer[kTxtBufferSize];
+        const char *mSubTypeLabels[kServiceMaxSubTypes + 1];
     };
 
     /**
@@ -204,13 +222,15 @@ public:
      * The returned service entry instance will be initialized as follows:
      *
      *  - `mService.mName` points to a string buffer which can be retrieved using `GetServiceNameString()`.
-     *  - `mService.mInstanceName` points to a string buffer which can be retrieved `GetInstanceNameString()`.
+     *  - `mService.mInstanceName` points to a string buffer which can be retrieved using `GetInstanceNameString()`.
+     *  - `mService.mSubTypeLabels` points to array which can be retrieved using `GetSubTypeLabelsArray()`.
      *  - `mService.mTxtEntries` points to `mTxtEntry`.
      *  - `mService.mNumTxtEntries` is set to one (one entry in the list).
      *  - Other `mService` fields (port, priority, weight) are set to zero.
      *  - `mTxtEntry.mKey` is set to `nullptr` (value is treated as already encoded data).
      *  - `mTxtEntry.mValue` points to a buffer which can be retrieved using `GetTxtBuffer()`
      *  - `mTxtEntry.mValueLength` is set to zero.
+     *  - All related data/string buffers and arrays are cleared to all zero.
      *
      * @returns A pointer to the newly allocated service entry or `nullptr` if not more entry available in the pool.
      *

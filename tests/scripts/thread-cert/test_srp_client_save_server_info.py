@@ -58,22 +58,22 @@ class SrpAutoStartMode(thread_cert.TestCase):
     TOPOLOGY = {
         CLIENT: {
             'name': 'SRP_CLIENT',
-            'masterkey': '00112233445566778899aabbccddeeff',
+            'networkkey': '00112233445566778899aabbccddeeff',
             'mode': 'rdn',
         },
         SERVER1: {
             'name': 'SRP_SERVER1',
-            'masterkey': '00112233445566778899aabbccddeeff',
+            'networkkey': '00112233445566778899aabbccddeeff',
             'mode': 'rn',
         },
         SERVER2: {
             'name': 'SRP_SERVER2',
-            'masterkey': '00112233445566778899aabbccddeeff',
+            'networkkey': '00112233445566778899aabbccddeeff',
             'mode': 'rn',
         },
         SERVER3: {
             'name': 'SRP_SERVER3',
-            'masterkey': '00112233445566778899aabbccddeeff',
+            'networkkey': '00112233445566778899aabbccddeeff',
             'mode': 'rn',
         },
     }
@@ -98,6 +98,7 @@ class SrpAutoStartMode(thread_cert.TestCase):
         # Enable auto start mode on client and check that server1 is used.
 
         server1.srp_server_set_enabled(True)
+        self.simulator.go(WAIT_TIME)
 
         client.srp_client_set_host_name('host')
         client.srp_client_set_host_address('2001::1')

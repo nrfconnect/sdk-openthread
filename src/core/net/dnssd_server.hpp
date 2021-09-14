@@ -60,7 +60,7 @@ class Server : public InstanceLocator, private NonCopyable
 {
 public:
     /**
-     * This enumeration specifies a dns-sd query type.
+     * This enumeration specifies a DNS-SD query type.
      *
      */
     enum DnsQueryType : uint8_t
@@ -70,6 +70,8 @@ public:
         kDnsQueryResolve     = OT_DNSSD_QUERY_TYPE_RESOLVE,      ///< Service type resolve service instance.
         kDnsQueryResolveHost = OT_DNSSD_QUERY_TYPE_RESOLVE_HOST, ///< Service type resolve hostname.
     };
+
+    static constexpr uint16_t kPort = OPENTHREAD_CONFIG_DNSSD_SERVER_PORT; ///< The DNS-SD server port.
 
     /**
      * This constructor initializes the object.
@@ -125,7 +127,7 @@ public:
     void HandleDiscoveredHost(const char *aHostFullName, const otDnssdHostInfo &aHostInfo);
 
     /**
-     * This function aquires the next query in the server.
+     * This method acquires the next query in the server.
      *
      * @param[in] aQuery            The query pointer. Pass nullptr to get the first query.
      *
@@ -135,12 +137,12 @@ public:
     const otDnssdQuery *GetNextQuery(const otDnssdQuery *aQuery) const;
 
     /**
-     * This function aquires the dns-sd query type and name for a specific query.
+     * This method acquires the DNS-SD query type and name for a specific query.
      *
      * @param[in]   aQuery            The query pointer.
      * @param[out]  aNameOutput       The name output buffer.
      *
-     * @returns The dns-sd query type.
+     * @returns The DNS-SD query type.
      *
      */
     static DnsQueryType GetQueryTypeAndName(const otDnssdQuery *aQuery, char (&aName)[Name::kMaxNameSize]);
@@ -160,10 +162,7 @@ private:
         {
         }
 
-        enum : uint16_t
-        {
-            kUnknownOffset = 0, // Unknown offset value (used when offset is not yet set).
-        };
+        static constexpr uint16_t kUnknownOffset = 0; // Unknown offset value (used when offset is not yet set).
 
         uint16_t GetDomainNameOffset(void) const { return mDomainNameOffset; }
 
@@ -227,25 +226,21 @@ private:
         uint16_t    mHostNameOffset;     // Offset of host name serialization into the response message.
     };
 
-    enum
-    {
-        kPort                 = OPENTHREAD_CONFIG_DNSSD_SERVER_PORT,
-        kProtocolLabelLength  = 4,
-        kMaxConcurrentQueries = 32,
-    };
+    static constexpr bool     kBindUnspecifiedNetif = OPENTHREAD_CONFIG_DNSSD_SERVER_BIND_UNSPECIFIED_NETIF;
+    static constexpr uint8_t  kProtocolLabelLength  = 4;
+    static constexpr uint8_t  kSubTypeLabelLength   = 4;
+    static constexpr uint16_t kMaxConcurrentQueries = 32;
 
     // This structure represents the splitting information of a full name.
     struct NameComponentsOffsetInfo
     {
-        enum : uint8_t
-        {
-            kNotPresent = 0xff, // Indicates the component is not present.
-        };
+        static constexpr uint8_t kNotPresent = 0xff; // Indicates the component is not present.
 
         explicit NameComponentsOffsetInfo(void)
             : mDomainOffset(kNotPresent)
             , mProtocolOffset(kNotPresent)
             , mServiceOffset(kNotPresent)
+            , mSubTypeOffset(kNotPresent)
             , mInstanceOffset(kNotPresent)
         {
         }
@@ -261,6 +256,7 @@ private:
                                  // the name is not a service or instance.
         uint8_t mServiceOffset;  // The offset to the beginning of <Service> or `kNotPresent` if the name is not a
                                  // service or instance.
+        uint8_t mSubTypeOffset;  // The offset to the beginning of sub-type label or `kNotPresent` is not a sub-type.
         uint8_t mInstanceOffset; // The offset to the beginning of <Instance> or `kNotPresent` if the name is not a
                                  // instance.
     };
@@ -298,10 +294,7 @@ private:
         TimeMilli        mStartTime;
     };
 
-    enum : uint32_t
-    {
-        kQueryTimeout = OPENTHREAD_CONFIG_DNSSD_QUERY_TIMEOUT,
-    };
+    static constexpr uint32_t kQueryTimeout = OPENTHREAD_CONFIG_DNSSD_QUERY_TIMEOUT;
 
     bool        IsRunning(void) const { return mSocket.IsBound(); }
     static void HandleUdpReceive(void *aContext, otMessage *aMessage, const otMessageInfo *aMessageInfo);
@@ -393,6 +386,7 @@ private:
 
     static const char kDnssdProtocolUdp[4];
     static const char kDnssdProtocolTcp[4];
+    static const char kDnssdSubTypeLabel[];
     static const char kDefaultDomainName[];
     Ip6::Udp::Socket  mSocket;
 

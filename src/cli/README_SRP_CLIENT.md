@@ -99,7 +99,7 @@ Host info:
     name:"dev4312", state:Registered, addrs:[fd00:0:0:0:0:0:0:1]
 Service list:
     instance:"ins2", name:"_test2._udp", state:Registered, port:111, priority:1, weight:1
-    instance:"ins1", name:"_test1._udp", state:Registered, port:777, priority:0, weight:0
+    instance:"ins1", name:"_test1._udp,_sub1,_sub2", state:Registered, port:777, priority:0, weight:0
 ```
 
 When service `ins2` is removed:
@@ -111,7 +111,7 @@ Host info:
 Service list:
     instance:"ins1", name:"_test1._udp", state:Registered, port:777, priority:0, weight:0
 Removed service list:
-    instance:"ins2", name:"_test2._udp", state:Removed, port:111, priority:1, weight:1
+    instance:"ins2", name:"_test2._udp,_sub1,_sub2", state:Removed, port:111, priority:1, weight:1
 ```
 
 When host info (and all services) is removed:
@@ -201,9 +201,12 @@ The possible states are (same value for service state):
 
 ### host remove
 
-Usage: `srp client host remove [removekeylease]`
+Usage: `srp client host remove [removekeylease] [sendunregtoserver]`
 
-Remove host info and all services from server. `removekeylease` is boolean value indicating whether or not the host key lease should also be removed
+Remove host info and all services from server.
+
+- `removekeylease` is an optional boolean value indicating whether or not the host key lease should also be removed (default is false).
+- `sendunregtoserver` is a another optional boolean value indicating whether or not to send an update message to the server when host info is not yet registered (default is false).
 
 ```bash
 > srp client host remove 1
@@ -301,7 +304,7 @@ Print the list of services.
 
 ```bash
 > srp client service
-instance:"ins2", name:"_test2._udp", state:Registered, port:111, priority:1, weight:1
+instance:"ins2", name:"_test2._udp,_sub1,_sub2", state:Registered, port:111, priority:1, weight:1
 instance:"ins1", name:"_test1._udp", state:Registered, port:777, priority:0, weight:0
 Done
 ```
@@ -310,10 +313,17 @@ Done
 
 Usage: `srp client service add <instancename> <servicename> <port> [priority] [weight] [txt]`
 
-Add a service with a given instance name, service name, port number, priority, weight and txt values. The priority and weight are optional and if not provided zero will be used. The txt should follow hex-string format and is treated as an already encoded TXT data byte sequence. It is also optional and if not provided it is considered empty.
+Add a service with a given instance name, service name, port number, priority, weight and txt values.
+
+The `<servicename>` can optionally include a list of service subtype labels separated by comma.
+
+The priority and weight are optional and if not provided zero will be used. The txt should follow hex-string format and is treated as an already encoded TXT data byte sequence. It is also optional and if not provided it is considered empty.
 
 ```bash
-> srp client service add ins2 _test2._udp 111 1 1
+> srp client service add ins1 _test1._udp 777
+Done
+
+> srp client service add ins2 _test2._udp,_sub1,_sub2 111 1 1
 Done
 ```
 

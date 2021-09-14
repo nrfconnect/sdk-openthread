@@ -46,26 +46,42 @@ unsigned int gBackboneNetifIndex          = 0;
 static ot::Posix::MulticastRoutingManager sMulticastRoutingManager;
 #endif
 
-void platformBackboneInit(otInstance *aInstance, const char *aInterfaceName)
+void platformBackboneInit(const char *aInterfaceName)
 {
-    OT_UNUSED_VARIABLE(aInstance);
-
     VerifyOrExit(aInterfaceName != nullptr && aInterfaceName[0] != '\0');
 
-    VerifyOrDie(strnlen(aInterfaceName, IFNAMSIZ) <= IFNAMSIZ - 1, OT_EXIT_INVALID_ARGUMENTS);
-    strncpy(gBackboneNetifName, aInterfaceName, sizeof(gBackboneNetifName));
+    VerifyOrDie(strnlen(aInterfaceName, sizeof(gBackboneNetifName)) < sizeof(gBackboneNetifName),
+                OT_EXIT_INVALID_ARGUMENTS);
+    strcpy(gBackboneNetifName, aInterfaceName);
 
     gBackboneNetifIndex = if_nametoindex(gBackboneNetifName);
     VerifyOrDie(gBackboneNetifIndex > 0, OT_EXIT_FAILURE);
 
     otLogInfoPlat("Backbone interface is configured to %s (%d)", gBackboneNetifName, gBackboneNetifIndex);
 
-#if OPENTHREAD_CONFIG_BACKBONE_ROUTER_MULTICAST_ROUTING_ENABLE
-    sMulticastRoutingManager.Init(aInstance);
-#endif
-
 exit:
     return;
+}
+
+void platformBackboneSetUp(void)
+{
+#if OPENTHREAD_CONFIG_BACKBONE_ROUTER_MULTICAST_ROUTING_ENABLE
+    sMulticastRoutingManager.SetUp();
+#endif
+}
+
+void platformBackboneTearDown(void)
+{
+#if OPENTHREAD_CONFIG_BACKBONE_ROUTER_MULTICAST_ROUTING_ENABLE
+    sMulticastRoutingManager.TearDown();
+#endif
+}
+
+void platformBackboneDeinit(void)
+{
+    gBackboneNetifIndex = 0;
+
+    memset(gBackboneNetifName, 0, sizeof(gBackboneNetifName));
 }
 
 void platformBackboneStateChange(otInstance *aInstance, otChangedFlags aFlags)

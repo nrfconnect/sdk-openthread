@@ -19,6 +19,12 @@ set(
     FORCE
 )
 
+if(CONFIG_ASSERT)
+  set(OT_ASSERT ON CACHE BOOL "Enable assert function OT_ASSERT()" FORCE)
+else()
+  set(OT_ASSERT OFF CACHE BOOL "Enable assert function OT_ASSERT()" FORCE)
+endif()
+
 if(CONFIG_OPENTHREAD_BACKBONE_ROUTER)
   set(OT_BACKBONE_ROUTER ON CACHE BOOL "Enable backbone router functionality" FORCE)
 else()
@@ -83,6 +89,12 @@ if(CONFIG_OPENTHREAD_CHILD_SUPERVISION)
   set(OT_CHILD_SUPERVISION ON CACHE BOOL "Enable child supervision support" FORCE)
 else()
   set(OT_CHILD_SUPERVISION OFF CACHE BOOL "Enable child supervision support" FORCE)
+endif()
+
+if(CONFIG_OPENTHREAD_CSL_AUTO_SYNC)
+  set(OT_CSL_AUTO_SYNC ON CACHE BOOL "Enable csl autosync" FORCE)
+else()
+  set(OT_CSL_AUTO_SYNC OFF CACHE BOOL "Enable csl autosync" FORCE)
 endif()
 
 if(CONFIG_OPENTHREAD_CSL_RECEIVER)
@@ -157,6 +169,12 @@ else()
   set(OT_EXTERNAL_HEAP OFF CACHE BOOL "Enable external heap support" FORCE)
 endif()
 
+if(CONFIG_OPENTHREAD_HISTORY_TRACKER)
+  set(OT_HISTORY_TRACKER ON CACHE BOOL "Enable history tracker support." FORCE)
+else()
+  set(OT_HISTORY_TRACKER OFF CACHE BOOL "Enable history tracker support." FORCE)
+endif()
+
 if(CONFIG_OPENTHREAD_IP6_FRAGM)
   set(OT_IP6_FRAGM ON CACHE BOOL "Enable IPv6 fragmentation support" FORCE)
 else()
@@ -181,10 +199,16 @@ else()
   set(OT_LEGACY OFF CACHE BOOL "Enable legacy network support" FORCE)
 endif()
 
-if(CONFIG_OPENTHREAD_LINK_METRICS)
-  set(OT_LINK_METRICS ON CACHE BOOL "Enable Link Metrics feature for Thread 1.2" FORCE)
+if(CONFIG_OPENTHREAD_LINK_METRICS_INITIATOR)
+  set(OT_LINK_METRICS_INITIATOR ON CACHE BOOL "Enable Link Metrics initiator for Thread 1.2" FORCE)
 else()
-  set(OT_LINK_METRICS OFF CACHE BOOL "Enable Link Metrics feature for Thread 1.2" FORCE)
+  set(OT_LINK_METRICS_INITIATOR OFF CACHE BOOL "Enable Link Metrics initiator for Thread 1.2" FORCE)
+endif()
+
+if(CONFIG_OPENTHREAD_LINK_METRICS_SUBJECT)
+  set(OT_LINK_METRICS_SUBJECT ON CACHE BOOL "Enable Link Metrics subject for Thread 1.2" FORCE)
+else()
+  set(OT_LINK_METRICS_SUBJECT OFF CACHE BOOL "Enable Link Metrics subject for Thread 1.2" FORCE)
 endif()
 
 if(CONFIG_OPENTHREAD_LOG_LEVEL_DYNAMIC)
@@ -227,6 +251,12 @@ if(CONFIG_OPENTHREAD_NEIGHBOR_DISCOVERY_AGENT)
   set(OT_NEIGHBOR_DISCOVERY_AGENT ON CACHE BOOL "Enable neighbor discovery agent support" FORCE)
 else()
   set(OT_NEIGHBOR_DISCOVERY_AGENT OFF CACHE BOOL "Enable neighbor discovery agent support" FORCE)
+endif()
+
+if(CONFIG_OPENTHREAD_NETDATA_PUBLISHER)
+  set(OT_NETDATA_PUBLISHER ON CACHE BOOL "Enable Thread Network Data publisher" FORCE)
+else()
+  set(OT_NETDATA_PUBLISHER OFF CACHE BOOL "Enable Thread Network Data publisher" FORCE)
 endif()
 
 if(CONFIG_OPENTHREAD_PING_SENDER)
@@ -323,9 +353,6 @@ if(CONFIG_OPENTHREAD_COPROCESSOR_VENDOR_HOOK_SOURCE)
   set(OT_NCP_VENDOR_HOOK_SOURCE ${CONFIG_OPENTHREAD_COPROCESSOR_VENDOR_HOOK_SOURCE} CACHE STRING "NCP vendor hook source file name" FORCE)
 endif()
 
-string(REPLACE " " ";" OT_PARAM_LIST " ${CONFIG_OPENTHREAD_CUSTOM_PARAMETERS}")
-list(APPEND OT_PRIVATE_DEFINES ${OT_PARAM_LIST})
-
 # Zephyr logging options
 
 if(CONFIG_LOG_BACKEND_SPINEL)
@@ -340,8 +367,6 @@ add_definitions(
     -DOPENTHREAD_PROJECT_CORE_CONFIG_FILE="openthread-core-zephyr-config.h"
 )
 
-list(APPEND OT_PRIVATE_INCLUDES ${ZEPHYR_BASE}/subsys/net/lib/openthread/platform)
-
 # Need to specify build directory as well
 add_subdirectory(.. build)
 
@@ -352,6 +377,9 @@ foreach(target ${ALL_TARGETS})
   # into Zephyr will be built due to dependencies.
   set_property(TARGET ${target} PROPERTY EXCLUDE_FROM_ALL TRUE)
 endforeach()
+
+string(REPLACE " " ";" OT_PARAM_LIST " ${CONFIG_OPENTHREAD_CUSTOM_PARAMETERS}")
+target_compile_definitions(ot-config INTERFACE ${OT_PARAM_LIST})
 
 # Zephyr compiler options
 target_include_directories(ot-config INTERFACE

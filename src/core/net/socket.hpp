@@ -204,6 +204,22 @@ public:
     const ThreadLinkInfo *GetThreadLinkInfo(void) const { return reinterpret_cast<const ThreadLinkInfo *>(mLinkInfo); }
 
     /**
+     * This method gets the ECN status.
+     *
+     * @returns The ECN status, as represented in the IP header.
+     *
+     */
+    uint8_t GetEcn(void) const { return mEcn; }
+
+    /**
+     * This method sets the ECN status.
+     *
+     * @param[in]  aEcn  The ECN status, as represented in the IP header.
+     *
+     */
+    void SetEcn(uint8_t aEcn) { mEcn = aEcn; }
+
+    /**
      * This method indicates whether peer is via the host interface.
      *
      * @retval TRUE if the peer is via the host interface.
@@ -237,10 +253,7 @@ public:
 class SockAddr : public otSockAddr, public Clearable<SockAddr>, public Unequatable<SockAddr>
 {
 public:
-    enum : uint16_t
-    {
-        kInfoStringSize = 50, ///< Max chars for the info string (`ToString()`).
-    };
+    static constexpr uint16_t kInfoStringSize = OT_IP6_SOCK_ADDR_STRING_SIZE; ///< Info string size (`ToString()`).
 
     /**
      * This type defines the fixed-length `String` object returned from `ToString()`.
@@ -343,6 +356,23 @@ public:
      *
      */
     InfoString ToString(void) const;
+
+    /**
+     * This method converts a given IPv6 socket address to a human-readable string.
+     *
+     * The IPv6 socket address string is formatted as "[<ipv6 address>]:<port>".
+     *
+     * If the resulting string does not fit in @p aBuffer (within its @p aSize characters), the string will be
+     * truncated but the outputted string is always null-terminated.
+     *
+     * @param[out] aBuffer   A pointer to a char array to output the string (MUST NOT be NULL).
+     * @param[in]  aSize     The size of @p aBuffer (in bytes).
+     *
+     */
+    void ToString(char *aBuffer, uint16_t aSize) const;
+
+private:
+    void ToString(StringWriter &aWriter) const;
 };
 
 /**

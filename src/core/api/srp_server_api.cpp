@@ -56,6 +56,13 @@ otError otSrpServerSetDomain(otInstance *aInstance, const char *aDomain)
     return instance.Get<Srp::Server>().SetDomain(aDomain);
 }
 
+otSrpServerState otSrpServerGetState(otInstance *aInstance)
+{
+    Instance &instance = *static_cast<Instance *>(aInstance);
+
+    return static_cast<otSrpServerState>(instance.Get<Srp::Server>().GetState());
+}
+
 void otSrpServerSetEnabled(otInstance *aInstance, bool aEnabled)
 {
     Instance &instance = *static_cast<Instance *>(aInstance);
@@ -122,7 +129,20 @@ const otSrpServerService *otSrpServerHostGetNextService(const otSrpServerHost * 
 {
     auto host = static_cast<const Srp::Server::Host *>(aHost);
 
-    return host->GetNextService(static_cast<const Srp::Server::Service *>(aService));
+    return host->FindNextService(static_cast<const Srp::Server::Service *>(aService),
+                                 Srp::Server::kFlagsBaseTypeServiceOnly);
+}
+
+const otSrpServerService *otSrpServerHostFindNextService(const otSrpServerHost *   aHost,
+                                                         const otSrpServerService *aPrevService,
+                                                         otSrpServerServiceFlags   aFlags,
+                                                         const char *              aServiceName,
+                                                         const char *              aInstanceName)
+{
+    auto host = static_cast<const Srp::Server::Host *>(aHost);
+
+    return host->FindNextService(static_cast<const Srp::Server::Service *>(aPrevService), aFlags, aServiceName,
+                                 aInstanceName);
 }
 
 bool otSrpServerServiceIsDeleted(const otSrpServerService *aService)
@@ -130,9 +150,29 @@ bool otSrpServerServiceIsDeleted(const otSrpServerService *aService)
     return static_cast<const Srp::Server::Service *>(aService)->IsDeleted();
 }
 
+bool otSrpServerServiceIsSubType(const otSrpServerService *aService)
+{
+    return static_cast<const Srp::Server::Service *>(aService)->IsSubType();
+}
+
 const char *otSrpServerServiceGetFullName(const otSrpServerService *aService)
 {
-    return static_cast<const Srp::Server::Service *>(aService)->GetFullName();
+    return static_cast<const Srp::Server::Service *>(aService)->GetInstanceName();
+}
+
+const char *otSrpServerServiceGetInstanceName(const otSrpServerService *aService)
+{
+    return static_cast<const Srp::Server::Service *>(aService)->GetInstanceName();
+}
+
+const char *otSrpServerServiceGetServiceName(const otSrpServerService *aService)
+{
+    return static_cast<const Srp::Server::Service *>(aService)->GetServiceName();
+}
+
+otError otSrpServerServiceGetServiceSubTypeLabel(const otSrpServerService *aService, char *aLabel, uint8_t aMaxSize)
+{
+    return static_cast<const Srp::Server::Service *>(aService)->GetServiceSubTypeLabel(aLabel, aMaxSize);
 }
 
 uint16_t otSrpServerServiceGetPort(const otSrpServerService *aService)

@@ -45,6 +45,7 @@
 #include "mac/mac_types.hpp"
 #include "meshcop/meshcop.hpp"
 #include "net/icmp6.hpp"
+#include "thread/key_manager.hpp"
 #include "thread/thread_netif.hpp"
 #include "thread/thread_tlvs.hpp"
 #include "thread/time_sync_service.hpp"
@@ -111,7 +112,29 @@ void MleRouter::HandlePartitionChange(void)
 
 bool MleRouter::IsRouterEligible(void) const
 {
-    return mRouterEligible && IsFullThreadDevice();
+    bool                  rval      = false;
+    const SecurityPolicy &secPolicy = Get<KeyManager>().GetSecurityPolicy();
+
+    VerifyOrExit(mRouterEligible && IsFullThreadDevice());
+
+#if OPENTHREAD_CONFIG_THREAD_VERSION == OT_THREAD_VERSION_1_1
+    VerifyOrExit(secPolicy.mRoutersEnabled);
+#else
+    if (secPolicy.mCommercialCommissioningEnabled)
+    {
+        VerifyOrExit(secPolicy.mNonCcmRoutersEnabled);
+    }
+    if (!secPolicy.mRoutersEnabled)
+    {
+        VerifyOrExit(secPolicy.mVersionThresholdForRouting + SecurityPolicy::kVersionThresholdOffsetVersion <=
+                     kThreadVersion);
+    }
+#endif
+
+    rval = true;
+
+exit:
+    return rval;
 }
 
 Error MleRouter::SetRouterEligible(bool aEligible)
@@ -956,7 +979,7 @@ Error MleRouter::HandleLinkAccept(const Message &         aMessage,
     router->SetState(Neighbor::kStateValid);
     router->SetKeySequence(aKeySequence);
 
-    mNeighborTable.Signal(OT_NEIGHBOR_TABLE_EVENT_ROUTER_ADDED, *router);
+    mNeighborTable.Signal(NeighborTable::kRouterAdded, *router);
 
     if (aRequest)
     {
@@ -1078,14 +1101,14 @@ int MleRouter::ComparePartitions(bool              aSingletonA,
 {
     int rval = 0;
 
-    if (aSingletonA != aSingletonB)
-    {
-        ExitNow(rval = aSingletonB ? 1 : -1);
-    }
-
     if (aLeaderDataA.GetWeighting() != aLeaderDataB.GetWeighting())
     {
         ExitNow(rval = aLeaderDataA.GetWeighting() > aLeaderDataB.GetWeighting() ? 1 : -1);
+    }
+
+    if (aSingletonA != aSingletonB)
+    {
+        ExitNow(rval = aSingletonB ? 1 : -1);
     }
 
     if (aLeaderDataA.GetPartitionId() != aLeaderDataB.GetPartitionId())
@@ -1441,7 +1464,7 @@ void MleRouter::UpdateRoutes(const RouteTlv &aRoute, uint8_t aRouterId)
 
         if (nextHop == nullptr || nextHop == neighbor)
         {
-            // route has no next hop or next hop is neighbor (sender)
+            // router has no next hop or next hop is neighbor (sender)
 
             if (cost + mRouterTable.GetLinkCost(*neighbor) < kMaxRouteCost)
             {
@@ -1450,9 +1473,17 @@ void MleRouter::UpdateRoutes(const RouteTlv &aRoute, uint8_t aRouterId)
                     resetAdvInterval = true;
                 }
 
-                router->SetNextHop(aRouterId);
-                router->SetCost(cost);
-                changed = true;
+                if (router->GetNextHop() != aRouterId)
+                {
+                    router->SetNextHop(aRouterId);
+                    changed = true;
+                }
+
+                if (router->GetCost() != cost)
+                {
+                    router->SetCost(cost);
+                    changed = true;
+                }
             }
             else if (nextHop == neighbor)
             {
@@ -1904,6 +1935,12 @@ void MleRouter::SendParentResponse(Child *aChild, const Challenge &aChallenge, b
     if (aChild->IsTimeSyncEnabled())
     {
         SuccessOrExit(error = AppendTimeParameter(*message));
+    }
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+    if (!aChild->IsRxOnWhenIdle())
+    {
+        SuccessOrExit(error = AppendCslClockAccuracy(*message));
     }
 #endif
 
@@ -2922,6 +2959,11 @@ Error MleRouter::SendDiscoveryResponse(const Ip6::Address &aDestination, const M
         discoveryResponse.SetNativeCommissioner(false);
     }
 
+    if (Get<KeyManager>().GetSecurityPolicy().mCommercialCommissioningEnabled)
+    {
+        discoveryResponse.SetCommercialCommissioningMode(true);
+    }
+
     SuccessOrExit(error = discoveryResponse.AppendTo(*message));
 
     // Extended PAN ID TLV
@@ -3243,12 +3285,12 @@ void MleRouter::SendDataResponse(const Ip6::Address &aDestination,
             SuccessOrExit(error = AppendPendingDataset(*message));
             break;
 
-#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_ENABLE
+#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
         case Tlv::kLinkMetricsReport:
             OT_ASSERT(aRequestMessage != nullptr);
             neighbor = mNeighborTable.FindNeighbor(aDestination);
             VerifyOrExit(neighbor != nullptr, error = kErrorInvalidState);
-            SuccessOrExit(error = Get<LinkMetrics>().AppendLinkMetricsReport(*message, *aRequestMessage, *neighbor));
+            SuccessOrExit(error = Get<LinkMetrics::LinkMetrics>().AppendReport(*message, *aRequestMessage, *neighbor));
             break;
 #endif
         }
@@ -3336,7 +3378,7 @@ void MleRouter::RemoveNeighbor(Neighbor &aNeighbor)
 
         if (aNeighbor.IsStateValidOrRestoring())
         {
-            mNeighborTable.Signal(OT_NEIGHBOR_TABLE_EVENT_CHILD_REMOVED, aNeighbor);
+            mNeighborTable.Signal(NeighborTable::kChildRemoved, aNeighbor);
         }
 
         Get<IndirectSender>().ClearAllMessagesForSleepyChild(static_cast<Child &>(aNeighbor));
@@ -3353,13 +3395,13 @@ void MleRouter::RemoveNeighbor(Neighbor &aNeighbor)
     {
         OT_ASSERT(mRouterTable.Contains(aNeighbor));
 
-        mNeighborTable.Signal(OT_NEIGHBOR_TABLE_EVENT_ROUTER_REMOVED, aNeighbor);
+        mNeighborTable.Signal(NeighborTable::kRouterRemoved, aNeighbor);
         mRouterTable.RemoveRouterLink(static_cast<Router &>(aNeighbor));
     }
 
     aNeighbor.GetLinkInfo().Clear();
     aNeighbor.SetState(Neighbor::kStateInvalid);
-#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_ENABLE
+#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
     aNeighbor.RemoveAllForwardTrackingSeriesInfo();
 #endif
 
@@ -4273,7 +4315,7 @@ void MleRouter::SetChildStateToValid(Child &aChild)
     Get<MlrManager>().UpdateProxiedSubscriptions(aChild, nullptr, 0);
 #endif
 
-    mNeighborTable.Signal(OT_NEIGHBOR_TABLE_EVENT_CHILD_ADDED, aChild);
+    mNeighborTable.Signal(NeighborTable::kChildAdded, aChild);
 
 exit:
     return;
@@ -4323,6 +4365,8 @@ exit:
 Error MleRouter::GetMaxChildTimeout(uint32_t &aTimeout) const
 {
     Error error = kErrorNotFound;
+
+    aTimeout = 0;
 
     VerifyOrExit(IsRouterOrLeader(), error = kErrorInvalidState);
 

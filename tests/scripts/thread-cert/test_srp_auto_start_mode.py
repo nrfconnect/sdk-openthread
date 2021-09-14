@@ -57,17 +57,17 @@ class SrpAutoStartMode(thread_cert.TestCase):
     TOPOLOGY = {
         CLIENT: {
             'name': 'SRP_CLIENT',
-            'masterkey': '00112233445566778899aabbccddeeff',
+            'networkkey': '00112233445566778899aabbccddeeff',
             'mode': 'rdn',
         },
         SERVER1: {
             'name': 'SRP_SERVER1',
-            'masterkey': '00112233445566778899aabbccddeeff',
+            'networkkey': '00112233445566778899aabbccddeeff',
             'mode': 'rdn',
         },
         SERVER2: {
             'name': 'SRP_SERVER2',
-            'masterkey': '00112233445566778899aabbccddeeff',
+            'networkkey': '00112233445566778899aabbccddeeff',
             'mode': 'rdn',
         },
     }
@@ -128,7 +128,7 @@ class SrpAutoStartMode(thread_cert.TestCase):
         #
 
         server1.srp_server_set_enabled(True)
-        self.simulator.go(2)
+        self.simulator.go(5)
         self.assertEqual(client.srp_client_get_state(), 'Enabled')
         self.assertEqual(client.srp_client_get_server_address(), server2_address)
 

@@ -168,8 +168,12 @@ if (openthread_enable_core_config_args) {
       defines += [ "OPENTHREAD_CONFIG_LEGACY_ENABLE=1" ]
     }
 
-    if (openthread_config_link_metrics_enable) {
-      defines += [ "OPENTHREAD_CONFIG_MLE_LINK_METRICS_ENABLE=1" ]
+    if (openthread_config_link_metrics_initiator_enable) {
+      defines += [ "DOPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE=1" ]
+    }
+
+    if (openthread_config_link_metrics_subject_enable) {
+      defines += [ "DOPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE=1" ]
     }
 
     if (openthread_config_link_raw_enable) {
@@ -311,6 +315,7 @@ openthread_core_files = [
   "api/entropy_api.cpp",
   "api/error_api.cpp",
   "api/heap_api.cpp",
+  "api/history_tracker_api.cpp",
   "api/icmp6_api.cpp",
   "api/instance_api.cpp",
   "api/ip6_api.cpp",
@@ -323,6 +328,7 @@ openthread_core_files = [
   "api/message_api.cpp",
   "api/multi_radio_api.cpp",
   "api/netdata_api.cpp",
+  "api/netdata_publisher_api.cpp",
   "api/netdiag_api.cpp",
   "api/network_time_api.cpp",
   "api/ping_sender_api.cpp",
@@ -334,6 +340,7 @@ openthread_core_files = [
   "api/srp_client_buffers_api.cpp",
   "api/srp_server_api.cpp",
   "api/tasklet_api.cpp",
+  "api/tcp_api.cpp",
   "api/thread_api.cpp",
   "api/thread_ftd_api.cpp",
   "api/udp_api.cpp",
@@ -361,6 +368,7 @@ openthread_core_files = [
   "coap/coap_secure.cpp",
   "coap/coap_secure.hpp",
   "common/arg_macros.hpp",
+  "common/array.hpp",
   "common/bit_vector.hpp",
   "common/clearable.hpp",
   "common/code_utils.hpp",
@@ -372,6 +380,8 @@ openthread_core_files = [
   "common/error.cpp",
   "common/error.hpp",
   "common/extension.hpp",
+  "common/heap_string.cpp",
+  "common/heap_string.hpp",
   "common/instance.cpp",
   "common/instance.hpp",
   "common/iterator_utils.hpp",
@@ -519,7 +529,8 @@ openthread_core_files = [
   "net/srp_client.hpp",
   "net/srp_server.cpp",
   "net/srp_server.hpp",
-  "net/tcp.hpp",
+  "net/tcp6.cpp",
+  "net/tcp6.hpp",
   "net/udp6.cpp",
   "net/udp6.hpp",
   "radio/max_power_table.hpp",
@@ -588,6 +599,8 @@ openthread_core_files = [
   "thread/network_data_local.hpp",
   "thread/network_data_notifier.cpp",
   "thread/network_data_notifier.hpp",
+  "thread/network_data_publisher.cpp",
+  "thread/network_data_publisher.hpp",
   "thread/network_data_service.cpp",
   "thread/network_data_service.hpp",
   "thread/network_data_tlvs.cpp",
@@ -626,6 +639,8 @@ openthread_core_files = [
   "utils/flash.hpp",
   "utils/heap.cpp",
   "utils/heap.hpp",
+  "utils/history_tracker.cpp",
+  "utils/history_tracker.hpp",
   "utils/jam_detector.cpp",
   "utils/jam_detector.hpp",
   "utils/lookup_table.cpp",
@@ -698,6 +713,7 @@ source_set("libopenthread_core_config") {
     "config/dns_client.h",
     "config/dnssd_server.h",
     "config/dtls.h",
+    "config/history_tracker.h",
     "config/ip6.h",
     "config/joiner.h",
     "config/link_quality.h",
@@ -705,6 +721,7 @@ source_set("libopenthread_core_config") {
     "config/logging.h",
     "config/mac.h",
     "config/mle.h",
+    "config/netdata_publisher.h",
     "config/openthread-core-config-check.h",
     "config/openthread-core-default-config.h",
     "config/parent_search.h",

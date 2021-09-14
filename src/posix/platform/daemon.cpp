@@ -80,7 +80,6 @@ int Daemon::OutputFormatV(const char *aFormat, va_list aArguments)
 
     VerifyOrExit(rval >= 0, otLogWarnPlat("Failed to format CLI output: %s", strerror(errno)));
 
-    otLogInfoPlat("%s", buf);
     VerifyOrExit(mSessionSocket != -1);
 
 #if defined(__linux__)
@@ -148,7 +147,7 @@ exit:
     }
 }
 
-void Daemon::Enable(otInstance *aInstance)
+void Daemon::SetUp(void)
 {
     struct sockaddr_un sockname;
     int                ret;
@@ -206,7 +205,7 @@ void Daemon::Enable(otInstance *aInstance)
     }
 
     otCliInit(
-        aInstance,
+        gInstance,
         [](void *aContext, const char *aFormat, va_list aArguments) -> int {
             return static_cast<Daemon *>(aContext)->OutputFormatV(aFormat, aArguments);
         },
@@ -218,7 +217,7 @@ exit:
     return;
 }
 
-void Daemon::Disable(void)
+void Daemon::TearDown(void)
 {
     Mainloop::Manager::Get().Remove(*this);
 

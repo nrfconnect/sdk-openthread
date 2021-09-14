@@ -23,7 +23,7 @@ Border Router and service information may be stable or temporary. Stable Thread 
    Channel Mask: 0x07fff800
    Ext PAN ID: d63e8e3e495ebbc3
    Mesh Local Prefix: fd3d:b50b:f96d:722d::/64
-   Master Key: dfd34f0f05cad978ec4e32b0413038ff
+   Network Key: dfd34f0f05cad978ec4e32b0413038ff
    Network Name: OpenThread-8f28
    PAN ID: 0x8f28
    PSKc: c23a76e98f1a6483639b1ac1271e2e27
@@ -92,7 +92,7 @@ Border Router and service information may be stable or temporary. Stable Thread 
 
 ### Attach to Existing Network
 
-Only the Master Key is required for a device to attach to a Thread network.
+Only the Network Key is required for a device to attach to a Thread network.
 
 While not required, specifying the channel avoids the need to search across multiple channels, improving both latency and efficiency of the attach process.
 
@@ -101,7 +101,7 @@ After the device successfully attaches to a Thread network, the device will retr
 1. Create a partial Active Operational Dataset.
 
    ```bash
-   > dataset masterkey dfd34f0f05cad978ec4e32b0413038ff
+   > dataset networkkey dfd34f0f05cad978ec4e32b0413038ff
    Done
    > dataset commit active
    Done
@@ -142,9 +142,11 @@ After the device successfully attaches to a Thread network, the device will retr
 ## Command List
 
 - [help](#help)
+- [publish](#publish)
 - [register](#register)
 - [show](#show)
 - [steeringdata](#steeringdata-check-eui64discerner)
+- [unpublish](#unpublish)
 
 ## Command Details
 
@@ -157,9 +159,75 @@ Print netdata help menu.
 ```bash
 > netdata help
 help
+publish
 register
 show
 steeringdata
+unpublish
+Done
+```
+
+### publish
+
+The Network Data Publisher provides mechanisms to limit the number of similar Service and/or Prefix (on-mesh prefix or external route) entries in the Thread Network Data by monitoring the Network Data and managing if or when to add or remove entries.
+
+The Publisher requires `OPENTHREAD_CONFIG_NETDATA_PUBLISHER_ENABLE`.
+
+### publish dnssrp
+
+Publish DNS/SRP service entry.
+
+This command requires `OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE`.
+
+The following formats are available: :
+
+- `netdata publish dnssrp anycast <seq-num>` to publish "DNS/SRP Service Anycast Address" with a given sequence number.
+- `netdata publish dnssrp unicast <address> <port>` to publish "DNS/SRP Service Unicast Address" with given address and port number info. The address/port info is included in Service TLV data.
+- `netdata publish dnssrp unicast <port>` to publish "DNS/SRP Service Unicast Address" with given port number and the device's mesh-local EID for the address. The address and port info is included in Server TLV data.
+
+A new call to `netdata publish dnssrp [anycast|unicast] [...]` command will remove and replace any previous "DNS/SRP Service" entry that was being published (from earlier `netdata publish dnssrp [...]` commands).
+
+```bash
+> netdata publish dnssrp anycast 1
+Done
+
+> netdata publish dnssrp unicast fd00::1234 51525
+Done
+
+> netdata publish dnssrp unicast 50152
+Done
+```
+
+### publish prefix \<prefix\> [padcrosnD][prf]
+
+Publish an on-mesh prefix entry.
+
+- p: Preferred flag
+- a: Stateless IPv6 Address Autoconfiguration flag
+- d: DHCPv6 IPv6 Address Configuration flag
+- c: DHCPv6 Other Configuration flag
+- r: Default Route flag
+- o: On Mesh flag
+- s: Stable flag
+- n: Nd Dns flag
+- D: Domain Prefix flag (only available for Thread 1.2).
+- prf: Preference, which may be 'high', 'med', or 'low'.
+
+```bash
+> netdata publish prefix fd00:1234:5678::/64 paos med
+Done
+```
+
+### publish route \<prefix\> [sn][prf]
+
+Publish an external route entry.
+
+- s: Stable flag
+- n: NAT64 flag
+- prf: Preference, which may be: 'high', 'med', or 'low'.
+
+```bash
+> netdata publish route fd00:1234:5678::/64 s high
 Done
 ```
 
@@ -211,4 +279,30 @@ Done
 Done
 > netdata steeringdata check 0xdef/12
 Error 23: NotFound
+```
+
+### unpublish
+
+This command unpublishes a previously published Network Data entry.
+
+This command requires `OPENTHREAD_CONFIG_NETDATA_PUBLISHER_ENABLE`.
+
+### unpublish dnssrp
+
+Unpublishes DNS/SRP Service entry (available when `OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE` is enabled):
+
+- `netdata unpublish dnssrp` to unpublish "DNS/SRP Service" entry (anycast or unciast).
+
+```bash
+> netdata unpublish dnssrp
+Done
+```
+
+### unpublish \<prefix\>
+
+Unpublishes a previously published on-mesh prefix or external route entry.
+
+```bash
+> netdata unpublish fd00:1234:5678::/64
+Done
 ```

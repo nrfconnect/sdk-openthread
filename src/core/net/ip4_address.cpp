@@ -41,11 +41,8 @@ namespace Ip4 {
 
 Error Address::FromString(const char *aString)
 {
-    enum : char
-    {
-        kSeperatorChar = '.',
-        kNullChar      = '\0',
-    };
+    constexpr char kSeperatorChar = '.';
+    constexpr char kNullChar      = '\0';
 
     Error error = kErrorParse;
 
@@ -62,7 +59,7 @@ Error Address::FromString(const char *aString)
             }
 
             value = static_cast<uint16_t>((value * 10) + static_cast<uint8_t>(digitChar - '0'));
-            VerifyOrExit(value <= NumericLimits<uint8_t>::Max());
+            VerifyOrExit(value <= NumericLimits<uint8_t>::kMax);
             hasFirstDigit = true;
         }
 

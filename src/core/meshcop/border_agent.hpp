@@ -173,11 +173,7 @@ private:
     }
     bool HandleUdpReceive(const Message &aMessage, const Ip6::MessageInfo &aMessageInfo);
 
-    enum
-    {
-        kKeepAliveTimeout = 50 * 1000, ///< Timeout to reject a commissioner.
-        kRestartDelay     = 1 * 1000,  ///< Delay to restart border agent service.
-    };
+    static constexpr uint32_t kKeepAliveTimeout = 50 * 1000; // Timeout to reject a commissioner.
 
     Ip6::MessageInfo mMessageInfo;
 
@@ -193,8 +189,8 @@ private:
     Coap::Resource mPendingSet;
     Coap::Resource mProxyTransmit;
 
-    Ip6::Udp::Receiver       mUdpReceiver; ///< The UDP receiver to receive packets from external commissioner
-    Ip6::NetifUnicastAddress mCommissionerAloc;
+    Ip6::Udp::Receiver         mUdpReceiver; ///< The UDP receiver to receive packets from external commissioner
+    Ip6::Netif::UnicastAddress mCommissionerAloc;
 
     TimerMilli mTimer;
     State      mState;

@@ -69,11 +69,14 @@ namespace ot {
 class SecurityPolicy : public otSecurityPolicy, public Equatable<SecurityPolicy>
 {
 public:
-    enum : uint16_t
-    {
-        kMinKeyRotationTime     = 1,   ///< The minimum Key Rotation Time in hours.
-        kDefaultKeyRotationTime = 672, ///< Default Key Rotation Time (in unit of hours).
-    };
+    /**
+     * Offset between the Thread Version and the Version-threshold valid for Routing.
+     *
+     */
+    static constexpr uint8_t kVersionThresholdOffsetVersion = 3;
+
+    static constexpr uint16_t kMinKeyRotationTime     = 1;   ///< The minimum Key Rotation Time in hours.
+    static constexpr uint16_t kDefaultKeyRotationTime = 672; ///< Default Key Rotation Time (in unit of hours).
 
     /**
      * This constructor initializes the object with default Key Rotation Time
@@ -108,39 +111,36 @@ public:
     void GetFlags(uint8_t *aFlags, uint8_t aFlagsLength) const;
 
 private:
-    enum : uint8_t
-    {
-        kDefaultFlags                   = 0xff,
-        kObtainMasterKeyMask            = 1 << 7,
-        kNativeCommissioningMask        = 1 << 6,
-        kRoutersMask                    = 1 << 5,
-        kExternalCommissioningMask      = 1 << 4,
-        kBeaconsMask                    = 1 << 3,
-        kCommercialCommissioningMask    = 1 << 2,
-        kAutonomousEnrollmentMask       = 1 << 1,
-        kMasterKeyProvisioningMask      = 1 << 0,
-        kTobleLinkMask                  = 1 << 7,
-        kNonCcmRoutersMask              = 1 << 6,
-        kReservedMask                   = 0x38,
-        kVersionThresholdForRoutingMask = 0x07,
-    };
+    static constexpr uint8_t kDefaultFlags                   = 0xff;
+    static constexpr uint8_t kObtainNetworkKeyMask           = 1 << 7;
+    static constexpr uint8_t kNativeCommissioningMask        = 1 << 6;
+    static constexpr uint8_t kRoutersMask                    = 1 << 5;
+    static constexpr uint8_t kExternalCommissioningMask      = 1 << 4;
+    static constexpr uint8_t kBeaconsMask                    = 1 << 3;
+    static constexpr uint8_t kCommercialCommissioningMask    = 1 << 2;
+    static constexpr uint8_t kAutonomousEnrollmentMask       = 1 << 1;
+    static constexpr uint8_t kNetworkKeyProvisioningMask     = 1 << 0;
+    static constexpr uint8_t kTobleLinkMask                  = 1 << 7;
+    static constexpr uint8_t kNonCcmRoutersMask              = 1 << 6;
+    static constexpr uint8_t kReservedMask                   = 0x38;
+    static constexpr uint8_t kVersionThresholdForRoutingMask = 0x07;
 
     void SetToDefaultFlags(void);
 };
 
 /**
- * This class represents a Thread Master Key.
+ * This class represents a Thread Network Key.
  *
  */
 OT_TOOL_PACKED_BEGIN
-class MasterKey : public otMasterKey, public Equatable<MasterKey>
+class NetworkKey : public otNetworkKey, public Equatable<NetworkKey>
 {
 public:
 #if !OPENTHREAD_RADIO
     /**
-     * This method generates a cryptographically secure random sequence to populate the Thread Master Key.
+     * This method generates a cryptographically secure random sequence to populate the Thread Network Key.
      *
-     * @retval kErrorNone     Successfully generated a random Thread Master Key.
+     * @retval kErrorNone     Successfully generated a random Thread Network Key.
      * @retval kErrorFailed   Failed to generate random sequence.
      *
      */
@@ -203,23 +203,23 @@ public:
     void Stop(void);
 
     /**
-     * This method returns the Thread Master Key.
+     * This method returns the Thread Network Key.
      *
-     * @returns The Thread Master Key.
+     * @returns The Thread Network Key.
      *
      */
-    const MasterKey &GetMasterKey(void) const { return mMasterKey; }
+    const NetworkKey &GetNetworkKey(void) const { return mNetworkKey; }
 
     /**
-     * This method sets the Thread Master Key.
+     * This method sets the Thread Network Key.
      *
-     * @param[in]  aKey        A Thread Master Key.
+     * @param[in]  aKey        A Thread Network Key.
      *
-     * @retval kErrorNone         Successfully set the Thread Master Key.
+     * @retval kErrorNone         Successfully set the Thread Network Key.
      * @retval kErrorInvalidArgs  The @p aKeyLength value was invalid.
      *
      */
-    Error SetMasterKey(const MasterKey &aKey);
+    Error SetNetworkKey(const NetworkKey &aKey);
 
 #if OPENTHREAD_FTD || OPENTHREAD_MTD
     /**
@@ -479,11 +479,8 @@ public:
     void MacFrameCounterUpdated(uint32_t aMacFrameCounter);
 
 private:
-    enum
-    {
-        kDefaultKeySwitchGuardTime = 624,
-        kOneHourIntervalInMsec     = 3600u * 1000u,
-    };
+    static constexpr uint32_t kDefaultKeySwitchGuardTime = 624;
+    static constexpr uint32_t kOneHourIntervalInMsec     = 3600u * 1000u;
 
     OT_TOOL_PACKED_BEGIN
     struct Keys
@@ -515,7 +512,7 @@ private:
     static const uint8_t kTrelInfoString[];
 #endif
 
-    MasterKey mMasterKey;
+    NetworkKey mNetworkKey;
 
     uint32_t mKeySequence;
     Mle::Key mMleKey;

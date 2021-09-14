@@ -29,16 +29,15 @@
 import ipaddress
 import logging
 import re
-import time
 from collections import Counter
-from typing import List, Collection, Union, Tuple, Optional, Dict, Pattern, Any
+from typing import Callable, List, Collection, Union, Tuple, Optional, Dict, Pattern, Any
 
 from . import connectors
 from .command_handlers import OTCommandHandler, OtCliCommandRunner, OtbrSshCommandRunner
 from .connectors import Simulator
 from .errors import UnexpectedCommandOutput, ExpectLineTimeoutError, CommandError, InvalidArgumentsError
 from .types import ChildId, Rloc16, Ip6Addr, ThreadState, PartitionId, DeviceMode, RouterId, SecurityPolicy, Ip6Prefix, \
-    RouterTableEntry
+    RouterTableEntry, NetifIdentifier
 from .utils import match_line, constant_property
 
 
@@ -76,9 +75,11 @@ class OTCI(object):
 
             while duration > 0:
                 output = self.__otcmd.wait(1)
-                if match_line(expect_line, output):
+                if any(match_line(line, expect_line) for line in output):
                     success = True
                     break
+
+                duration -= 1
 
             if not success:
                 raise ExpectLineTimeoutError(expect_line)
@@ -105,7 +106,6 @@ class OTCI(object):
                 self.__logger and self.__logger.info('%s', line)
 
         if cmd in ('reset', 'factoryreset'):
-            self.__wait_reset()
             return output
 
         if output[-1] == 'Done':
@@ -117,6 +117,10 @@ class OTCI(object):
     def set_logger(self, logger: logging.Logger):
         """Set the logger for the OTCI instance, or None to disable logging."""
         self.__logger = logger
+
+    def set_line_read_callback(self, callback: Optional[Callable[[str], Any]]):
+        """Set the callback that will be called for each line output by the CLI."""
+        self.__otcmd.set_line_read_callback(callback)
 
     #
     # Constant properties
@@ -362,14 +366,15 @@ class OTCI(object):
         """Get network name."""
         return self.__parse_str(self.execute_command('networkname'))
 
-    def get_master_key(self) -> str:
-        """Get the network master key."""
-        return self.__parse_master_key(self.execute_command('masterkey'))
+    def get_network_key(self) -> str:
+        """Get the network key."""
+        return self.__parse_network_key(self.execute_command(self.__detect_networkkey_cmd()))
 
-    def set_master_key(self, masterkey: str):
-        """Set the network master key."""
-        self.__validate_master_key(masterkey)
-        self.execute_command(f'masterkey {masterkey}')
+    def set_network_key(self, networkkey: str):
+        """Set the network key."""
+        self.__validate_network_key(networkkey)
+        cmd = self.__detect_networkkey_cmd()
+        self.execute_command(f'{cmd} {networkkey}')
 
     def get_key_sequence_counter(self) -> int:
         """Get the Thread Key Sequence Counter."""
@@ -780,7 +785,7 @@ class OTCI(object):
     def dns_browse(self, service: str) -> List[Dict]:
         """Browse DNS service instances."""
         cmd = f'dns browse {service}'
-        output = '\n'.join(self.execute_command(cmd))
+        output = '\n'.join(self.execute_command(cmd, 30.0))
 
         result = []
         for ins, port, priority, weight, srv_ttl, hostname, address, aaaa_ttl, txt_data, txt_ttl in re.findall(
@@ -805,7 +810,7 @@ class OTCI(object):
     def dns_resolve(self, hostname: str) -> List[Dict]:
         """Resolve a DNS host name."""
         cmd = f'dns resolve {hostname}'
-        output = self.execute_command(cmd)
+        output = self.execute_command(cmd, 30.0)
         dns_resp = output[0]
         addrs = dns_resp.strip().split(' - ')[1].split(' ')
         ips = [Ip6Addr(item.strip()) for item in addrs[::2]]
@@ -819,7 +824,7 @@ class OTCI(object):
     def dns_resolve_service(self, instance: str, service: str) -> Dict:
         """Resolves aservice instance."""
         cmd = f'dns service {instance} {service}'
-        output = self.execute_command(cmd)
+        output = self.execute_command(cmd, 30.0)
 
         m = re.match(
             r'.*Port:(\d+), Priority:(\d+), Weight:(\d+), TTL:(\d+)\s+Host:(.*?)\s+HostAddress:(\S+) TTL:(\d+)\s+TXT:(\[.*?\]) TTL:(\d+)',
@@ -845,6 +850,10 @@ class OTCI(object):
     #
     # SRP server & client utilities
     #
+
+    def srp_server_get_state(self):
+        """Get the SRP server state"""
+        return self.__parse_str(self.execute_command('srp server state'))
 
     def srp_server_enable(self):
         """Enable SRP server."""
@@ -918,6 +927,8 @@ class OTCI(object):
 
                     v = v[1:-1]
                     info['addresses'] = list(map(Ip6Addr, v.split(', ')))
+                elif k == 'subtypes':
+                    info[k] = list() if v == '(null)' else list(v.split(','))
                 elif k in ('port', 'weight', 'priority'):
                     info[k] = int(v)
                 elif k in ('host',):
@@ -1497,7 +1508,6 @@ class OTCI(object):
 
         netdata['prefixes'] = self.__parse_prefixes(prefixes_output)
 
-        print(prefixes_output, output)
         routes_output = []
         while True:
             line = output.pop(0)
@@ -1559,7 +1569,6 @@ class OTCI(object):
         routes = []
         for line in output:
             line = line.split()
-            print(line)
             if line[1] == 's':
                 prefix, _, prf, rloc16 = line
                 stable = True
@@ -1652,7 +1661,7 @@ class OTCI(object):
         # Channel Mask: 0x07fff800
         # Ext PAN ID: 5c93ae980ff22d35
         # Mesh Local Prefix: fdc7:55fe:6363:bd01::/64
-        # Master Key: d1a8348d59fb1fac1d6c4f95007d487a
+        # Network Key: d1a8348d59fb1fac1d6c4f95007d487a
         # Network Name: OpenThread-7caa
         # PAN ID: 0x7caa
         # PSKc: 167d89fd169e439ca0b8266de248090f
@@ -1674,8 +1683,8 @@ class OTCI(object):
                 dataset['extpanid'] = val
             elif key == 'Mesh Local Prefix':
                 dataset['mesh_local_prefix'] = val
-            elif key == 'Master Key':
-                dataset['masterkey'] = val
+            elif key in ('Network Key', 'Master Key'):
+                dataset['networkkey'] = val
             elif key == 'Network Name':
                 dataset['network_name'] = val
             elif key == 'PAN ID':
@@ -1706,7 +1715,7 @@ class OTCI(object):
                            channel_mask: int = None,
                            extpanid: str = None,
                            mesh_local_prefix: str = None,
-                           master_key: str = None,
+                           network_key: str = None,
                            network_name: str = None,
                            panid: int = None,
                            pskc: str = None,
@@ -1727,8 +1736,9 @@ class OTCI(object):
         if mesh_local_prefix is not None:
             self.execute_command(f'dataset meshlocalprefix {mesh_local_prefix}')
 
-        if master_key is not None:
-            self.execute_command(f'dataset masterkey {master_key}')
+        if network_key is not None:
+            nwk_cmd = self.__detect_networkkey_cmd()
+            self.execute_command(f'dataset {nwk_cmd} {network_key}')
 
         if network_name is not None:
             self.execute_command(f'dataset networkname {self.__escape_escapable(network_name)}')
@@ -1800,6 +1810,9 @@ class OTCI(object):
             return 'allowlist'
         else:
             return '\x77\x68\x69\x74\x65\x6c\x69\x73\x74'
+
+    def __detect_networkkey_cmd(self) -> str:
+        return 'networkkey' if self.api_version >= 126 else 'masterkey'
 
     #
     # Unicast Addresses management
@@ -2112,13 +2125,19 @@ class OTCI(object):
         """Opens the example socket."""
         self.execute_command('udp close')
 
-    def udp_bind(self, ip: str, port: int):
+    def udp_bind(self, ip: str, port: int, netif: NetifIdentifier = NetifIdentifier.THERAD):
         """Assigns a name (i.e. IPv6 address and port) to the example socket.
 
         :param ip: the IPv6 address or the unspecified IPv6 address (::).
         :param port: the UDP port
         """
-        self.execute_command(f'udp bind {ip} {port}')
+        bindarg = ''
+        if netif == NetifIdentifier.UNSPECIFIED:
+            bindarg += ' -u'
+        elif netif == NetifIdentifier.BACKBONE:
+            bindarg += ' -b'
+
+        self.execute_command(f'udp bind{bindarg} {ip} {port}')
 
     def udp_connect(self, ip: str, port: int):
         """Specifies the peer with which the socket is to be associated.
@@ -2261,21 +2280,21 @@ class OTCI(object):
 
         return int(output[0], base)
 
-    def __parse_master_key(self, output: List[str]) -> str:
-        masterkey = self.__parse_str(output)
+    def __parse_network_key(self, output: List[str]) -> str:
+        networkkey = self.__parse_str(output)
 
         try:
-            self.__validate_master_key(masterkey)
+            self.__validate_network_key(networkkey)
         except ValueError:
             raise UnexpectedCommandOutput(output)
 
-        return masterkey
+        return networkkey
 
-    def __validate_master_key(self, masterkey: str):
-        if len(masterkey) != 32:
-            raise ValueError(masterkey)
+    def __validate_network_key(self, networkkey: str):
+        if len(networkkey) != 32:
+            raise ValueError(networkkey)
 
-        int(masterkey, 16)
+        int(networkkey, 16)
 
     def __parse_hex64b(self, output: List[str]) -> str:
         extaddr = self.__parse_str(output)
@@ -2337,12 +2356,6 @@ class OTCI(object):
             s = s.replace(char, '\\%s' % char)
         return s
 
-    def __wait_reset(self):
-        # reset would restart the otbr-agent executable. It's risky to send commands after reset too quickly because
-        # it might cause ot-ctl to quit abnormally.
-        # So we sleep for a while after reset.
-        time.sleep(3)
-
     def __txt_to_hex(self, txt: Dict[str, Union[str, bytes, bool]]) -> str:
         txt_bin = b''
         for k, v in txt.items():
@@ -2382,8 +2395,8 @@ def connect_ncp_sim(executable: str, nodeid: int, simulator: Optional[Simulator]
     return OTCI(cmd_handler)
 
 
-def connect_otbr_ssh(host: str, port: int = 22, username='pi', password='raspberry'):
-    cmd_handler = OtbrSshCommandRunner(host, port, username, password)
+def connect_otbr_ssh(host: str, port: int = 22, username='pi', password='raspberry', sudo=True):
+    cmd_handler = OtbrSshCommandRunner(host, port, username, password, sudo=sudo)
     return OTCI(cmd_handler)
 
 

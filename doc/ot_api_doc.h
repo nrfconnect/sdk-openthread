@@ -59,6 +59,7 @@
  * @defgroup api-ip6                  IPv6
  * @defgroup api-srp                  SRP
  * @defgroup api-ping-sender          Ping Sender
+ * @defgroup api-tcp                  TCP
  * @defgroup api-udp-group            UDP
  *
  * @{
@@ -123,6 +124,7 @@
  * @defgroup api-entropy              Entropy Source
  * @defgroup api-factory-diagnostics  Factory Diagnostics
  * @defgroup api-heap                 Heap
+ * @defgroup api-history-tracker      History Tracker
  * @defgroup api-jam-detection        Jam Detection
  * @defgroup api-logging              Logging
  * @defgroup api-ncp                  Network Co-Processor

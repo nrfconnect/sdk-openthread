@@ -178,6 +178,7 @@ LOCAL_SRC_FILES                                                  := \
     src/core/api/entropy_api.cpp                                    \
     src/core/api/error_api.cpp                                      \
     src/core/api/heap_api.cpp                                       \
+    src/core/api/history_tracker_api.cpp                            \
     src/core/api/icmp6_api.cpp                                      \
     src/core/api/instance_api.cpp                                   \
     src/core/api/ip6_api.cpp                                        \
@@ -190,6 +191,7 @@ LOCAL_SRC_FILES                                                  := \
     src/core/api/message_api.cpp                                    \
     src/core/api/multi_radio_api.cpp                                \
     src/core/api/netdata_api.cpp                                    \
+    src/core/api/netdata_publisher_api.cpp                          \
     src/core/api/netdiag_api.cpp                                    \
     src/core/api/network_time_api.cpp                               \
     src/core/api/ping_sender_api.cpp                                \
@@ -201,6 +203,7 @@ LOCAL_SRC_FILES                                                  := \
     src/core/api/srp_client_buffers_api.cpp                         \
     src/core/api/srp_server_api.cpp                                 \
     src/core/api/tasklet_api.cpp                                    \
+    src/core/api/tcp_api.cpp                                        \
     src/core/api/thread_api.cpp                                     \
     src/core/api/thread_ftd_api.cpp                                 \
     src/core/api/udp_api.cpp                                        \
@@ -218,6 +221,7 @@ LOCAL_SRC_FILES                                                  := \
     src/core/coap/coap_secure.cpp                                   \
     src/core/common/crc16.cpp                                       \
     src/core/common/error.cpp                                       \
+    src/core/common/heap_string.cpp                                 \
     src/core/common/instance.cpp                                    \
     src/core/common/logging.cpp                                     \
     src/core/common/message.cpp                                     \
@@ -286,6 +290,7 @@ LOCAL_SRC_FILES                                                  := \
     src/core/net/socket.cpp                                         \
     src/core/net/srp_client.cpp                                     \
     src/core/net/srp_server.cpp                                     \
+    src/core/net/tcp6.cpp                                           \
     src/core/net/udp6.cpp                                           \
     src/core/radio/radio.cpp                                        \
     src/core/radio/radio_callbacks.cpp                              \
@@ -319,6 +324,7 @@ LOCAL_SRC_FILES                                                  := \
     src/core/thread/network_data_leader_ftd.cpp                     \
     src/core/thread/network_data_local.cpp                          \
     src/core/thread/network_data_notifier.cpp                       \
+    src/core/thread/network_data_publisher.cpp                      \
     src/core/thread/network_data_service.cpp                        \
     src/core/thread/network_data_tlvs.cpp                           \
     src/core/thread/network_data_types.cpp                          \
@@ -337,6 +343,7 @@ LOCAL_SRC_FILES                                                  := \
     src/core/utils/child_supervision.cpp                            \
     src/core/utils/flash.cpp                                        \
     src/core/utils/heap.cpp                                         \
+    src/core/utils/history_tracker.cpp                              \
     src/core/utils/jam_detector.cpp                                 \
     src/core/utils/lookup_table.cpp                                 \
     src/core/utils/otns.cpp                                         \
@@ -367,6 +374,7 @@ LOCAL_SRC_FILES                                                  := \
     src/posix/platform/settings.cpp                                 \
     src/posix/platform/spi_interface.cpp                            \
     src/posix/platform/system.cpp                                   \
+    src/posix/platform/trel_udp6.cpp                                \
     src/posix/platform/udp.cpp                                      \
     third_party/mbedtls/repo/library/aes.c                          \
     third_party/mbedtls/repo/library/aesni.c                        \
@@ -493,10 +501,12 @@ LOCAL_SRC_FILES                            := \
     src/cli/cli_coap_secure.cpp               \
     src/cli/cli_commissioner.cpp              \
     src/cli/cli_dataset.cpp                   \
+    src/cli/cli_history.cpp                   \
     src/cli/cli_joiner.cpp                    \
     src/cli/cli_network_data.cpp              \
     src/cli/cli_srp_client.cpp                \
     src/cli/cli_srp_server.cpp                \
+    src/cli/cli_tcp.cpp                       \
     src/cli/cli_udp.cpp                       \
     $(NULL)
 

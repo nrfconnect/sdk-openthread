@@ -71,6 +71,57 @@
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_SRP_CLIENT_SWITCH_SERVER_ON_FAILURE
+ *
+ * Define to 1 to enable SRP client to switch server on failure (when auto-start feature is used).
+ *
+ * This config is only used when `OPENTHREAD_CONFIG_SRP_CLIENT_AUTO_START_API_ENABLE` is enabled.
+ *
+ * When enabled, the client will try to select the next server from entries in Thread Network Data when the current
+ * server rejects an SRP update or there is no response (timeout waiting for response from server).
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_SRP_CLIENT_SWITCH_SERVER_ON_FAILURE
+#define OPENTHREAD_CONFIG_SRP_CLIENT_SWITCH_SERVER_ON_FAILURE 1
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_SRP_CLIENT_DISALLOW_SERVER_SWITCH_WITH_REGISTERED_HOST
+ *
+ * Define to 1 to disallow SRP client to switch server (when auto-start is used) on failure if host (or any services)
+ * were previously successfully registered with the currently selected server.
+ *
+ * This config is only applicable when `OPENTHREAD_CONFIG_SRP_CLIENT_SWITCH_SERVER_ON_FAILURE` is enabled.
+ *
+ * If this is enabled, once SRP client successfully registers with an auto-start selected SRP server, it stays with
+ * the selected SRP server (even if future SRP updates fail or timeout) while the related server entry remains present
+ * in the Thread Network Data. If the entry is removed from Network Data, then SRP client will try to select a new
+ * server.
+ *
+ * Enabling this behavior would be useful allowing more aggressive switch logic (e.g., switch after fewer timeouts
+ * `OPENTHREAD_CONFIG_SRP_CLIENT_MAX_TIMEOUT_FAILURES_TO_SWITCH_SERVER`) while not allowing switch due to temporary
+ * failures on the currently selected server. This can help avoid situation where the old server may still remember the
+ * registered host/service info and client switching to a new server then failing due to name conflict (when new server
+ * probes for the host/service name original server would not allow new registration).
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_SRP_CLIENT_DISALLOW_SERVER_SWITCH_WITH_REGISTERED_HOST
+#define OPENTHREAD_CONFIG_SRP_CLIENT_DISALLOW_SERVER_SWITCH_WITH_REGISTERED_HOST 1
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_SRP_CLIENT_MAX_TIMEOUT_FAILURES_TO_SWITCH_SERVER
+ *
+ * Specifies number of timeout failures to trigger a switch of server.
+ *
+ * This is applicable only when `OPENTHREAD_CONFIG_SRP_CLIENT_SWITCH_SERVER_ON_FAILURE` is used.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_SRP_CLIENT_MAX_TIMEOUT_FAILURES_TO_SWITCH_SERVER
+#define OPENTHREAD_CONFIG_SRP_CLIENT_MAX_TIMEOUT_FAILURES_TO_SWITCH_SERVER 3
+#endif
+
+/**
  * @def OPENTHREAD_CONFIG_SRP_CLIENT_DOMAIN_NAME_API_ENABLE
  *
  * Define to 1 for the SRP client implementation to provide APIs that get/set the domain name.
@@ -289,7 +340,19 @@
  *
  */
 #ifndef OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_SERVICE_NAME_SIZE
-#define OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_SERVICE_NAME_SIZE 64
+#define OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_SERVICE_NAME_SIZE 96
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_SERVICE_MAX_SUB_TYPES
+ *
+ * Specifies the maximum number of service subtype labels (array length) in the SRP client buffers and service pool.
+ *
+ * This config is applicable only when `OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_ENABLE` is enabled.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_SERVICE_MAX_SUB_TYPES
+#define OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_SERVICE_MAX_SUB_TYPES 6
 #endif
 
 /**

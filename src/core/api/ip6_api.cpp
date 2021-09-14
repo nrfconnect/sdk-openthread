@@ -79,7 +79,7 @@ const otNetifAddress *otIp6GetUnicastAddresses(otInstance *aInstance)
 {
     Instance &instance = *static_cast<Instance *>(aInstance);
 
-    return instance.Get<ThreadNetif>().GetUnicastAddresses();
+    return instance.Get<ThreadNetif>().GetUnicastAddresses().GetHead();
 }
 
 otError otIp6AddUnicastAddress(otInstance *aInstance, const otNetifAddress *aAddress)
@@ -87,7 +87,7 @@ otError otIp6AddUnicastAddress(otInstance *aInstance, const otNetifAddress *aAdd
     Instance &instance = *static_cast<Instance *>(aInstance);
 
     return instance.Get<ThreadNetif>().AddExternalUnicastAddress(
-        *static_cast<const Ip6::NetifUnicastAddress *>(aAddress));
+        *static_cast<const Ip6::Netif::UnicastAddress *>(aAddress));
 }
 
 otError otIp6RemoveUnicastAddress(otInstance *aInstance, const otIp6Address *aAddress)
@@ -101,7 +101,7 @@ const otNetifMulticastAddress *otIp6GetMulticastAddresses(otInstance *aInstance)
 {
     Instance &instance = *static_cast<Instance *>(aInstance);
 
-    return instance.Get<ThreadNetif>().GetMulticastAddresses();
+    return instance.Get<ThreadNetif>().GetMulticastAddresses().GetHead();
 }
 
 otError otIp6SubscribeMulticastAddress(otInstance *aInstance, const otIp6Address *aAddress)
@@ -227,6 +227,11 @@ bool otIp6IsAddressEqual(const otIp6Address *aFirst, const otIp6Address *aSecond
     return *static_cast<const Ip6::Address *>(aFirst) == *static_cast<const Ip6::Address *>(aSecond);
 }
 
+bool otIp6ArePrefixesEqual(const otIp6Prefix *aFirst, const otIp6Prefix *aSecond)
+{
+    return *static_cast<const Ip6::Prefix *>(aFirst) == *static_cast<const Ip6::Prefix *>(aSecond);
+}
+
 otError otIp6AddressFromString(const char *aString, otIp6Address *aAddress)
 {
     return static_cast<Ip6::Address *>(aAddress)->FromString(aString);
@@ -235,6 +240,11 @@ otError otIp6AddressFromString(const char *aString, otIp6Address *aAddress)
 void otIp6AddressToString(const otIp6Address *aAddress, char *aBuffer, uint16_t aSize)
 {
     static_cast<const Ip6::Address *>(aAddress)->ToString(aBuffer, aSize);
+}
+
+void otIp6SockAddrToString(const otSockAddr *aSockAddr, char *aBuffer, uint16_t aSize)
+{
+    static_cast<const Ip6::SockAddr *>(aSockAddr)->ToString(aBuffer, aSize);
 }
 
 void otIp6PrefixToString(const otIp6Prefix *aPrefix, char *aBuffer, uint16_t aSize)
@@ -256,9 +266,9 @@ bool otIp6IsAddressUnspecified(const otIp6Address *aAddress)
 
 otError otIp6SelectSourceAddress(otInstance *aInstance, otMessageInfo *aMessageInfo)
 {
-    Error                           error    = kErrorNone;
-    Instance &                      instance = *static_cast<Instance *>(aInstance);
-    const Ip6::NetifUnicastAddress *netifAddr;
+    Error                             error    = kErrorNone;
+    Instance &                        instance = *static_cast<Instance *>(aInstance);
+    const Ip6::Netif::UnicastAddress *netifAddr;
 
     netifAddr = instance.Get<Ip6::Ip6>().SelectSourceAddress(*static_cast<Ip6::MessageInfo *>(aMessageInfo));
     VerifyOrExit(netifAddr != nullptr, error = kErrorNotFound);
@@ -323,3 +333,8 @@ otError otIp6SetMeshLocalIid(otInstance *aInstance, const otIp6InterfaceIdentifi
 }
 
 #endif
+
+const char *otIp6ProtoToString(uint8_t aIpProto)
+{
+    return Ip6::Ip6::IpProtoToString(aIpProto);
+}

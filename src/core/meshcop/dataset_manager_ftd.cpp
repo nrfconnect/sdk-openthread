@@ -61,11 +61,11 @@ namespace MeshCoP {
 
 Error DatasetManager::AppendMleDatasetTlv(Message &aMessage) const
 {
-    Dataset dataset(GetType());
+    Dataset dataset;
 
     IgnoreError(Read(dataset));
 
-    return dataset.AppendMleDatasetTlv(aMessage);
+    return dataset.AppendMleDatasetTlv(GetType(), aMessage);
 }
 
 Error DatasetManager::HandleSet(Coap::Message &aMessage, const Ip6::MessageInfo &aMessageInfo)
@@ -76,17 +76,17 @@ Error DatasetManager::HandleSet(Coap::Message &aMessage, const Ip6::MessageInfo 
     Tlv::Type       type;
     bool            isUpdateFromCommissioner = false;
     bool            doesAffectConnectivity   = false;
-    bool            doesAffectMasterKey      = false;
-    bool            hasMasterKey             = false;
+    bool            doesAffectNetworkKey     = false;
+    bool            hasNetworkKey            = false;
     StateTlv::State state                    = StateTlv::kReject;
-    Dataset         dataset(GetType());
+    Dataset         dataset;
 
     ActiveTimestampTlv   activeTimestamp;
     PendingTimestampTlv  pendingTimestamp;
     ChannelTlv           channel;
     uint16_t             sessionId;
     Mle::MeshLocalPrefix meshLocalPrefix;
-    MasterKey            masterKey;
+    NetworkKey           networkKey;
     uint16_t             panId;
 
     activeTimestamp.SetLength(0);
@@ -151,22 +151,22 @@ Error DatasetManager::HandleSet(Coap::Message &aMessage, const Ip6::MessageInfo 
         doesAffectConnectivity = true;
     }
 
-    // check network master key
-    if (Tlv::Find<NetworkMasterKeyTlv>(aMessage, masterKey) == kErrorNone)
+    // check network key
+    if (Tlv::Find<NetworkKeyTlv>(aMessage, networkKey) == kErrorNone)
     {
-        hasMasterKey = true;
+        hasNetworkKey = true;
 
-        if (masterKey != Get<KeyManager>().GetMasterKey())
+        if (networkKey != Get<KeyManager>().GetNetworkKey())
         {
             doesAffectConnectivity = true;
-            doesAffectMasterKey    = true;
+            doesAffectNetworkKey   = true;
         }
     }
 
     // check active timestamp rollback
-    if (type == Tlv::kPendingTimestamp && (!hasMasterKey || (masterKey == Get<KeyManager>().GetMasterKey())))
+    if (type == Tlv::kPendingTimestamp && (!hasNetworkKey || (networkKey == Get<KeyManager>().GetNetworkKey())))
     {
-        // no change to master key, active timestamp must be ahead
+        // no change to network key, active timestamp must be ahead
         const Timestamp *localActiveTimestamp = Get<ActiveDataset>().GetTimestamp();
 
         VerifyOrExit(localActiveTimestamp == nullptr || localActiveTimestamp->Compare(activeTimestamp) > 0);
@@ -215,7 +215,7 @@ Error DatasetManager::HandleSet(Coap::Message &aMessage, const Ip6::MessageInfo 
             {
                 DelayTimerTlv &delayTimerTlv = static_cast<DelayTimerTlv &>(static_cast<Tlv &>(datasetTlv));
 
-                if (doesAffectMasterKey && delayTimerTlv.GetDelayTimer() < DelayTimerTlv::kDelayTimerDefault)
+                if (doesAffectNetworkKey && delayTimerTlv.GetDelayTimer() < DelayTimerTlv::kDelayTimerDefault)
                 {
                     delayTimerTlv.SetDelayTimer(DelayTimerTlv::kDelayTimerDefault);
                 }
@@ -298,7 +298,7 @@ Error DatasetManager::DatasetTlv::ReadFromMessage(const Message &aMessage, uint1
     Error error = kErrorNone;
 
     SuccessOrExit(error = aMessage.Read(aOffset, this, sizeof(Tlv)));
-    VerifyOrExit(GetLength() <= kMaxValueSize, error = kErrorParse);
+    VerifyOrExit(GetLength() <= Dataset::kMaxValueSize, error = kErrorParse);
     SuccessOrExit(error = aMessage.Read(aOffset + sizeof(Tlv), mValue, GetLength()));
     VerifyOrExit(Tlv::IsValid(*this), error = kErrorParse);
 
@@ -309,7 +309,7 @@ exit:
 Error ActiveDataset::GenerateLocal(void)
 {
     Error   error = kErrorNone;
-    Dataset dataset(GetType());
+    Dataset dataset;
 
     VerifyOrExit(Get<Mle::MleRouter>().IsAttached(), error = kErrorInvalidState);
     VerifyOrExit(!mLocal.IsTimestampPresent(), error = kErrorAlready);
@@ -351,9 +351,9 @@ Error ActiveDataset::GenerateLocal(void)
         IgnoreError(dataset.SetTlv(Tlv::kMeshLocalPrefix, Get<Mle::MleRouter>().GetMeshLocalPrefix()));
     }
 
-    if (dataset.GetTlv<NetworkMasterKeyTlv>() == nullptr)
+    if (dataset.GetTlv<NetworkKeyTlv>() == nullptr)
     {
-        IgnoreError(dataset.SetTlv(Tlv::kNetworkMasterKey, Get<KeyManager>().GetMasterKey()));
+        IgnoreError(dataset.SetTlv(Tlv::kNetworkKey, Get<KeyManager>().GetNetworkKey()));
     }
 
     if (dataset.GetTlv<NetworkNameTlv>() == nullptr)
@@ -457,7 +457,7 @@ exit:
 void PendingDataset::ApplyActiveDataset(const Timestamp &aTimestamp, Coap::Message &aMessage)
 {
     uint16_t offset = aMessage.GetOffset();
-    Dataset  dataset(GetType());
+    Dataset  dataset;
 
     VerifyOrExit(Get<Mle::MleRouter>().IsAttached());
 
@@ -474,7 +474,7 @@ void PendingDataset::ApplyActiveDataset(const Timestamp &aTimestamp, Coap::Messa
     IgnoreError(dataset.SetTlv(Tlv::kDelayTimer, Get<Leader>().GetDelayTimerMinimal()));
 
     // add pending timestamp tlv
-    dataset.SetTimestamp(aTimestamp);
+    dataset.SetTimestamp(Dataset::kPending, aTimestamp);
     IgnoreError(DatasetManager::Save(dataset));
 
     // reset delay timer

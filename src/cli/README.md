@@ -52,6 +52,7 @@ Done
 - [factoryreset](#factoryreset)
 - [fake](#fake)
 - [fem](#fem)
+- [history](README_HISTORY.md)
 - [ifconfig](#ifconfig)
 - [ipaddr](#ipaddr)
 - [ipmaddr](#ipmaddr)
@@ -65,7 +66,6 @@ Done
 - [log](#log-filename-filename)
 - [mac](#mac-retries-direct)
 - [macfilter](#macfilter)
-- [masterkey](#masterkey)
 - [mliid](#mliid-iid)
 - [mlr](#mlr-reg-ipaddr--timeout)
 - [mode](#mode)
@@ -75,13 +75,14 @@ Done
 - [netstat](#netstat)
 - [networkdiagnostic](#networkdiagnostic-get-addr-type-)
 - [networkidtimeout](#networkidtimeout)
+- [networkkey](#networkkey)
 - [networkname](#networkname)
 - [networktime](#networktime)
 - [panid](#panid)
 - [parent](#parent)
 - [parentpriority](#parentpriority)
 - [partitionid](#partitionid)
-- [ping](#ping-ipaddr-sizecount-intervalhoplimit)
+- [ping](#ping--i-source-ipaddr-size-count-interval-hoplimit-timeout)
 - [pollperiod](#pollperiod-pollperiod)
 - [preferrouterid](#preferrouterid-routerid)
 - [prefix](#prefix)
@@ -105,6 +106,7 @@ Done
 - [state](#state)
 - [srp](README_SRP.md)
 - [thread](#thread-start)
+- [trel](#trel-enable)
 - [txpower](#txpower)
 - [udp](README_UDP.md)
 - [unsecureport](#unsecureport-add-port)
@@ -353,6 +355,26 @@ Done
 
 ```bash
 > br disable
+Done
+```
+
+### br omrprefix
+
+Get the randomly generated off-mesh-routable prefix of the Border Router.
+
+```bash
+> br omrprefix
+fdfc:1ff5:1512:5622::/64
+Done
+```
+
+### br onlinkprefix
+
+Get the randomly generated on-link prefix of the Border Router.
+
+```bash
+> br onlinkprefix
+fd41:2650:a6f5:0::/64
 Done
 ```
 
@@ -770,6 +792,7 @@ Get the supported counter names.
 
 ```bash
 > counters
+ip
 mac
 mle
 Done
@@ -824,6 +847,12 @@ Partition Id Changes: 1
 Better Partition Attach Attempts: 0
 Parent Changes: 0
 Done
+> counters ip
+TxSuccess: 10
+TxFailed: 0
+RxSuccess: 5
+RxFailed: 0
+Done
 ```
 
 ### counters \<countername\> reset
@@ -834,6 +863,8 @@ Reset the counter value.
 > counters mac reset
 Done
 > counters mle reset
+Done
+> counters ip reset
 Done
 ```
 
@@ -1608,25 +1639,6 @@ Set the log level.
 Done
 ```
 
-### masterkey
-
-Get the Thread Master Key value.
-
-```bash
-> masterkey
-00112233445566778899aabbccddeeff
-Done
-```
-
-### masterkey \<key\>
-
-Set the Thread Master Key value.
-
-```bash
-> masterkey 00112233445566778899aabbccddeeff
-Done
-```
-
 ### mliid \<iid\>
 
 Set the Mesh Local IID.
@@ -1767,12 +1779,12 @@ List all UDP sockets.
 
 ```bash
 > netstat
-|                 Local Address                 |                  Peer Address                 |
-+-----------------------------------------------+-----------------------------------------------+
-| 0:0:0:0:0:0:0:0:49153                         | 0:0:0:0:0:0:0:0:*                             |
-| 0:0:0:0:0:0:0:0:49152                         | 0:0:0:0:0:0:0:0:*                             |
-| 0:0:0:0:0:0:0:0:61631                         | 0:0:0:0:0:0:0:0:*                             |
-| 0:0:0:0:0:0:0:0:19788                         | 0:0:0:0:0:0:0:0:*                             |
+| Local Address                                   | Peer Address                                    |
++-------------------------------------------------+-------------------------------------------------+
+| [0:0:0:0:0:0:0:0]:49153                         | [0:0:0:0:0:0:0:0]:0                             |
+| [0:0:0:0:0:0:0:0]:49152                         | [0:0:0:0:0:0:0:0]:0                             |
+| [0:0:0:0:0:0:0:0]:61631                         | [0:0:0:0:0:0:0:0]:0                             |
+| [0:0:0:0:0:0:0:0]:19788                         | [0:0:0:0:0:0:0:0]:0                             |
 Done
 ```
 
@@ -1831,6 +1843,25 @@ Set the NETWORK_ID_TIMEOUT parameter used in the Router role.
 
 ```bash
 > networkidtimeout 120
+Done
+```
+
+### networkkey
+
+Get the Thread Network Key value.
+
+```bash
+> networkkey
+00112233445566778899aabbccddeeff
+Done
+```
+
+### networkkey \<key\>
+
+Set the Thread Network Key value.
+
+```bash
+> networkkey 00112233445566778899aabbccddeeff
 Done
 ```
 
@@ -1942,10 +1973,11 @@ Set the preferred Thread Leader Partition ID.
 Done
 ```
 
-### ping \<ipaddr\> \[size\] \[count\] \[interval\] \[hoplimit\] \[timeout\]
+### ping \[-I source\] \<ipaddr\> \[size\] \[count\] \[interval\] \[hoplimit\] \[timeout\]
 
 Send an ICMPv6 Echo Request.
 
+- source: The source IPv6 address of the echo request.
 - size: The number of data bytes to be sent.
 - count: The number of ICMPv6 Echo Requests to be sent.
 - interval: The interval between two consecutive ICMPv6 Echo Requests in seconds. The value may have fractional form, for example `0.5`.
@@ -1953,10 +1985,15 @@ Send an ICMPv6 Echo Request.
 - timeout: Time in seconds to wait for the final ICMPv6 Echo Reply after sending out the request. The value may have fractional form, for example `3.5`.
 
 ```bash
-> ping fdde:ad00:beef:0:558:f56b:d688:799
-16 bytes from fdde:ad00:beef:0:558:f56b:d688:799: icmp_seq=1 hlim=64 time=28ms
+> ping fd00:db8:0:0:76b:6a05:3ae9:a61a
+> 16 bytes from fd00:db8:0:0:76b:6a05:3ae9:a61a: icmp_seq=5 hlim=64 time=0ms
+1 packets transmitted, 1 packets received. Packet loss = 0.0%. Round-trip min/avg/max = 0/0.0/0 ms.
+Done
 
-> ping ff05::1 100 1 1 1
+> ping -I fd00:db8:0:0:76b:6a05:3ae9:a61a ff02::1 100 1 1 1
+> 108 bytes from fd00:db8:0:0:f605:fb4b:d429:d59a: icmp_seq=4 hlim=64 time=7ms
+1 packets transmitted, 1 packets received. Round-trip min/avg/max = 7/7.0/7 ms.
+Done
 ```
 
 ### ping stop
@@ -2153,11 +2190,12 @@ Get the external route list in the local Network Data.
 Done
 ```
 
-### route add \<prefix\> [s][prf]
+### route add \<prefix\> [sn][prf]
 
 Add a valid external route to the Network Data.
 
 - s: Stable flag
+- n: NAT64 flag
 - prf: Default Router Preference, which may be: 'high', 'med', or 'low'.
 
 ```bash
@@ -2473,6 +2511,30 @@ Get the Thread Version number.
 ```bash
 > thread version
 2
+Done
+```
+
+### trel enable
+
+Enable TREL radio link.
+
+`OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE` is required.
+
+Note: TREL radio link can be enabled only when a valid TREL URL was specified.
+
+```bash
+> trel enable
+Done
+```
+
+### trel disable
+
+Disable TREL radio link.
+
+`OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE` is required.
+
+```bash
+> trel disable
 Done
 ```
 

@@ -703,7 +703,7 @@ void Message::SetLinkInfo(const ThreadLinkInfo &aLinkInfo)
     SetLinkSecurityEnabled(aLinkInfo.mLinkSecurity);
     SetPanId(aLinkInfo.mPanId);
     AddRss(aLinkInfo.mRss);
-#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_ENABLE
+#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
     AddLqi(aLinkInfo.mLqi);
 #endif
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
@@ -799,6 +799,22 @@ void MessageQueue::Dequeue(Message &aMessage)
     aMessage.Next() = nullptr;
 
     aMessage.SetMessageQueue(nullptr);
+}
+
+void MessageQueue::DequeueAndFree(Message &aMessage)
+{
+    Dequeue(aMessage);
+    aMessage.Free();
+}
+
+void MessageQueue::DequeueAndFreeAll(void)
+{
+    Message *message;
+
+    while ((message = GetHead()) != nullptr)
+    {
+        DequeueAndFree(*message);
+    }
 }
 
 void MessageQueue::GetInfo(uint16_t &aMessageCount, uint16_t &aBufferCount) const
@@ -938,6 +954,22 @@ void PriorityQueue::Dequeue(Message &aMessage)
     aMessage.Prev()         = nullptr;
 
     aMessage.SetMessageQueue(nullptr);
+}
+
+void PriorityQueue::DequeueAndFree(Message &aMessage)
+{
+    Dequeue(aMessage);
+    aMessage.Free();
+}
+
+void PriorityQueue::DequeueAndFreeAll(void)
+{
+    Message *message;
+
+    while ((message = GetHead()) != nullptr)
+    {
+        DequeueAndFree(*message);
+    }
 }
 
 void PriorityQueue::GetInfo(uint16_t &aMessageCount, uint16_t &aBufferCount) const

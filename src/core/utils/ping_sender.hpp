@@ -79,8 +79,8 @@ public:
             mSentCount          = 0;
             mReceivedCount      = 0;
             mTotalRoundTripTime = 0;
-            mMinRoundTripTime   = NumericLimits<uint16_t>::Max();
-            mMaxRoundTripTime   = NumericLimits<uint16_t>::Min();
+            mMinRoundTripTime   = NumericLimits<uint16_t>::kMax;
+            mMaxRoundTripTime   = NumericLimits<uint16_t>::kMin;
             mIsMulticast        = false;
         }
     };
@@ -127,17 +127,10 @@ public:
         const Ip6::Address &GetDestination(void) const { return static_cast<const Ip6::Address &>(mDestination); }
 
     private:
-        enum : uint16_t
-        {
-            kDefaultSize  = OPENTHREAD_CONFIG_PING_SENDER_DEFAULT_SIZE,
-            kDefaultCount = OPENTHREAD_CONFIG_PING_SENDER_DEFAULT_COUNT,
-        };
-
-        enum : uint32_t
-        {
-            kDefaultInterval = OPENTHREAD_CONFIG_PING_SENDER_DEFAULT_INTEVRAL,
-            kDefaultTimeout  = OPENTHREAD_CONFIG_PING_SENDER_DEFAULT_TIMEOUT,
-        };
+        static constexpr uint16_t kDefaultSize     = OPENTHREAD_CONFIG_PING_SENDER_DEFAULT_SIZE;
+        static constexpr uint16_t kDefaultCount    = OPENTHREAD_CONFIG_PING_SENDER_DEFAULT_COUNT;
+        static constexpr uint32_t kDefaultInterval = OPENTHREAD_CONFIG_PING_SENDER_DEFAULT_INTEVRAL;
+        static constexpr uint32_t kDefaultTimeout  = OPENTHREAD_CONFIG_PING_SENDER_DEFAULT_TIMEOUT;
 
         void SetUnspecifiedToDefault(void);
         void InvokeReplyCallback(const Reply &aReply) const;

@@ -73,7 +73,7 @@ Error Dataset::Info::GenerateRandom(Instance &aInstance)
     mPanId           = Mac::GenerateRandomPanId();
     static_cast<SecurityPolicy &>(mSecurityPolicy).SetToDefault();
 
-    SuccessOrExit(error = static_cast<MasterKey &>(mMasterKey).GenerateRandom());
+    SuccessOrExit(error = static_cast<NetworkKey &>(mNetworkKey).GenerateRandom());
     SuccessOrExit(error = static_cast<Pskc &>(mPskc).GenerateRandom());
     SuccessOrExit(error = Random::Crypto::FillBuffer(mExtendedPanId.m8, sizeof(mExtendedPanId.m8)));
     SuccessOrExit(error = static_cast<Ip6::NetworkPrefix &>(mMeshLocalPrefix).GenerateRandomUla());
@@ -81,7 +81,7 @@ Error Dataset::Info::GenerateRandom(Instance &aInstance)
     snprintf(mNetworkName.m8, sizeof(mNetworkName), "OpenThread-%04x", mPanId);
 
     mComponents.mIsActiveTimestampPresent = true;
-    mComponents.mIsMasterKeyPresent       = true;
+    mComponents.mIsNetworkKeyPresent      = true;
     mComponents.mIsNetworkNamePresent     = true;
     mComponents.mIsExtendedPanIdPresent   = true;
     mComponents.mIsMeshLocalPrefixPresent = true;
@@ -99,9 +99,9 @@ bool Dataset::Info::IsSubsetOf(const Info &aOther) const
 {
     bool isSubset = false;
 
-    if (IsMasterKeyPresent())
+    if (IsNetworkKeyPresent())
     {
-        VerifyOrExit(aOther.IsMasterKeyPresent() && GetMasterKey() == aOther.GetMasterKey());
+        VerifyOrExit(aOther.IsNetworkKeyPresent() && GetNetworkKey() == aOther.GetNetworkKey());
     }
 
     if (IsNetworkNamePresent())
@@ -150,10 +150,9 @@ exit:
     return isSubset;
 }
 
-Dataset::Dataset(Type aType)
+Dataset::Dataset(void)
     : mUpdateTime(0)
     , mLength(0)
-    , mType(aType)
 {
     memset(mTlvs, 0, sizeof(mTlvs));
 }
@@ -223,8 +222,8 @@ void Dataset::ConvertTo(Info &aDatasetInfo) const
             aDatasetInfo.SetMeshLocalPrefix(static_cast<const MeshLocalPrefixTlv *>(cur)->GetMeshLocalPrefix());
             break;
 
-        case Tlv::kNetworkMasterKey:
-            aDatasetInfo.SetMasterKey(static_cast<const NetworkMasterKeyTlv *>(cur)->GetNetworkMasterKey());
+        case Tlv::kNetworkKey:
+            aDatasetInfo.SetNetworkKey(static_cast<const NetworkKeyTlv *>(cur)->GetNetworkKey());
             break;
 
         case Tlv::kNetworkName:
@@ -263,12 +262,12 @@ void Dataset::ConvertTo(otOperationalDatasetTlvs &aDataset) const
     aDataset.mLength = static_cast<uint8_t>(mLength);
 }
 
-void Dataset::Set(const Dataset &aDataset)
+void Dataset::Set(Type aType, const Dataset &aDataset)
 {
     memcpy(mTlvs, aDataset.mTlvs, aDataset.mLength);
     mLength = aDataset.mLength;
 
-    if (mType == kActive)
+    if (aType == kActive)
     {
         RemoveTlv(Tlv::kPendingTimestamp);
         RemoveTlv(Tlv::kDelayTimer);
@@ -336,9 +335,9 @@ Error Dataset::SetFrom(const Info &aDatasetInfo)
         IgnoreError(SetTlv(Tlv::kMeshLocalPrefix, aDatasetInfo.GetMeshLocalPrefix()));
     }
 
-    if (aDatasetInfo.IsMasterKeyPresent())
+    if (aDatasetInfo.IsNetworkKeyPresent())
     {
-        IgnoreError(SetTlv(Tlv::kNetworkMasterKey, aDatasetInfo.GetMasterKey()));
+        IgnoreError(SetTlv(Tlv::kNetworkKey, aDatasetInfo.GetNetworkKey()));
     }
 
     if (aDatasetInfo.IsNetworkNamePresent())
@@ -372,11 +371,11 @@ Error Dataset::SetFrom(const Info &aDatasetInfo)
     return error;
 }
 
-const Timestamp *Dataset::GetTimestamp(void) const
+const Timestamp *Dataset::GetTimestamp(Type aType) const
 {
     const Timestamp *timestamp = nullptr;
 
-    if (mType == kActive)
+    if (aType == kActive)
     {
         const ActiveTimestampTlv *tlv = GetTlv<ActiveTimestampTlv>();
         VerifyOrExit(tlv != nullptr);
@@ -393,9 +392,9 @@ exit:
     return timestamp;
 }
 
-void Dataset::SetTimestamp(const Timestamp &aTimestamp)
+void Dataset::SetTimestamp(Type aType, const Timestamp &aTimestamp)
 {
-    IgnoreError(SetTlv((mType == kActive) ? Tlv::kActiveTimestamp : Tlv::kPendingTimestamp, aTimestamp));
+    IgnoreError(SetTlv((aType == kActive) ? Tlv::kActiveTimestamp : Tlv::kPendingTimestamp, aTimestamp));
 }
 
 Error Dataset::SetTlv(Tlv::Type aType, const void *aValue, uint8_t aLength)
@@ -461,7 +460,7 @@ exit:
     return;
 }
 
-Error Dataset::AppendMleDatasetTlv(Message &aMessage) const
+Error Dataset::AppendMleDatasetTlv(Type aType, Message &aMessage) const
 {
     Error          error = kErrorNone;
     Mle::Tlv       tlv;
@@ -469,7 +468,7 @@ Error Dataset::AppendMleDatasetTlv(Message &aMessage) const
 
     VerifyOrExit(mLength > 0);
 
-    type = (mType == kActive ? Mle::Tlv::kActiveDataset : Mle::Tlv::kPendingDataset);
+    type = (aType == kActive ? Mle::Tlv::kActiveDataset : Mle::Tlv::kPendingDataset);
 
     tlv.SetType(type);
     tlv.SetLength(static_cast<uint8_t>(mLength) - sizeof(Tlv) - sizeof(Timestamp));
@@ -477,8 +476,8 @@ Error Dataset::AppendMleDatasetTlv(Message &aMessage) const
 
     for (const Tlv *cur = GetTlvsStart(); cur < GetTlvsEnd(); cur = cur->GetNext())
     {
-        if (((mType == kActive) && (cur->GetType() == Tlv::kActiveTimestamp)) ||
-            ((mType == kPending) && (cur->GetType() == Tlv::kPendingTimestamp)))
+        if (((aType == kActive) && (cur->GetType() == Tlv::kActiveTimestamp)) ||
+            ((aType == kPending) && (cur->GetType() == Tlv::kPendingTimestamp)))
         {
             ; // skip Active or Pending Timestamp TLV
         }
@@ -517,7 +516,7 @@ void Dataset::RemoveTlv(Tlv *aTlv)
     mLength -= length;
 }
 
-Error Dataset::ApplyConfiguration(Instance &aInstance, bool *aIsMasterKeyUpdated) const
+Error Dataset::ApplyConfiguration(Instance &aInstance, bool *aIsNetworkKeyUpdated) const
 {
     Mac::Mac &  mac        = aInstance.Get<Mac::Mac>();
     KeyManager &keyManager = aInstance.Get<KeyManager>();
@@ -525,9 +524,9 @@ Error Dataset::ApplyConfiguration(Instance &aInstance, bool *aIsMasterKeyUpdated
 
     VerifyOrExit(IsValid(), error = kErrorParse);
 
-    if (aIsMasterKeyUpdated)
+    if (aIsNetworkKeyUpdated)
     {
-        *aIsMasterKeyUpdated = false;
+        *aIsNetworkKeyUpdated = false;
     }
 
     for (const Tlv *cur = GetTlvsStart(); cur < GetTlvsEnd(); cur = cur->GetNext())
@@ -562,16 +561,16 @@ Error Dataset::ApplyConfiguration(Instance &aInstance, bool *aIsMasterKeyUpdated
             IgnoreError(mac.SetNetworkName(static_cast<const NetworkNameTlv *>(cur)->GetNetworkName()));
             break;
 
-        case Tlv::kNetworkMasterKey:
+        case Tlv::kNetworkKey:
         {
-            const NetworkMasterKeyTlv *key = static_cast<const NetworkMasterKeyTlv *>(cur);
+            const NetworkKeyTlv *key = static_cast<const NetworkKeyTlv *>(cur);
 
-            if (aIsMasterKeyUpdated && (key->GetNetworkMasterKey() != keyManager.GetMasterKey()))
+            if (aIsNetworkKeyUpdated && (key->GetNetworkKey() != keyManager.GetNetworkKey()))
             {
-                *aIsMasterKeyUpdated = true;
+                *aIsNetworkKeyUpdated = true;
             }
 
-            IgnoreError(keyManager.SetMasterKey(key->GetNetworkMasterKey()));
+            IgnoreError(keyManager.SetNetworkKey(key->GetNetworkKey()));
             break;
         }
 
@@ -608,7 +607,6 @@ void Dataset::ConvertToActive(void)
 {
     RemoveTlv(Tlv::kPendingTimestamp);
     RemoveTlv(Tlv::kDelayTimer);
-    mType = kActive;
 }
 
 const char *Dataset::TypeToString(Type aType)
