@@ -471,14 +471,12 @@ public:
     void UpdateKeyMaterial(void);
 
     /**
-     * This method handles MAC frame counter changes (callback from `SubMac` for 15.4 security frame change).
-     *
-     * This is called to indicate the @p aMacFrameCounter value is now used.
+     * This method handles MAC frame counter change (callback from `SubMac` for 15.4 security frame change)
      *
      * @param[in]  aMacFrameCounter  The 15.4 link MAC frame counter value.
      *
      */
-    void MacFrameCounterUsed(uint32_t aMacFrameCounter);
+    void MacFrameCounterUpdated(uint32_t aMacFrameCounter);
 
 private:
     static constexpr uint32_t kDefaultKeySwitchGuardTime = 624;

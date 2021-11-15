@@ -265,7 +265,7 @@ void SubMac::HandleReceiveDone(RxFrame *aFrame, Error aError)
 
     if (!ShouldHandleTransmitSecurity() && aFrame != nullptr && aFrame->mInfo.mRxInfo.mAckedWithSecEnhAck)
     {
-        SignalFrameCounterUsed(aFrame->mInfo.mRxInfo.mAckFrameCounter);
+        UpdateFrameCounter(aFrame->mInfo.mRxInfo.mAckFrameCounter);
     }
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
@@ -348,7 +348,7 @@ void SubMac::ProcessTransmitSecurity(void)
         uint32_t frameCounter = GetFrameCounter();
 
         mTransmitFrame.SetFrameCounter(frameCounter);
-        SignalFrameCounterUsed(frameCounter);
+        UpdateFrameCounter(frameCounter + 1);
     }
 
     extAddress = &GetExtAddress();
@@ -522,7 +522,7 @@ void SubMac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aErro
         OT_UNREACHABLE_CODE(ExitNow());
     }
 
-    SignalFrameCounterUsedOnTxDone(aFrame);
+    UpdateFrameCounterOnTxDone(aFrame);
 
     // Determine whether a CSMA retry is required.
 
@@ -557,7 +557,7 @@ exit:
     return;
 }
 
-void SubMac::SignalFrameCounterUsedOnTxDone(const TxFrame &aFrame)
+void SubMac::UpdateFrameCounterOnTxDone(const TxFrame &aFrame)
 {
     uint8_t  keyIdMode;
     uint32_t frameCounter;
@@ -584,7 +584,7 @@ void SubMac::SignalFrameCounterUsedOnTxDone(const TxFrame &aFrame)
     VerifyOrExit(keyIdMode == Frame::kKeyIdMode1);
 
     VerifyOrExit(aFrame.GetFrameCounter(frameCounter) == kErrorNone, OT_ASSERT(allowError));
-    SignalFrameCounterUsed(frameCounter);
+    UpdateFrameCounter(frameCounter);
 
 exit:
     return;
@@ -862,23 +862,11 @@ exit:
     return;
 }
 
-void SubMac::SignalFrameCounterUsed(uint32_t aFrameCounter)
+void SubMac::UpdateFrameCounter(uint32_t aFrameCounter)
 {
-    mCallbacks.FrameCounterUsed(aFrameCounter);
+    mFrameCounter = aFrameCounter;
 
-    // It not always guaranteed that this method is invoked in order
-    // for different counter values (i.e., we may get it for a
-    // smaller counter value after a lager one). This may happen due
-    // to a new counter value being used for an enhanced-ack during
-    // tx of a frame. Note that the newer counter used for enhanced-ack
-    // is processed from `HandleReceiveDone()` which can happen before
-    // processing of the older counter value from `HandleTransmitDone()`.
-
-    VerifyOrExit(mFrameCounter <= aFrameCounter);
-    mFrameCounter = aFrameCounter + 1;
-
-exit:
-    return;
+    mCallbacks.FrameCounterUpdated(aFrameCounter);
 }
 
 void SubMac::SetFrameCounter(uint32_t aFrameCounter)

@@ -357,26 +357,17 @@ void KeyManager::SetAllMacFrameCounters(uint32_t aMacFrameCounter)
 }
 
 #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
-void KeyManager::MacFrameCounterUsed(uint32_t aMacFrameCounter)
+void KeyManager::MacFrameCounterUpdated(uint32_t aMacFrameCounter)
 {
-    // This is callback from `SubMac` to indicate that a frame
-    // counter value is used for tx. We ensure to handle it
-    // even if it is called out of order.
-
-    VerifyOrExit(mMacFrameCounters.Get154() <= aMacFrameCounter);
-
-    mMacFrameCounters.Set154(aMacFrameCounter + 1);
+    mMacFrameCounters.Set154(aMacFrameCounter);
 
     if (mMacFrameCounters.Get154() >= mStoredMacFrameCounter)
     {
         IgnoreError(Get<Mle::MleRouter>().Store());
     }
-
-exit:
-    return;
 }
 #else
-void KeyManager::MacFrameCounterUsed(uint32_t)
+void KeyManager::MacFrameCounterUpdated(uint32_t)
 {
 }
 #endif
