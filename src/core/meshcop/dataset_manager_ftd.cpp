@@ -121,17 +121,10 @@ Error DatasetManager::HandleSet(Coap::Message &aMessage, const Ip6::MessageInfo 
         VerifyOrExit(pendingTimestamp.IsValid());
     }
 
-    if (type == Tlv::kActiveTimestamp)
-    {
-        timestamp = static_cast<Timestamp *>(&activeTimestamp);
-    }
-    else
-    {
-        VerifyOrExit(pendingTimestamp.GetLength() > 0);
-        timestamp = static_cast<Timestamp *>(&pendingTimestamp);
-    }
-
     // verify the request includes a timestamp that is ahead of the locally stored value
+    timestamp = (type == Tlv::kActiveTimestamp) ? static_cast<Timestamp *>(&activeTimestamp)
+                                                : static_cast<Timestamp *>(&pendingTimestamp);
+
     VerifyOrExit(mLocal.Compare(timestamp) > 0);
 
     // check channel
