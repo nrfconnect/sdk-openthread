@@ -377,7 +377,7 @@
  * Please see section "Spinel definition compatibility guideline" for more details.
  *
  */
-#define SPINEL_RCP_API_VERSION 4
+#define SPINEL_RCP_API_VERSION 5
 
 /**
  * @def SPINEL_MIN_HOST_SUPPORTED_RCP_API_VERSION
@@ -752,6 +752,7 @@ enum
 // @ref SPINEL_PROP_THREAD_LINK_METRICS_QUERY_RESULT
 // @ref SPINEL_PROP_THREAD_LINK_METRICS_MGMT_ENH_ACK
 // @ref SPINEL_PROP_THREAD_LINK_METRICS_MGMT_FORWARD
+// @ref SPINEL_PROP_RCP_ENH_ACK_PROBING
 enum
 {
     SPINEL_THREAD_LINK_METRIC_PDU_COUNT   = (1 << 0),
@@ -853,6 +854,12 @@ enum
 
 enum
 {
+    SPINEL_RESET_PLATFORM = 1,
+    SPINEL_RESET_STACK    = 2,
+};
+
+enum
+{
     /**
      * No-Operation command (Host -> NCP)
      *
@@ -870,14 +877,16 @@ enum
     /**
      * Reset NCP command (Host -> NCP)
      *
-     * Encoding: Empty
+     * Encoding: Empty or `C`
      *
      * Causes the NCP to perform a software reset. Due to the nature of
      * this command, the TID is ignored. The host should instead wait
      * for a `CMD_PROP_VALUE_IS` command from the NCP indicating
      * `PROP_LAST_STATUS` has been set to `STATUS_RESET_SOFTWARE`.
      *
-     * The command payload for this command SHOULD be empty.
+     * The optional command payload specifies the reset type, can be
+     * `SPINEL_RESET_PLATFORM` or `SPINEL_RESET_STACK`. Defaults to stack
+     * reset if unspecified.
      *
      * If an error occurs, the value of `PROP_LAST_STATUS` will be emitted
      * instead with the value set to the generated status code for the error.
@@ -4701,6 +4710,27 @@ enum
      */
     SPINEL_PROP_RCP_TIMESTAMP = SPINEL_PROP_RCP_EXT__BEGIN + 2,
 
+    /// Configure Enhanced ACK probing
+    /** Format: `SEC` (Write-only).
+     *
+     * `S`: Short address
+     * `E`: Extended address
+     * `C`: List of requested metric ids encoded as bit fields in single byte
+     *
+     *   +---------------+----+
+     *   |    Metric     | Id |
+     *   +---------------+----+
+     *   | Received PDUs |  0 |
+     *   | LQI           |  1 |
+     *   | Link margin   |  2 |
+     *   | RSSI          |  3 |
+     *   +---------------+----+
+     *
+     * Enable/disable or update Enhanced-ACK Based Probing in radio for a specific Initiator.
+     *
+     */
+    SPINEL_PROP_RCP_ENH_ACK_PROBING = SPINEL_PROP_RCP_EXT__BEGIN + 3,
+
     SPINEL_PROP_RCP_EXT__END = 0x900,
 
     SPINEL_PROP_NEST__BEGIN = 0x3BC0,
@@ -4719,6 +4749,9 @@ enum
 
     SPINEL_PROP_VENDOR__BEGIN = 0x3C00,
     SPINEL_PROP_VENDOR__END   = 0x4000,
+
+    SPINEL_PROP_VENDOR_ESP__BEGIN = (SPINEL_PROP_VENDOR__BEGIN + 0),
+    SPINEL_PROP_VENDOR_ESP__END   = (SPINEL_PROP_VENDOR__BEGIN + 128),
 
     SPINEL_PROP_DEBUG__BEGIN = 0x4000,
 

@@ -198,6 +198,7 @@ private:
     static constexpr uint32_t kRtrSolicitationInterval     = 4;   // Interval between RSs. In sec.
     static constexpr uint32_t kMaxRtrSolicitationDelay     = 1;   // Max delay for initial solicitation. In sec.
     static constexpr uint32_t kMaxRoutingPolicyDelay       = 1;   // Max delay for routing policy evaluation. In sec.
+    static constexpr uint32_t kRtrSolicitationRetryDelay   = 60;  // The delay before retrying failed RS tx. In Sec.
 
     // The STALE_RA_TIME in seconds. The Routing Manager will consider the prefixes
     // and learned RA parameters STALE when they are not refreshed in STALE_RA_TIME
@@ -305,7 +306,7 @@ private:
     void DeprecateOnLinkPrefix(void);
     void HandleRouterSolicit(const Ip6::Address &aSrcAddress, const uint8_t *aBuffer, uint16_t aBufferLength);
     void HandleRouterAdvertisement(const Ip6::Address &aSrcAddress, const uint8_t *aBuffer, uint16_t aBufferLength);
-    bool UpdateDiscoveredPrefixes(const RouterAdv::PrefixInfoOption &aPio, bool aManagedAddrConfig);
+    bool UpdateDiscoveredPrefixes(const RouterAdv::PrefixInfoOption &aPio);
     bool UpdateDiscoveredPrefixes(const RouterAdv::RouteInfoOption &aRio);
     bool InvalidateDiscoveredPrefixes(const Ip6::Prefix *aPrefix = nullptr, bool aIsOnLinkPrefix = true);
     void InvalidateAllDiscoveredPrefixes(void);
@@ -314,7 +315,7 @@ private:
 
     static bool IsValidOmrPrefix(const NetworkData::OnMeshPrefixConfig &aOnMeshPrefixConfig);
     static bool IsValidOmrPrefix(const Ip6::Prefix &aOmrPrefix);
-    static bool IsValidOnLinkPrefix(const RouterAdv::PrefixInfoOption &aPio, bool aManagedAddrConfig);
+    static bool IsValidOnLinkPrefix(const RouterAdv::PrefixInfoOption &aPio);
     static bool IsValidOnLinkPrefix(const Ip6::Prefix &aOnLinkPrefix);
 
     // Indicates whether the Routing Manager is running (started).

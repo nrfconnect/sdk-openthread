@@ -221,6 +221,8 @@ LOCAL_SRC_FILES                                                  := \
     src/core/coap/coap_secure.cpp                                   \
     src/core/common/crc16.cpp                                       \
     src/core/common/error.cpp                                       \
+    src/core/common/heap.cpp                                        \
+    src/core/common/heap_data.cpp                                   \
     src/core/common/heap_string.cpp                                 \
     src/core/common/instance.cpp                                    \
     src/core/common/logging.cpp                                     \
@@ -234,14 +236,17 @@ LOCAL_SRC_FILES                                                  := \
     src/core/common/timer.cpp                                       \
     src/core/common/tlvs.cpp                                        \
     src/core/common/trickle_timer.cpp                               \
+    src/core/common/uptime.cpp                                      \
     src/core/crypto/aes_ccm.cpp                                     \
     src/core/crypto/aes_ecb.cpp                                     \
+    src/core/crypto/crypto_platform.cpp                             \
     src/core/crypto/ecdsa.cpp                                       \
     src/core/crypto/hkdf_sha256.cpp                                 \
     src/core/crypto/hmac_sha256.cpp                                 \
     src/core/crypto/mbedtls.cpp                                     \
     src/core/crypto/pbkdf2_cmac.cpp                                 \
     src/core/crypto/sha256.cpp                                      \
+    src/core/crypto/storage.cpp                                     \
     src/core/diags/factory_diags.cpp                                \
     src/core/mac/channel_mask.cpp                                   \
     src/core/mac/data_poll_handler.cpp                              \
@@ -301,6 +306,7 @@ LOCAL_SRC_FILES                                                  := \
     src/core/thread/address_resolver.cpp                            \
     src/core/thread/announce_begin_server.cpp                       \
     src/core/thread/announce_sender.cpp                             \
+    src/core/thread/anycast_locator.cpp                             \
     src/core/thread/child_table.cpp                                 \
     src/core/thread/csl_tx_scheduler.cpp                            \
     src/core/thread/discover_scanner.cpp                            \
@@ -504,6 +510,7 @@ LOCAL_SRC_FILES                            := \
     src/cli/cli_history.cpp                   \
     src/cli/cli_joiner.cpp                    \
     src/cli/cli_network_data.cpp              \
+    src/cli/cli_output.cpp                    \
     src/cli/cli_srp_client.cpp                \
     src/cli/cli_srp_server.cpp                \
     src/cli/cli_tcp.cpp                       \

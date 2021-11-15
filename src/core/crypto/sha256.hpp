@@ -38,13 +38,15 @@
 
 #include <stdint.h>
 
-#include <mbedtls/sha256.h>
-
 #include <openthread/crypto.h>
+#include <openthread/platform/crypto.h>
 
+#include "common/as_core_type.hpp"
 #include "common/clearable.hpp"
+#include "common/code_utils.hpp"
 #include "common/equatable.hpp"
 #include "common/type_traits.hpp"
+#include "crypto/context_size.hpp"
 
 namespace ot {
 
@@ -144,7 +146,8 @@ public:
     void Finish(Hash &aHash);
 
 private:
-    mbedtls_sha256_context mContext;
+    otCryptoContext mContext;
+    OT_DEFINE_ALIGNED_VAR(mContextStorage, kSha256ContextSize, uint64_t);
 };
 
 /**
@@ -153,6 +156,9 @@ private:
  */
 
 } // namespace Crypto
+
+DefineCoreType(otCryptoSha256Hash, Crypto::Sha256::Hash);
+
 } // namespace ot
 
 #endif // SHA256_HPP_

@@ -35,6 +35,7 @@
 
 #include <openthread/dnssd_server.h>
 
+#include "common/as_core_type.hpp"
 #include "common/message.hpp"
 #include "common/non_copyable.hpp"
 #include "common/timer.hpp"
@@ -49,6 +50,11 @@
  */
 
 namespace ot {
+
+namespace Srp {
+class Server;
+}
+
 namespace Dns {
 namespace ServiceDiscovery {
 
@@ -58,6 +64,8 @@ namespace ServiceDiscovery {
  */
 class Server : public InstanceLocator, private NonCopyable
 {
+    friend class Srp::Server;
+
 public:
     /**
      * This enumeration specifies a DNS-SD query type.
@@ -399,6 +407,9 @@ private:
 
 } // namespace ServiceDiscovery
 } // namespace Dns
+
+DefineMapEnum(otDnssdQueryType, Dns::ServiceDiscovery::Server::DnsQueryType);
+
 } // namespace ot
 
 #endif // OPENTHREAD_CONFIG_DNSSD_SERVER_ENABLE

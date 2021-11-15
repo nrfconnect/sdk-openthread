@@ -37,8 +37,10 @@
 #if OPENTHREAD_CONFIG_NETDATA_PUBLISHER_ENABLE
 
 #include "common/code_utils.hpp"
+#include "common/const_cast.hpp"
 #include "common/instance.hpp"
 #include "common/locator_getters.hpp"
+#include "common/logging.hpp"
 #include "common/random.hpp"
 #include "thread/network_data_local.hpp"
 #include "thread/network_data_service.hpp"
@@ -161,7 +163,7 @@ exit:
 
 Publisher::PrefixEntry *Publisher::FindMatchingPrefixEntry(const Ip6::Prefix &aPrefix)
 {
-    return const_cast<PrefixEntry *>(const_cast<const Publisher *>(this)->FindMatchingPrefixEntry(aPrefix));
+    return AsNonConst(AsConst(this)->FindMatchingPrefixEntry(aPrefix));
 }
 
 const Publisher::PrefixEntry *Publisher::FindMatchingPrefixEntry(const Ip6::Prefix &aPrefix) const
@@ -729,10 +731,12 @@ void Publisher::DnsSrpServiceEntry::CountAnycastEntries(uint8_t &aNumEntries, ui
 
     Service::DnsSrpAnycast::ServiceData serviceData(mInfo.GetSequenceNumber());
     const ServiceTlv *                  serviceTlv = nullptr;
+    ServiceData                         data;
 
-    while ((serviceTlv = Get<Leader>().FindNextService(
-                serviceTlv, Service::kThreadEnterpriseNumber, reinterpret_cast<const uint8_t *>(&serviceData),
-                serviceData.GetLength(), NetworkData::kServicePrefixMatch)) != nullptr)
+    data.Init(&serviceData, serviceData.GetLength());
+
+    while ((serviceTlv = Get<Leader>().FindNextThreadService(serviceTlv, data, NetworkData::kServicePrefixMatch)) !=
+           nullptr)
     {
         TlvIterator      subTlvIterator(*serviceTlv);
         const ServerTlv *serverSubTlv;
@@ -755,10 +759,12 @@ void Publisher::DnsSrpServiceEntry::CountUnicastEntries(uint8_t &aNumEntries, ui
     // the Network Data.
 
     const ServiceTlv *serviceTlv = nullptr;
+    ServiceData       data;
 
-    while ((serviceTlv = Get<Leader>().FindNextService(
-                serviceTlv, Service::kThreadEnterpriseNumber, &Service::DnsSrpUnicast::kServiceData,
-                sizeof(Service::DnsSrpUnicast::kServiceData), NetworkData::kServicePrefixMatch)) != nullptr)
+    data.InitFrom(Service::DnsSrpUnicast::kServiceData);
+
+    while ((serviceTlv = Get<Leader>().FindNextThreadService(serviceTlv, data, NetworkData::kServicePrefixMatch)) !=
+           nullptr)
     {
         TlvIterator      subTlvIterator(*serviceTlv);
         const ServerTlv *serverSubTlv;
@@ -829,6 +835,8 @@ Publisher::DnsSrpServiceEntry::Info::Info(Type aType, uint16_t aPortOrSeqNumber,
 }
 
 #endif // OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
+
+#if OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
 
 //---------------------------------------------------------------------------------------------------------------------
 // Publisher::PrefixEntry
@@ -1082,6 +1090,8 @@ void Publisher::PrefixEntry::CountExternalRouteEntries(uint8_t &aNumEntries, uin
 exit:
     return;
 }
+
+#endif // OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
 
 } // namespace NetworkData
 } // namespace ot

@@ -38,7 +38,9 @@
 
 #include <openthread/netdata.h>
 
+#include "common/as_core_type.hpp"
 #include "common/clearable.hpp"
+#include "common/data.hpp"
 #include "common/debug.hpp"
 #include "common/equatable.hpp"
 #include "net/ip6_address.hpp"
@@ -250,6 +252,22 @@ private:
 };
 
 /**
+ * This class represents a Service Data.
+ *
+ */
+class ServiceData : public Data<kWithUint8Length>
+{
+};
+
+/**
+ * This class represents a Server Data.
+ *
+ */
+class ServerData : public Data<kWithUint8Length>
+{
+};
+
+/**
  * This type represents a Service configuration.
  *
  */
@@ -268,6 +286,14 @@ public:
 
     public:
         /**
+         * This method gets the Server Data.
+         *
+         * @param[out] aServerData   A reference to a`ServerData` to return the data.
+         *
+         */
+        void GetServerData(ServerData &aServerData) const { aServerData.Init(mServerData, mServerDataLength); }
+
+        /**
          * This method overloads operator `==` to evaluate whether or not two `ServerConfig` instances are equal.
          *
          * @param[in]  aOther  The other `ServerConfig` instance to compare with.
@@ -281,6 +307,14 @@ public:
     private:
         void SetFrom(const ServerTlv &aServerTlv);
     };
+
+    /**
+     * This method gets the Service Data.
+     *
+     * @param[out] aServiceData   A reference to a `ServiceData` to return the data.
+     *
+     */
+    void GetServiceData(ServiceData &aServiceData) const { aServiceData.Init(mServiceData, mServiceDataLength); }
 
     /**
      * This method gets the Server configuration.
@@ -314,6 +348,11 @@ private:
 };
 
 } // namespace NetworkData
+
+DefineCoreType(otBorderRouterConfig, NetworkData::OnMeshPrefixConfig);
+DefineCoreType(otExternalRouteConfig, NetworkData::ExternalRouteConfig);
+DefineCoreType(otServiceConfig, NetworkData::ServiceConfig);
+DefineCoreType(otServerConfig, NetworkData::ServiceConfig::ServerConfig);
 
 /**
  * @}

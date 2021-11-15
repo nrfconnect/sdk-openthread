@@ -42,6 +42,10 @@
 #error "Thread 1.2 or higher version is required for OPENTHREAD_CONFIG_DUA_ENABLE"
 #endif
 
+#if OPENTHREAD_CONFIG_DUA_ENABLE && !OPENTHREAD_CONFIG_IP6_SLAAC_ENABLE
+#error "OPENTHREAD_CONFIG_IP6_SLAAC_ENABLE is required for OPENTHREAD_CONFIG_DUA_ENABLE"
+#endif
+
 #include "backbone_router/bbr_leader.hpp"
 #include "coap/coap.hpp"
 #include "coap/coap_message.hpp"
@@ -195,21 +199,15 @@ private:
 
     void UpdateTimeTickerRegistration(void);
 
-    static void HandleDuaResponse(void *aContext, otMessage *aMessage, const otMessageInfo *aMessageInfo, Error aResult)
-    {
-        static_cast<DuaManager *>(aContext)->HandleDuaResponse(
-            static_cast<Coap::Message *>(aMessage), static_cast<const Ip6::MessageInfo *>(aMessageInfo), aResult);
-    }
+    static void HandleDuaResponse(void *               aContext,
+                                  otMessage *          aMessage,
+                                  const otMessageInfo *aMessageInfo,
+                                  Error                aResult);
+    void        HandleDuaResponse(Coap::Message *aMessage, const Ip6::MessageInfo *aMessageInfo, Error aResult);
 
-    void HandleDuaResponse(Coap::Message *aMessage, const Ip6::MessageInfo *aMessageInfo, Error aResult);
+    static void HandleDuaNotification(void *aContext, otMessage *aMessage, const otMessageInfo *aMessageInfo);
+    void        HandleDuaNotification(Coap::Message &aMessage, const Ip6::MessageInfo &aMessageInfo);
 
-    static void HandleDuaNotification(void *aContext, otMessage *aMessage, const otMessageInfo *aMessageInfo)
-    {
-        static_cast<DuaManager *>(aContext)->HandleDuaNotification(
-            *static_cast<Coap::Message *>(aMessage), *static_cast<const Ip6::MessageInfo *>(aMessageInfo));
-    }
-
-    void  HandleDuaNotification(Coap::Message &aMessage, const Ip6::MessageInfo &aMessageInfo);
     Error ProcessDuaResponse(Coap::Message &aMessage);
 
     void PerformNextRegistration(void);

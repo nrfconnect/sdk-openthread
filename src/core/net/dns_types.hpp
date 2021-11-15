@@ -39,6 +39,7 @@
 #include <openthread/dns.h>
 #include <openthread/dns_client.h>
 
+#include "common/as_core_type.hpp"
 #include "common/clearable.hpp"
 #include "common/encoding.hpp"
 #include "common/equatable.hpp"
@@ -1677,13 +1678,14 @@ public:
     /**
      * This static method tests if a buffer contains valid encoded TXT data.
      *
-     * @param[in]  aTxtData    The TXT data buffer.
-     * @param[in]  aTxtLength  The length of the TXT data buffer.
+     * @param[in]  aTxtData     The TXT data buffer.
+     * @param[in]  aTxtLength   The length of the TXT data buffer.
+     * @param[in]  aAllowEmpty  True if zero-length TXT data is allowed.
      *
      * @returns  TRUE if @p aTxtData contains valid encoded TXT data, FALSE if not.
      *
      */
-    static bool VerifyTxtData(const uint8_t *aTxtData, uint16_t aTxtLength);
+    static bool VerifyTxtData(const uint8_t *aTxtData, uint16_t aTxtLength, bool aAllowEmpty);
 
 } OT_TOOL_PACKED_END;
 
@@ -2584,6 +2586,10 @@ public:
  */
 
 } // namespace Dns
+
+DefineCoreType(otDnsTxtEntry, Dns::TxtEntry);
+DefineCoreType(otDnsTxtEntryIterator, Dns::TxtEntry::Iterator);
+
 } // namespace ot
 
 #endif // DNS_HEADER_HPP_

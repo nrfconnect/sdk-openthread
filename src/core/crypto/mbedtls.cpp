@@ -44,7 +44,7 @@
 #endif
 
 #include "common/error.hpp"
-#include "common/instance.hpp"
+#include "common/heap.hpp"
 
 namespace ot {
 namespace Crypto {
@@ -56,7 +56,7 @@ MbedTls::MbedTls(void)
     // mbedTLS's debug level is almost the same as OpenThread's
     mbedtls_debug_set_threshold(OPENTHREAD_CONFIG_LOG_LEVEL);
 #endif
-    mbedtls_platform_set_calloc_free(Instance::HeapCAlloc, Instance::HeapFree);
+    mbedtls_platform_set_calloc_free(Heap::CAlloc, Heap::Free);
 #endif // OPENTHREAD_CONFIG_ENABLE_BUILTIN_MBEDTLS_MANAGEMENT
 }
 
@@ -132,7 +132,9 @@ Error MbedTls::MapError(int aMbedTlsError)
     case MBEDTLS_ERR_ENTROPY_SOURCE_FAILED:
     case MBEDTLS_ERR_ENTROPY_NO_SOURCES_DEFINED:
     case MBEDTLS_ERR_ENTROPY_NO_STRONG_SOURCE:
+#if (MBEDTLS_VERSION_NUMBER < 0x03000000)
     case MBEDTLS_ERR_SSL_PEER_VERIFY_FAILED:
+#endif
     case MBEDTLS_ERR_THREADING_BAD_INPUT_DATA:
     case MBEDTLS_ERR_THREADING_MUTEX_ERROR:
         error = kErrorSecurity;

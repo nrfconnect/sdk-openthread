@@ -48,6 +48,7 @@
 #include "common/settings.hpp"
 #include "lib/platform/exit_code.h"
 #include "lib/spinel/radio_spinel.hpp"
+#include "lib/spinel/spinel.h"
 #include "lib/spinel/spinel_decoder.hpp"
 #include "meshcop/dataset.hpp"
 #include "meshcop/meshcop_tlvs.hpp"
@@ -233,10 +234,8 @@ void RadioSpinel<InterfaceType, ProcessContextType>::Init(bool aResetRadio,
 
     if (aResetRadio)
     {
-        SuccessOrExit(error = SendReset());
-#if OPENTHREAD_SPINEL_CONFIG_RESET_CONNECTION
+        SuccessOrExit(error = SendReset(SPINEL_RESET_STACK));
         SuccessOrDie(mSpinelInterface.ResetConnection());
-#endif
     }
 
     SuccessOrExit(error = WaitResponse());
@@ -1136,26 +1135,41 @@ exit:
 }
 
 template <typename InterfaceType, typename ProcessContextType>
-otError RadioSpinel<InterfaceType, ProcessContextType>::SetMacKey(uint8_t         aKeyIdMode,
-                                                                  uint8_t         aKeyId,
-                                                                  const otMacKey &aPrevKey,
-                                                                  const otMacKey &aCurrKey,
-                                                                  const otMacKey &aNextKey)
+otError RadioSpinel<InterfaceType, ProcessContextType>::SetMacKey(uint8_t                 aKeyIdMode,
+                                                                  uint8_t                 aKeyId,
+                                                                  const otMacKeyMaterial *aPrevKey,
+                                                                  const otMacKeyMaterial *aCurrKey,
+                                                                  const otMacKeyMaterial *aNextKey)
 {
     otError error;
+    size_t  aKeySize;
+
+    VerifyOrExit((aPrevKey != nullptr) && (aCurrKey != nullptr) && (aNextKey != nullptr), error = kErrorInvalidArgs);
+
+#if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
+    SuccessOrExit(error = otPlatCryptoExportKey(aPrevKey->mKeyMaterial.mKeyRef, aPrevKey->mKeyMaterial.mKey.m8,
+                                                sizeof(aPrevKey->mKeyMaterial.mKey.m8), &aKeySize));
+    SuccessOrExit(error = otPlatCryptoExportKey(aCurrKey->mKeyMaterial.mKeyRef, aCurrKey->mKeyMaterial.mKey.m8,
+                                                sizeof(aCurrKey->mKeyMaterial.mKey.m8), &aKeySize));
+    SuccessOrExit(error = otPlatCryptoExportKey(aNextKey->mKeyMaterial.mKeyRef, aNextKey->mKeyMaterial.mKey.m8,
+                                                sizeof(aNextKey->mKeyMaterial.mKey.m8), &aKeySize));
+#else
+    OT_UNUSED_VARIABLE(aKeySize);
+#endif
 
     SuccessOrExit(error = Set(SPINEL_PROP_RCP_MAC_KEY,
                               SPINEL_DATATYPE_UINT8_S SPINEL_DATATYPE_UINT8_S SPINEL_DATATYPE_DATA_WLEN_S
                                   SPINEL_DATATYPE_DATA_WLEN_S SPINEL_DATATYPE_DATA_WLEN_S,
-                              aKeyIdMode, aKeyId, aPrevKey.m8, sizeof(otMacKey), aCurrKey.m8, sizeof(otMacKey),
-                              aNextKey.m8, sizeof(otMacKey)));
+                              aKeyIdMode, aKeyId, aPrevKey->mKeyMaterial.mKey.m8, sizeof(otMacKey),
+                              aCurrKey->mKeyMaterial.mKey.m8, sizeof(otMacKey), aNextKey->mKeyMaterial.mKey.m8,
+                              sizeof(otMacKey)));
 
 #if OPENTHREAD_SPINEL_CONFIG_RCP_RESTORATION_MAX_COUNT > 0
     mKeyIdMode = aKeyIdMode;
     mKeyId     = aKeyId;
-    memcpy(mPrevKey.m8, aPrevKey.m8, OT_MAC_KEY_SIZE);
-    memcpy(mCurrKey.m8, aCurrKey.m8, OT_MAC_KEY_SIZE);
-    memcpy(mNextKey.m8, aNextKey.m8, OT_MAC_KEY_SIZE);
+    memcpy(mPrevKey.m8, aPrevKey->mKeyMaterial.mKey.m8, OT_MAC_KEY_SIZE);
+    memcpy(mCurrKey.m8, aCurrKey->mKeyMaterial.mKey.m8, OT_MAC_KEY_SIZE);
+    memcpy(mNextKey.m8, aNextKey->mKeyMaterial.mKey.m8, OT_MAC_KEY_SIZE);
     mMacKeySet = true;
 #endif
 
@@ -1690,15 +1704,15 @@ spinel_tid_t RadioSpinel<InterfaceType, ProcessContextType>::GetNextTid(void)
 }
 
 template <typename InterfaceType, typename ProcessContextType>
-otError RadioSpinel<InterfaceType, ProcessContextType>::SendReset(void)
+otError RadioSpinel<InterfaceType, ProcessContextType>::SendReset(uint8_t aResetType)
 {
     otError        error = OT_ERROR_NONE;
     uint8_t        buffer[kMaxSpinelFrame];
     spinel_ssize_t packed;
 
     // Pack the header, command and key
-    packed =
-        spinel_datatype_pack(buffer, sizeof(buffer), "Ci", SPINEL_HEADER_FLAG | SPINEL_HEADER_IID_0, SPINEL_CMD_RESET);
+    packed = spinel_datatype_pack(buffer, sizeof(buffer), SPINEL_DATATYPE_COMMAND_S SPINEL_DATATYPE_UINT8_S,
+                                  SPINEL_HEADER_FLAG | SPINEL_HEADER_IID_0, SPINEL_CMD_RESET, aResetType);
 
     VerifyOrExit(packed > 0 && static_cast<size_t>(packed) <= sizeof(buffer), error = OT_ERROR_NO_BUFS);
 
@@ -2243,10 +2257,8 @@ void RadioSpinel<InterfaceType, ProcessContextType>::RecoverFromRcpFailure(void)
 
     if (mResetRadioOnStartup)
     {
-        SuccessOrDie(SendReset());
-#if OPENTHREAD_SPINEL_CONFIG_RESET_CONNECTION
+        SuccessOrDie(SendReset(SPINEL_RESET_STACK));
         SuccessOrDie(mSpinelInterface.ResetConnection());
-#endif
     }
 
     SuccessOrDie(WaitResponse());
@@ -2393,6 +2405,43 @@ otError RadioSpinel<InterfaceType, ProcessContextType>::GetRadioRegion(uint16_t 
 exit:
     return error;
 }
+
+#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
+template <typename InterfaceType, typename ProcessContextType>
+otError RadioSpinel<InterfaceType, ProcessContextType>::ConfigureEnhAckProbing(otLinkMetrics        aLinkMetrics,
+                                                                               const otShortAddress aShortAddress,
+                                                                               const otExtAddress & aExtAddress)
+{
+    otError error = OT_ERROR_NONE;
+    uint8_t flags = 0;
+
+    if (aLinkMetrics.mPduCount)
+    {
+        flags |= SPINEL_THREAD_LINK_METRIC_PDU_COUNT;
+    }
+
+    if (aLinkMetrics.mLqi)
+    {
+        flags |= SPINEL_THREAD_LINK_METRIC_LQI;
+    }
+
+    if (aLinkMetrics.mLinkMargin)
+    {
+        flags |= SPINEL_THREAD_LINK_METRIC_LINK_MARGIN;
+    }
+
+    if (aLinkMetrics.mRssi)
+    {
+        flags |= SPINEL_THREAD_LINK_METRIC_RSSI;
+    }
+
+    error =
+        Set(SPINEL_PROP_RCP_ENH_ACK_PROBING, SPINEL_DATATYPE_UINT16_S SPINEL_DATATYPE_EUI64_S SPINEL_DATATYPE_UINT8_S,
+            aShortAddress, aExtAddress.m8, flags);
+
+    return error;
+}
+#endif
 
 } // namespace Spinel
 } // namespace ot

@@ -42,6 +42,7 @@
 
 #include <openthread/thread.h>
 
+#include "common/as_core_type.hpp"
 #include "common/clearable.hpp"
 #include "common/code_utils.hpp"
 #include "common/encoding.hpp"
@@ -571,7 +572,13 @@ private:
 } OT_TOOL_PACKED_END;
 
 /**
- * This class represents a MLE key.
+ * This class represents a MLE Key Material
+ *
+ */
+typedef Mac::KeyMaterial KeyMaterial;
+
+/**
+ * This class represents a MLE Key.
  *
  */
 typedef Mac::Key Key;
@@ -582,6 +589,11 @@ typedef Mac::Key Key;
  */
 
 } // namespace Mle
+
+DefineCoreType(otMeshLocalPrefix, Mle::MeshLocalPrefix);
+DefineCoreType(otLeaderData, Mle::LeaderData);
+DefineMapEnum(otDeviceRole, Mle::DeviceRole);
+
 } // namespace ot
 
 #endif // MLE_TYPES_HPP_
