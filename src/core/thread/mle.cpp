@@ -1959,20 +1959,10 @@ void Mle::HandleDelayedResponseTimer(void)
         }
         else
         {
-            Error error = kErrorNone;
-
             mDelayedResponses.Dequeue(*message);
             metadata.RemoveFrom(*message);
 
-            if (metadata.mAppendTimestamps)
-            {
-                error = AppendActiveTimestamp(*message);
-                error = (error == kErrorNone) ? AppendPendingTimestamp(*message) : error;
-            }
-
-            error = (error == kErrorNone) ? SendMessage(*message, metadata.mDestination) : error;
-
-            if (error == kErrorNone)
+            if (SendMessage(*message, metadata.mDestination) == kErrorNone)
             {
                 Log(kMessageSend, kTypeGenericDelayed, metadata.mDestination);
 
@@ -2163,6 +2153,8 @@ Error Mle::SendDataRequest(const Ip6::Address &aDestination,
     VerifyOrExit((message = NewMleMessage()) != nullptr, error = kErrorNoBufs);
     SuccessOrExit(error = AppendHeader(*message, kCommandDataRequest));
     SuccessOrExit(error = AppendTlvRequest(*message, aTlvs, aTlvsLength));
+    SuccessOrExit(error = AppendActiveTimestamp(*message));
+    SuccessOrExit(error = AppendPendingTimestamp(*message));
 
     if (aExtraTlvs != nullptr && aExtraTlvsLength > 0)
     {
@@ -2171,14 +2163,11 @@ Error Mle::SendDataRequest(const Ip6::Address &aDestination,
 
     if (aDelay)
     {
-        SuccessOrExit(error = AddDelayedResponse(*message, aDestination, aDelay, /* aAppendTimestamps */ true));
+        SuccessOrExit(error = AddDelayedResponse(*message, aDestination, aDelay));
         Log(kMessageDelay, kTypeDataRequest, aDestination);
     }
     else
     {
-        SuccessOrExit(error = AppendActiveTimestamp(*message));
-        SuccessOrExit(error = AppendPendingTimestamp(*message));
-
         SuccessOrExit(error = SendMessage(*message, aDestination));
         Log(kMessageSend, kTypeDataRequest, aDestination);
 
@@ -2661,17 +2650,13 @@ exit:
     return error;
 }
 
-Error Mle::AddDelayedResponse(Message &           aMessage,
-                              const Ip6::Address &aDestination,
-                              uint16_t            aDelay,
-                              bool                aAppendTimestamps)
+Error Mle::AddDelayedResponse(Message &aMessage, const Ip6::Address &aDestination, uint16_t aDelay)
 {
     Error                   error = kErrorNone;
     DelayedResponseMetadata metadata;
 
-    metadata.mSendTime         = TimerMilli::GetNow() + aDelay;
-    metadata.mDestination      = aDestination;
-    metadata.mAppendTimestamps = aAppendTimestamps;
+    metadata.mSendTime    = TimerMilli::GetNow() + aDelay;
+    metadata.mDestination = aDestination;
 
     SuccessOrExit(error = metadata.AppendTo(aMessage));
     mDelayedResponses.Enqueue(aMessage);
