@@ -319,7 +319,7 @@ void KeyManager::SetCurrentKeySequence(uint32_t aKeySequence)
     mKeySequence = aKeySequence;
     UpdateKeyMaterial();
 
-    SetAllMacFrameCounters(0);
+    mMacFrameCounters.Reset();
     mMleFrameCounter = 0;
 
     Get<Notifier>().Signal(kEventThreadKeySeqCounterChanged);
