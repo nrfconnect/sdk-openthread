@@ -153,7 +153,7 @@ private:
 
 enum
 {
-    kMaxEnhAckProbingInitiator = 10,
+    kMaxEnhAckProbingInitiator = OPENTHREAD_CONFIG_MLE_MAX_CHILDREN,
 };
 
 typedef Pool<LinkMetricsDataInfo, kMaxEnhAckProbingInitiator> LinkMetricsDataInfoPool;
