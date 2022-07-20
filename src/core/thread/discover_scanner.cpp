@@ -67,7 +67,7 @@ Error DiscoverScanner::Discover(const Mac::ChannelMask &aScanChannels,
                                 void *                  aContext)
 {
     Error                           error   = kErrorNone;
-    Message *                       message = nullptr;
+    Mle::TxMessage *                message = nullptr;
     Tlv                             tlv;
     Ip6::Address                    destination;
     MeshCoP::DiscoveryRequestTlv    discoveryRequest;
@@ -136,7 +136,7 @@ Error DiscoverScanner::Discover(const Mac::ChannelMask &aScanChannels,
 
     destination.SetToLinkLocalAllRoutersMulticast();
 
-    SuccessOrExit(error = Get<Mle>().SendMessage(*message, destination));
+    SuccessOrExit(error = message->SendTo(destination));
 
     if ((aPanId == Mac::kPanIdBroadcast) && (Get<Mac::Mac>().GetPanId() == Mac::kPanIdBroadcast))
     {
@@ -213,6 +213,7 @@ void DiscoverScanner::HandleDiscoveryRequestFrameTxDone(Message &aMessage)
         // the next scan channel. Also pause message tx on `MeshForwarder`
         // while listening to receive Discovery Responses.
         aMessage.SetDirectTransmission();
+        aMessage.SetTimestampToNow();
         Get<MeshForwarder>().PauseMessageTransmissions();
         mTimer.Start(kDefaultScanDuration);
         break;
