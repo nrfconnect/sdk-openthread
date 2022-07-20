@@ -33,6 +33,8 @@
 
 #include "address_resolver.hpp"
 
+#if OPENTHREAD_FTD
+
 #include "coap/coap_message.hpp"
 #include "common/as_core_type.hpp"
 #include "common/code_utils.hpp"
@@ -55,23 +57,17 @@ RegisterLogModule("AddrResolver");
 AddressResolver::AddressResolver(Instance &aInstance)
     : InstanceLocator(aInstance)
     , mAddressError(UriPath::kAddressError, &AddressResolver::HandleAddressError, this)
-#if OPENTHREAD_FTD
     , mAddressQuery(UriPath::kAddressQuery, &AddressResolver::HandleAddressQuery, this)
     , mAddressNotification(UriPath::kAddressNotify, &AddressResolver::HandleAddressNotification, this)
     , mCacheEntryPool(aInstance)
     , mIcmpHandler(&AddressResolver::HandleIcmpReceive, this)
-#endif
 {
     Get<Tmf::Agent>().AddResource(mAddressError);
-#if OPENTHREAD_FTD
     Get<Tmf::Agent>().AddResource(mAddressQuery);
     Get<Tmf::Agent>().AddResource(mAddressNotification);
 
     IgnoreError(Get<Ip6::Icmp>().RegisterHandler(mIcmpHandler));
-#endif
 }
-
-#if OPENTHREAD_FTD
 
 void AddressResolver::Clear(void)
 {
@@ -707,8 +703,6 @@ exit:
     }
 }
 
-#endif // OPENTHREAD_FTD
-
 void AddressResolver::HandleAddressError(void *aContext, otMessage *aMessage, const otMessageInfo *aMessageInfo)
 {
     static_cast<AddressResolver *>(aContext)->HandleAddressError(AsCoapMessage(aMessage), AsCoreType(aMessageInfo));
@@ -719,10 +713,8 @@ void AddressResolver::HandleAddressError(Coap::Message &aMessage, const Ip6::Mes
     Error                    error = kErrorNone;
     Ip6::Address             target;
     Ip6::InterfaceIdentifier meshLocalIid;
-#if OPENTHREAD_FTD
-    Mac::ExtAddress extAddr;
-    Ip6::Address    destination;
-#endif
+    Mac::ExtAddress          extAddr;
+    Ip6::Address             destination;
 
     VerifyOrExit(aMessage.IsPostRequest(), error = kErrorDrop);
 
@@ -759,7 +751,6 @@ void AddressResolver::HandleAddressError(Coap::Message &aMessage, const Ip6::Mes
         }
     }
 
-#if OPENTHREAD_FTD
     meshLocalIid.ConvertToExtAddress(extAddr);
 
     for (Child &child : Get<ChildTable>().Iterate(Child::kInStateValid))
@@ -783,7 +774,6 @@ void AddressResolver::HandleAddressError(Coap::Message &aMessage, const Ip6::Mes
             }
         }
     }
-#endif // OPENTHREAD_FTD
 
 exit:
 
@@ -792,8 +782,6 @@ exit:
         LogWarn("Error while processing address error notification: %s", ErrorToString(error));
     }
 }
-
-#if OPENTHREAD_FTD
 
 void AddressResolver::HandleAddressQuery(void *aContext, otMessage *aMessage, const otMessageInfo *aMessageInfo)
 {
@@ -1085,6 +1073,6 @@ exit:
     return;
 }
 
-#endif // OPENTHREAD_FTD
-
 } // namespace ot
+
+#endif // OPENTHREAD_FTD
