@@ -3207,6 +3207,435 @@ class OpenThreadTHCI(object):
     def setVrCheckSkip(self):
         self.__executeCommand("tvcheck disable")
 
+    @API
+    def getOMRPrefix(self):
+        getomr = self.__executeCommand("br omrprefix")
+        ipaddr = self.__executeCommand("ipaddr")
+        result = []
+        for ip in ipaddr:
+            try:
+                if ipaddress.ip_address(unicode(ip) in ipaddress.ip_network(unicode(getomr[0]))):
+                    result.append(ip)
+            except Exception:
+                continue
+        return result
+
+    @API
+    def getOMR(self, br_omr_prefix):
+        ipaddr = self.__executeCommand("ipaddr")
+        result = filter(lambda x: x.startswith(br_omr_prefix), ipaddr)
+        return result
+
+    def srp_client_remove(self, instancename, servicename):
+        cmd = 'srp client service remove %s %s' % (instancename, servicename)
+        self.__executeCommand(cmd)
+
+    def srpCallBackEnable(self):
+        cmd = 'srp client callback enable'
+        self.__executeCommand(cmd)
+
+    def srpCallBackDisable(self):
+        cmd = 'srp client callback disable'
+        self.__executeCommand(cmd)
+
+    def srp_update(self, dst_addr=None, service_type='_thread-test._udp', srv=None, weight='0', priority='4', AAAA=None,
+                   port=None, lease_option=(), enable_srv_key=False, enable_name_compression=False, host_addr=None,
+                   client_remove=False, is_tcp=False, omr=None, ml_eid=None):
+        """ Send Service Registration Protocol
+
+        Args:
+            dst_addr                =  Destination device address which srp_update to be sent,
+                                       if not specified, srp_update is sent to BR by default.
+            srv                     =  Service Description
+                                       if not specified, Default would be None.
+            AAAA                    =  Host Description
+                                       if not specified, Default would be Ip4 or IPv6 address of the host.
+            lease_option            =  Update Lease Option contains two lease time: Lease Time and Key Lease Time.
+
+            enable_srv_key          =  If True contains the public key corresponding to the private key that was
+                                       used to sign the message.
+
+            enable_host_key         =  If True contains the public key corresponding to the private key that was used to
+                                       sign the message.
+
+            enable_name_compression =  If True send SRP update without name compression.
+
+        Returns:
+            True: DNS Update is syntactically and semantically valid
+            False: DNS Update is not syntactically and semantically valid
+        """
+
+        # Implement-1.3-Thread
+        # QUERY : What should be the port number?
+        # Commands mentioned in the following :
+        # https://github.com/openthread/openthread/blob/ca450e541636692909183773beba8f55591a7185/src/cli/README_SRP.md
+        # https://github.com/openthread/openthread/blob/ca450e541636692909183773beba8f55591a7185/src/cli/README_SRP_CLIENT.md
+        # srp client keyleaseinterval 864000
+        # srp client leaseinterval 864000
+        # https://github.com/openthread/opentread/blob/39a1f55447f3eec0cf089d8bec29b3303f3e7f99/src/cli/README.md
+        # dns compression <enable/disable>
+        # Implement-1.3-Thread
+        lease = None
+        keylease = None
+        if len(lease_option) != 0:
+            lease, keylease = lease_option
+        if client_remove:
+            cmd = 'srp client host remove'
+            self.__executeCommand(cmd)
+        if port == "12348":
+            cmd = 'srp client host clear'
+            self.__executeCommand(cmd)
+        if port == '12345':
+            cmd = 'srp client host name %s' % (AAAA)
+            self.__executeCommand(cmd)
+        elif port == '12348':
+            cmd = 'srp client host name %s' % (AAAA)
+            self.__executeCommand(cmd)
+        if host_addr == None:
+            if ml_eid == None:
+                cmd = 'srp client host address %s' % (omr[0])
+            elif omr == None:
+                cmd = 'srp client host address %s' % ml_eid
+            else:
+                cmd = 'srp client host address %s %s' % (omr[0], ml_eid)
+            self.__executeCommand(cmd)
+        else:
+            cmd = 'srp client host address %s' % (host_addr)
+            self.__executeCommand(cmd)
+
+        if is_tcp != False:
+            cmd = 'srp client service add %s _thread-test._tcp,_test_subtype1 %s' % (srv, port)
+        else:
+            cmd = 'srp client service add %s %s %s %s %s' % (srv, service_type, port, weight, priority)
+        self.__executeCommand(cmd)
+        time.sleep(3)
+        if (lease != None):
+            cmd = 'srp client leaseinterval %s' % (lease)
+            self.__executeCommand(cmd)
+        if keylease != None:
+            cmd = 'srp client keyleaseinterval %s' % (keylease)
+            self.__executeCommand(cmd)
+        if enable_srv_key != False:
+            cmd = 'srp client service key %s' % enable_srv_key
+            self.__executeCommand(cmd)
+        if enable_name_compression != False:
+            cmd = 'dns compression %s' % enable_name_compression
+            self.__executeCommand(cmd)
+        if dst_addr == None:
+            cmd = 'srp client autostart enable'
+            self.__executeCommand(cmd)
+        else:
+            cmd_to_stop_srp = 'srp client stop'
+            self.__executeCommand(cmd_to_stop_srp)
+            cmd1 = 'dns config %s 53 6000 3 1' % dst_addr[1]
+            self.__executeCommand(cmd1)
+            cmd = 'srp client start %s' % dst_addr[0]
+            self.__executeCommand(cmd)
+
+    def srp_add(self, dst_addr=None, service_type='_thread-test._udp', srv=None, weight='0', priority='4', AAAA=None, \
+                port=None,
+                lease_option=(), enable_srv_key=False, enable_name_compression=False, host_addr=None,
+                client_remove=False, is_tcp=False, omr=None, ml_eid=None):
+        """ Send Service Registration Protocol
+
+        Args:
+            dst_addr                =  Destination device address which srp_update to be sent,
+                                       if not specified, srp_update is sent to BR by default.
+            srv                     =  Service Description
+                                       if not specified, Default would be None.
+            AAAA                    =  Host Description
+                                       if not specified, Default would be Ip4 or IPv6 address of the host.
+            lease_option            =  Update Lease Option contains two lease time: Lease Time and Key Lease Time.
+
+            enable_srv_key          =  If True contains the public key corresponding to the private key that was
+                                       used to sign the message.
+
+            enable_host_key         =  If True contains the public key corresponding to the private key that was used to
+                                       sign the message.
+
+            enable_name_compression =  If True send SRP update without name compression.
+
+        Returns:
+            True: DNS Update is syntactically and semantically valid
+            False: DNS Update is not syntactically and semantically valid
+        """
+
+        # Implement-1.3-Thread
+        # QUERY : What should be the port number?
+        # Commands mentioned in the following :
+        # https://github.com/openthread/openthread/blob/ca450e541636692909183773beba8f55591a7185/src/cli/README_SRP.md
+        # https://github.com/openthread/openthread/blob/ca450e541636692909183773beba8f55591a7185/src/cli/README_SRP_CLIENT.md
+        # srp client keyleaseinterval 864000
+        # srp client leaseinterval 864000
+        # https://github.com/openthread/opentread/blob/39a1f55447f3eec0cf089d8bec29b3303f3e7f99/src/cli/README.md
+        # dns compression <enable/disable>
+        # Implement-1.3-Thread
+        lease = None
+        keylease = None
+        if len(lease_option) != 0:
+            lease, keylease = lease_option
+        if client_remove:
+            cmd = 'srp client host remove'
+            self.__executeCommand(cmd)
+        if port == "12348":
+            cmd = 'srp client host clear'
+            self.__executeCommand(cmd)
+        cmd = 'srp client host name %s' % (AAAA)
+        self.__executeCommand(cmd)
+        if host_addr == None:
+            # mleid = ModuleHelper.GetFullIpv6Address(self.getOMR()).lower()
+            if ml_eid == None:
+                cmd = 'srp client host address %s' % (omr[0])
+            elif omr == None:
+                cmd = 'srp client host address %s' % (ml_eid)
+            else:
+                cmd = 'srp client host address %s %s' % (omr[0], ml_eid)
+            self.__executeCommand(cmd)
+        else:
+            cmd = 'srp client host address %s' % (host_addr)
+            self.__executeCommand(cmd)
+        if (lease != None):
+            cmd = 'srp client leaseinterval %s' % (lease)
+            self.__executeCommand(cmd)
+        if keylease != None:
+            cmd = 'srp client keyleaseinterval %s' % (keylease)
+            self.__executeCommand(cmd)
+        if is_tcp != False:
+            cmd = 'srp client service add %s _thread-test._tcp,test_subtype %s 0 4' % (srv, port)
+        else:
+            cmd = 'srp client service add %s %s %s %s %s' % (srv, service_type, port, weight, priority)
+        self.__executeCommand(cmd)
+
+        if enable_srv_key != False:
+            cmd = 'srp client service key %s' % enable_srv_key
+            self.__executeCommand(cmd)
+        if enable_name_compression != False:
+            cmd = 'dns compression %s' % enable_name_compression
+            self.__executeCommand(cmd)
+
+        if dst_addr == None:
+            cmd = 'srp client autostart enable'
+            self.__executeCommand(cmd)
+        else:
+            cmd_to_stop_srp = 'srp client stop'
+            self.__executeCommand(cmd_to_stop_srp)
+            cmd1 = 'dns config %s 53 6000 3 1' % dst_addr[1]
+            self.__executeCommand(cmd1)
+            cmd = 'srp client start %s' % dst_addr[0]
+            self.__executeCommand(cmd)
+
+    def dns_query(self, service_type='_thread-test._udp'):
+        """ Send unicast DNS query
+
+        Args:
+            addr: IPv6 Address to send unicast DNS query, if `None` is passed, by default reference stacks are expected
+            to send unicast to its parent address
+
+        Returns:
+            True: successfully sends unicast DNS query
+            False: Fail to send the unicast DNS query
+        """
+
+        # Implement-1.3-Thread
+        # dns resolve <addr>
+        # getParentAddress()
+        # https://github.com/openthread/openthread/blob/39a1f55447f3eec0cf089d8bec29b3303f3e7f99/src/cli/README.md#dns-config
+        # Implement-1.3-Thread
+        cmd = 'dns browse %s.default.service.arpa' % service_type
+        self.__executeCommand(cmd)
+
+    def dns_resolve(self, host_name):
+        cmd = 'dns resolve %s.default.service.arpa' % host_name
+        self.__executeCommand(cmd)
+
+    def get_ip_port(self):
+        server_ip_port = []
+        cmd = 'sudo ot-ctl ipaddr mleid'
+        server_ip = self.bash(cmd)
+        ipa = ipaddress.ip_address(unicode((server_ip[0])))
+        ipb = str(ipa.exploded)
+        ipc = ipb.replace(':', '')
+
+        mystr = 'sudo ot-ctl netdata show | grep ' + str(ipc) + ' | cut -d \' \' -f3'
+        mystr = self.bash(mystr)
+        mystr = (mystr[0][-4:])
+        mystr = int(str(mystr), 16)
+        print(mystr)
+        server_ip = str(ipb) + ' ' + str(mystr)
+        print server_ip
+        print ipb
+        server_ip_port.append(server_ip)
+        server_ip_port.append(ipb)
+        print server_ip_port
+        return server_ip_port
+
+    def generate_new_ip(self):
+        cmd = 'ipaddr add 2001::dead:beef:cafe'
+        new_host_addr = self.__executeCommand(cmd)
+        print new_host_addr
+        return new_host_addr
+
+    def dns_query_instance(self, ip_addr, service_name, service_type='_thread-test._udp'):
+        cmd = 'dns service %s %s.default.service.arpa %s 53 6000 3 1' % (service_name, service_type,
+                                                                         ip_addr)
+        print cmd
+        self.__executeCommand(cmd)
+
+    def dns_tcp_query_instance(self, ip_addr, service_name):
+        # cmd = 'dns service %s _test_subtype._sub._duckhorn-test._tcp.default.service.arpa %s 53 6000 3 1' % (
+        # service_name, ip_addr)
+        cmd = 'ot dns browse _thread-test._tcp.default.service.arpa'
+        print cmd
+        self.__executeCommand(cmd)
+
+    def setMliid(self, sMlIid):
+        self.__setMlIid(sMlIid)
+
+    def srp_host_remove(self):
+        cmd = 'srp client host remove'
+        self.__executeCommand(cmd)
+
+    def add_new_service(self):
+        rloc = self.__executeCommand('rloc16')[0]
+        mleid = self.__executeCommand('ipaddr mleid')[0]
+        mleid = ModuleHelper.GetFullIpv6Address(mleid)
+        mleid = mleid.replace(':', '')
+        cmd = 'service add 44970 5d %sd11f' % (mleid)
+        self.__executeCommand(cmd)
+        self.__executeCommand('netdata register')
+        time.sleep(3)
+
+    def remove_prefix_network_data(self, prefix):
+        cmd = 'prefix remove %s' % prefix
+        self.__executeCommand(cmd)
+        cmd1 = 'netdata register'
+        self.__executeCommand(cmd1)
+        time.sleep(3)
+
+    def republish_prefix(self):
+        cmd = 'br omrprefix'
+        omrprefix = self.__executeCommand(cmd)
+
+        cmd1 = 'prefix remove %s' % omrprefix[0]
+        self.__executeCommand(cmd1)
+
+        cmd2 = 'netdata register'
+        self.__executeCommand(cmd2)
+        time.sleep(3)
+
+        cmd4 = 'prefix add %s paros med ' % (omrprefix[0])
+        self.__executeCommand(cmd4)
+
+        cmd5 = 'netdata register'
+        self.__executeCommand(cmd5)
+        time.sleep(3)
+
+    def config_prefix(self):
+        cmd = 'br omrprefix'
+        omrprefix = self.__executeCommand(cmd)
+
+        cmd1 = 'prefix remove %s' % omrprefix[0]
+        self.__executeCommand(cmd1)
+
+        cmd2 = 'netdata register'
+        self.__executeCommand(cmd2)
+        time.sleep(3)
+        omrprefix = omrprefix[0][:-3]
+        omrprefix = omrprefix + '/64'
+        cmd4 = 'prefix add %s paos low' % (omrprefix)
+        self.__executeCommand(cmd4)
+        cmd5 = 'netdata register'
+        self.__executeCommand(cmd5)
+
+    ########################################################################################################################
+    #                                       1.3 THCI Commands
+    #
+    ########################################################################################################################
+    def record_query(self):
+        """
+        Sends A and/or AAAA records must be of sufficient scope to be reachable by all hosts that might query the DNS.
+
+        Returns:
+            True: successfully sends record query
+            False: Fail to send the record query
+        """
+        pass
+
+    def get_service_instance_name(self):
+        """
+         get_service_instance_name Returns the SRV value of Service Description Instruction.
+
+         Returns:
+            True: successfully retrieves the SRV value of service description instruction.
+            False: Fail to retrieve the SRV value of service description instruction.
+        """
+
+        # Implement-1.3-Thread
+        # srp client service
+        # instance:"ins2", name:"_test2._udp,_sub1,_sub2", state:Registered, port:111, priority:1, weight:1
+        # instance:"ins1", name:"_test1._udp", state:Registered, port:777, priority:0, weight:0
+        # https://github.com/openthread/openthread/blob/ca450e541636692909183773beba8f55591a7185/src/cli/README_SRP_CLIENT.md
+
+        # srp server service
+        # srp-api-test-1._ipps._tcp.default.service.arpa.
+        #     deleted: false
+        #     subtypes: (null)
+        #     port: 49152
+        #     priority: 0
+        #     weight: 0
+        #     TXT: 0130
+        #     host: srp-api-test-1.default.service.arpa.
+        #     addresses: [fdde:ad00:beef:0:0:ff:fe00:fc10]
+        # srp-api-test-0._ipps._tcp.default.service.arpa.
+        #     deleted: false
+        #     subtypes: _sub1,_sub2
+        #     port: 49152
+        #     priority: 0
+        #     weight: 0
+        #     TXT: 0130
+        #     host: srp-api-test-0.default.service.arpa.
+        #     addresses: [fdde:ad00:beef:0:0:ff:fe00:fc10]
+        # Implement-1.3-Thread
+
+        pass
+
+    def mdns_query(self, service_instance_name='_meshcop._udp_.local'):
+        """
+        Sends Multicast DNS query for SRV value of Service Description Instruction.
+
+        Returns:
+            True: successfully sends the multicast DNS query for SRV value of service description instruction.
+            False: Fail to send the multicast DNS query for SRV value of service description instruction.
+        """
+        pass
+
+    def enable_trel_connectivity(self):
+        """
+        Thread Radio Encapsulation Link enables Thread devices to
+        communicate directly over IPv6-based link technologies other then
+        802.15.4, including WI-Fi and Ethernet.
+        """
+
+        # Implement-1.3-Thread
+        # https://github.com/openthread/openthread/tree/ca450e541636692909183773beba8f55591a7185/src/cli#trel-enable
+        # trel enable
+        # Implement-1.3-Thread
+
+        pass
+
+    def disable_trel_connectivity(self):
+        """
+        Thread Radio Encapsulation Link disables Thread devices to
+        communicate directly over IPv6-based link technologies other then
+        802.15.4, including WI-Fi and Ethernet.
+        """
+
+        # Implement-1.3-Thread
+        # https://github.com/openthread/openthread/tree/ca450e541636692909183773beba8f55591a7185/src/cli#trel-enable
+        # trel disable
+        # Implement-1.3-Thread
+
+        pass
 
 class OpenThread(OpenThreadTHCI, IThci):
 
