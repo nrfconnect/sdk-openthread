@@ -29,7 +29,6 @@
 # This test verifies that the MLR timeout configured by Commissioner works for multicast routing.
 #
 import unittest
-import config
 
 from pktverify.consts import NM_COMMISSIONER_SESSION_ID_TLV
 from pktverify.packet_verifier import PacketVerifier

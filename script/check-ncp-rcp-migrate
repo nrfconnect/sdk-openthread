@@ -83,7 +83,7 @@ send "ifconfig up\r\n"
 expect "Done"
 send "thread start\r\n"
 expect "Done"
-sleep 10
+sleep 5
 send "state\r\n"
 expect "leader"
 expect "Done"

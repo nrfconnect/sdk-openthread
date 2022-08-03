@@ -160,21 +160,10 @@ template <> otError SrpClient::Process<Cmd("host")>(Arg aArgs[])
         {
             const otSrpClientHostInfo *hostInfo = otSrpClientGetHostInfo(GetInstancePtr());
 
-            if (hostInfo->mAutoAddress)
+            for (uint8_t index = 0; index < hostInfo->mNumAddresses; index++)
             {
-                OutputLine("auto");
+                OutputIp6AddressLine(hostInfo->mAddresses[index]);
             }
-            else
-            {
-                for (uint8_t index = 0; index < hostInfo->mNumAddresses; index++)
-                {
-                    OutputIp6AddressLine(hostInfo->mAddresses[index]);
-                }
-            }
-        }
-        else if (aArgs[1] == "auto")
-        {
-            error = otSrpClientEnableAutoHostAddress(GetInstancePtr());
         }
         else
         {
@@ -458,28 +447,19 @@ void SrpClient::OutputHostInfo(uint8_t aIndentSize, const otSrpClientHostInfo &a
         OutputFormat("(null)");
     }
 
-    OutputFormat(", state:%s, addrs:", otSrpClientItemStateToString(aHostInfo.mState));
+    OutputFormat(", state:%s, addrs:[", otSrpClientItemStateToString(aHostInfo.mState));
 
-    if (aHostInfo.mAutoAddress)
+    for (uint8_t index = 0; index < aHostInfo.mNumAddresses; index++)
     {
-        OutputLine("auto");
-    }
-    else
-    {
-        OutputFormat("[");
-
-        for (uint8_t index = 0; index < aHostInfo.mNumAddresses; index++)
+        if (index > 0)
         {
-            if (index > 0)
-            {
-                OutputFormat(", ");
-            }
-
-            OutputIp6Address(aHostInfo.mAddresses[index]);
+            OutputFormat(", ");
         }
 
-        OutputLine("]");
+        OutputIp6Address(aHostInfo.mAddresses[index]);
     }
+
+    OutputLine("]");
 }
 
 void SrpClient::OutputServiceList(uint8_t aIndentSize, const otSrpClientService *aServices)
@@ -545,11 +525,6 @@ exit:
     return error;
 }
 
-template <> otError SrpClient::Process<Cmd("ttl")>(Arg aArgs[])
-{
-    return Interpreter::GetInterpreter().ProcessGetSet(aArgs, otSrpClientGetTtl, otSrpClientSetTtl);
-}
-
 void SrpClient::HandleCallback(otError                    aError,
                                const otSrpClientHostInfo *aHostInfo,
                                const otSrpClientService * aServices,
@@ -603,7 +578,7 @@ otError SrpClient::Process(Arg aArgs[])
     static constexpr Command kCommands[] = {
         CmdEntry("autostart"),     CmdEntry("callback"), CmdEntry("host"),    CmdEntry("keyleaseinterval"),
         CmdEntry("leaseinterval"), CmdEntry("server"),   CmdEntry("service"), CmdEntry("start"),
-        CmdEntry("state"),         CmdEntry("stop"),     CmdEntry("ttl"),
+        CmdEntry("state"),         CmdEntry("stop"),
     };
 
     static_assert(BinarySearch::IsSorted(kCommands), "kCommands is not sorted");

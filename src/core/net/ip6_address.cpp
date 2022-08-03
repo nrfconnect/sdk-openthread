@@ -77,17 +77,13 @@ bool Prefix::IsEqual(const uint8_t *aPrefixBytes, uint8_t aPrefixLength) const
 bool Prefix::operator<(const Prefix &aOther) const
 {
     bool    isSmaller;
-    uint8_t minLength;
     uint8_t matchedLength;
 
-    minLength     = OT_MIN(GetLength(), aOther.GetLength());
-    matchedLength = MatchLength(GetBytes(), aOther.GetBytes(), SizeForLength(minLength));
+    VerifyOrExit(GetLength() == aOther.GetLength(), isSmaller = GetLength() < aOther.GetLength());
 
-    if (matchedLength >= minLength)
-    {
-        isSmaller = (GetLength() < aOther.GetLength());
-        ExitNow();
-    }
+    matchedLength = MatchLength(GetBytes(), aOther.GetBytes(), GetBytesSize());
+
+    VerifyOrExit(matchedLength < GetLength(), isSmaller = false);
 
     isSmaller = GetBytes()[matchedLength / CHAR_BIT] < aOther.GetBytes()[matchedLength / CHAR_BIT];
 

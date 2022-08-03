@@ -34,7 +34,7 @@ import config
 import thread_cert
 
 # Test description:
-#   This test verifies on-link prefix configuration.
+#   This test verifies Vicarious Router Solicitation.
 #
 # Topology:
 #    -------------(eth)----------------------------
@@ -67,7 +67,6 @@ class MultiThreadNetworks(thread_cert.TestCase):
             'version': '1.2',
             'channel': CHANNEL1,
             'router_selection_jitter': 1,
-            'extended_panid': '0001020304050607'
         },
         ROUTER1: {
             'name': 'Router_1',
@@ -75,7 +74,6 @@ class MultiThreadNetworks(thread_cert.TestCase):
             'version': '1.2',
             'channel': CHANNEL1,
             'router_selection_jitter': 1,
-            'extended_panid': '0001020304050607'
         },
         BR2: {
             'name': 'BR_2',
@@ -84,7 +82,6 @@ class MultiThreadNetworks(thread_cert.TestCase):
             'version': '1.2',
             'channel': CHANNEL2,
             'router_selection_jitter': 1,
-            'extended_panid': '08090a0b0c0d0e0f'
         },
         ROUTER2: {
             'name': 'Router_2',
@@ -92,7 +89,6 @@ class MultiThreadNetworks(thread_cert.TestCase):
             'version': '1.2',
             'channel': CHANNEL2,
             'router_selection_jitter': 1,
-            'extended_panid': '08090a0b0c0d0e0f'
         },
         HOST: {
             'name': 'Host',
@@ -112,7 +108,7 @@ class MultiThreadNetworks(thread_cert.TestCase):
         self.simulator.go(5)
 
         br1.start()
-        self.simulator.go(config.LEADER_STARTUP_DELAY)
+        self.simulator.go(5)
         self.assertEqual('leader', br1.get_state())
 
         router1.start()
@@ -139,7 +135,7 @@ class MultiThreadNetworks(thread_cert.TestCase):
         host.kill_radvd_service()
 
         br2.start()
-        self.simulator.go(config.LEADER_STARTUP_DELAY)
+        self.simulator.go(5)
         self.assertEqual('leader', br2.get_state())
 
         router2.start()

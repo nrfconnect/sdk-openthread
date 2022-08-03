@@ -457,42 +457,18 @@ public:
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     /**
-     * This method configures CSL parameters in all radios.
+     * This method transitions all radios link to CSL sample state.
      *
-     * @param[in]  aPeriod    The CSL period.
-     * @param[in]  aChannel   The CSL channel.
-     * @param[in]  aShortAddr The short source address of CSL receiver's peer.
-     * @param[in]  aExtAddr   The extended source address of CSL receiver's peer.
+     * CSL sample state is only applicable and used for 15.4 radio link. Other link are transitioned to sleep state.
      *
-     * @retval  TRUE if CSL Period or CSL Channel changed.
-     * @retval  FALSE if CSL Period and CSL Channel did not change.
-     *
+     * @param[in]  aPanChannel  The current phy channel used by the device. This param will only take effect when CSL
+     *                          channel hasn't been explicitly specified.
      */
-    bool UpdateCsl(uint16_t aPeriod, uint8_t aChannel, otShortAddress aShortAddr, const otExtAddress *aExtAddr)
+    void CslSample(uint8_t aPanChannel)
     {
-        bool retval = false;
-
-        OT_UNUSED_VARIABLE(aPeriod);
-        OT_UNUSED_VARIABLE(aChannel);
-        OT_UNUSED_VARIABLE(aShortAddr);
-        OT_UNUSED_VARIABLE(aExtAddr);
+        OT_UNUSED_VARIABLE(aPanChannel);
 #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
-        retval = mSubMac.UpdateCsl(aPeriod, aChannel, aShortAddr, aExtAddr);
-#endif
-        return retval;
-    }
-
-    /**
-     * This method transitions all radios link to CSL sample state, given that a non-zero CSL period is configured.
-     *
-     * CSL sample state is only applicable and used for 15.4 radio link. Other link are transitioned to sleep state
-     * when CSL period is non-zero.
-     *
-     */
-    void CslSample(void)
-    {
-#if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
-        mSubMac.CslSample();
+        IgnoreError(mSubMac.CslSample(aPanChannel));
 #endif
 #if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
         mTrel.Sleep();
@@ -596,7 +572,6 @@ public:
      * @param[in] aScanDuration  The duration, in milliseconds, for the channel to be scanned.
      *
      * @retval kErrorNone            Successfully started scanning the channel.
-     * @retval kErrorBusy            The radio is performing energy scanning.
      * @retval kErrorInvalidState    The radio was disabled or transmitting.
      * @retval kErrorNotImplemented  Energy scan is not supported by radio link.
      *

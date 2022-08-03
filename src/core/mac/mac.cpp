@@ -92,10 +92,6 @@ Mac::Mac(Instance &aInstance)
 #if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     , mCslTxFireTime(TimeMilli::kMaxDuration)
 #endif
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-    , mCslChannel(0)
-    , mCslPeriod(0)
-#endif
 #endif
     , mActiveScanHandler(nullptr) // Initialize `mActiveScanHandler` and `mEnergyScanHandler` union
     , mScanHandlerContext(nullptr)
@@ -214,11 +210,6 @@ Error Mac::ConvertBeaconToActiveScanResult(const RxFrame *aBeaconFrame, ActiveSc
 {
     Error   error = kErrorNone;
     Address address;
-#if OPENTHREAD_CONFIG_MAC_BEACON_PAYLOAD_PARSING_ENABLE
-    const BeaconPayload *beaconPayload = nullptr;
-    const Beacon *       beacon        = nullptr;
-    uint16_t             payloadLength;
-#endif
 
     memset(&aResult, 0, sizeof(ActiveScanResult));
 
@@ -237,23 +228,6 @@ Error Mac::ConvertBeaconToActiveScanResult(const RxFrame *aBeaconFrame, ActiveSc
     aResult.mChannel = aBeaconFrame->GetChannel();
     aResult.mRssi    = aBeaconFrame->GetRssi();
     aResult.mLqi     = aBeaconFrame->GetLqi();
-
-#if OPENTHREAD_CONFIG_MAC_BEACON_PAYLOAD_PARSING_ENABLE
-    payloadLength = aBeaconFrame->GetPayloadLength();
-
-    beacon        = reinterpret_cast<const Beacon *>(aBeaconFrame->GetPayload());
-    beaconPayload = reinterpret_cast<const BeaconPayload *>(beacon->GetPayload());
-
-    if ((payloadLength >= (sizeof(*beacon) + sizeof(*beaconPayload))) && beacon->IsValid() && beaconPayload->IsValid())
-    {
-        aResult.mVersion    = beaconPayload->GetProtocolVersion();
-        aResult.mIsJoinable = beaconPayload->IsJoiningPermitted();
-        aResult.mIsNative   = beaconPayload->IsNative();
-        IgnoreError(AsCoreType(&aResult.mNetworkName).Set(beaconPayload->GetNetworkName()));
-        VerifyOrExit(IsValidUtf8String(aResult.mNetworkName.m8), error = kErrorParse);
-        aResult.mExtendedPanId = beaconPayload->GetExtendedPanId();
-    }
-#endif
 
     LogBeacon("Received");
 
@@ -417,10 +391,6 @@ Error Mac::SetPanChannel(uint8_t aChannel)
 
     mRadioChannel = mPanChannel;
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-    UpdateCsl();
-#endif
-
     UpdateIdleMode();
 
 exit:
@@ -512,7 +482,7 @@ Error Mac::RequestDataPollTransmission(void)
     Error error = kErrorNone;
 
     VerifyOrExit(IsEnabled(), error = kErrorInvalidState);
-    VerifyOrExit(!IsActiveOrPending(kOperationTransmitPoll));
+    VerifyOrExit(!IsActiveOrPending(kOperationTransmitPoll), error = kErrorAlready);
 
     // We ensure data frame and data poll tx requests are handled in the
     // order they are requested. So if we have a pending direct data frame
@@ -561,7 +531,7 @@ void Mac::UpdateIdleMode(void)
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
         if (IsCslEnabled())
         {
-            mLinks.CslSample();
+            mLinks.CslSample(mRadioChannel);
             ExitNow();
         }
 #endif
@@ -745,10 +715,6 @@ TxFrame *Mac::PrepareBeacon(void)
     TxFrame *frame;
     uint16_t fcf;
     Beacon * beacon = nullptr;
-#if OPENTHREAD_CONFIG_MAC_OUTGOING_BEACON_PAYLOAD_ENABLE
-    uint8_t        beaconLength;
-    BeaconPayload *beaconPayload = nullptr;
-#endif
 
 #if OPENTHREAD_CONFIG_MULTI_RADIO
     OT_ASSERT(!mTxBeaconRadioLinks.IsEmpty());
@@ -765,30 +731,6 @@ TxFrame *Mac::PrepareBeacon(void)
 
     beacon = reinterpret_cast<Beacon *>(frame->GetPayload());
     beacon->Init();
-
-#if OPENTHREAD_CONFIG_MAC_OUTGOING_BEACON_PAYLOAD_ENABLE
-    beaconLength = sizeof(*beacon);
-
-    beaconPayload = reinterpret_cast<BeaconPayload *>(beacon->GetPayload());
-
-    beaconPayload->Init();
-
-    if (IsJoinable())
-    {
-        beaconPayload->SetJoiningPermitted();
-    }
-    else
-    {
-        beaconPayload->ClearJoiningPermitted();
-    }
-
-    beaconPayload->SetNetworkName(Get<MeshCoP::NetworkNameManager>().GetNetworkName().GetAsData());
-    beaconPayload->SetExtendedPanId(Get<MeshCoP::ExtendedPanIdManager>().GetExtPanId());
-
-    beaconLength += sizeof(*beaconPayload);
-
-    frame->SetPayloadLength(beaconLength);
-#endif
 
     LogBeacon("Sending");
 
@@ -2265,57 +2207,52 @@ exit:
 #endif
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-void Mac::UpdateCsl(void)
+void Mac::SetCslChannel(uint8_t aChannel)
 {
-    uint16_t period;
-    uint8_t  channel;
+    VerifyOrExit(GetCslChannel() != aChannel);
 
-    VerifyOrExit(IsCslSupported());
+    mLinks.GetSubMac().SetCslChannel(aChannel);
+    mLinks.GetSubMac().SetCslChannelSpecified(aChannel != 0);
 
-    period  = Get<Mle::Mle>().IsRxOnWhenIdle() ? 0 : GetCslPeriod();
-    channel = GetCslChannel() ? GetCslChannel() : mRadioChannel;
-
-    if (mLinks.UpdateCsl(period, channel, Get<Mle::Mle>().GetParent().GetRloc16(),
-                         &Get<Mle::Mle>().GetParent().GetExtAddress()))
+    if (IsCslEnabled())
     {
-        Get<DataPollSender>().RecalculatePollPeriod();
-        if (period)
-        {
-            Get<Mle::Mle>().ScheduleChildUpdateRequest();
-        }
-        UpdateIdleMode();
+        Get<Mle::Mle>().ScheduleChildUpdateRequest();
     }
-
 exit:
     return;
 }
 
-void Mac::SetCslChannel(uint8_t aChannel)
-{
-    mCslChannel = aChannel;
-    UpdateCsl();
-}
-
 void Mac::SetCslPeriod(uint16_t aPeriod)
 {
-    mCslPeriod = aPeriod;
-    UpdateCsl();
+    mLinks.GetSubMac().SetCslPeriod(aPeriod);
+
+    Get<DataPollSender>().RecalculatePollPeriod();
+
+    if ((GetCslPeriod() == 0) || IsCslEnabled())
+    {
+        IgnoreError(Get<Radio>().EnableCsl(GetCslPeriod(), Get<Mle::Mle>().GetParent().GetRloc16(),
+                                           &Get<Mle::Mle>().GetParent().GetExtAddress()));
+    }
+
+    if (IsCslEnabled())
+    {
+        Get<Mle::Mle>().ScheduleChildUpdateRequest();
+    }
+
+    UpdateIdleMode();
 }
 
 bool Mac::IsCslEnabled(void) const
 {
-    return !Get<Mle::Mle>().IsRxOnWhenIdle() && IsCslCapable();
+    return !GetRxOnWhenIdle() && IsCslCapable();
 }
 
 bool Mac::IsCslCapable(void) const
 {
-    return (GetCslPeriod() > 0) && IsCslSupported();
+    return (GetCslPeriod() > 0) && Get<Mle::MleRouter>().IsChild() &&
+           Get<Mle::Mle>().GetParent().IsEnhancedKeepAliveSupported();
 }
 
-bool Mac::IsCslSupported(void) const
-{
-    return Get<Mle::MleRouter>().IsChild() && Get<Mle::Mle>().GetParent().IsEnhancedKeepAliveSupported();
-}
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
 #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE

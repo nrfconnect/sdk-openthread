@@ -196,7 +196,7 @@ Done
 
 Usage: `dataset activetimestamp [timestamp]`
 
-Get active timestamp seconds.
+Get active timestamp.
 
 ```bash
 > dataset activetimestamp
@@ -204,7 +204,7 @@ Get active timestamp seconds.
 Done
 ```
 
-Set active timestamp seconds.
+Set active timestamp.
 
 ```bash
 > dataset activetimestamp 123456789
@@ -457,7 +457,7 @@ Done
 
 Usage: `dataset pendingtimestamp [timestamp]`
 
-Get pending timestamp seconds.
+Get pending timestamp.
 
 ```bash
 > dataset pendingtimestamp
@@ -465,7 +465,7 @@ Get pending timestamp seconds.
 Done
 ```
 
-Set pending timestamp seconds.
+Set pending timestamp.
 
 ```bash
 > dataset pendingtimestamp 123456789

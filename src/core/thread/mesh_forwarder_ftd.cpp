@@ -53,7 +53,6 @@ Error MeshForwarder::SendMessage(Message &aMessage)
 
     aMessage.SetOffset(0);
     aMessage.SetDatagramTag(0);
-    aMessage.SetTimestampToNow();
     mSendQueue.Enqueue(aMessage);
 
     switch (aMessage.GetType())
@@ -200,11 +199,6 @@ Error MeshForwarder::EvictMessage(Message::Priority aPriority)
     Error    error = kErrorNotFound;
     Message *evict = nullptr;
 
-#if OPENTHREAD_CONFIG_DELAY_AWARE_QUEUE_MANAGEMENT_ENABLE
-    error = RemoveAgedMessages();
-    VerifyOrExit(error == kErrorNotFound);
-#endif
-
     // Search for a lower priority message to evict
     for (uint8_t priority = 0; priority < aPriority; priority++)
     {
@@ -251,7 +245,8 @@ Error MeshForwarder::EvictMessage(Message::Priority aPriority)
     }
 
 exit:
-    if ((error == kErrorNone) && (evict != nullptr))
+
+    if (error == kErrorNone)
     {
         RemoveMessage(*evict);
     }
@@ -637,6 +632,19 @@ exit:
     return error;
 }
 
+Error MeshForwarder::GetIp6Header(const uint8_t *     aFrame,
+                                  uint16_t            aFrameLength,
+                                  const Mac::Address &aMacSource,
+                                  const Mac::Address &aMacDest,
+                                  Ip6::Header &       aIp6Header)
+{
+    uint8_t headerLength;
+    bool    nextHeaderCompressed;
+
+    return DecompressIp6Header(aFrame, aFrameLength, aMacSource, aMacDest, aIp6Header, headerLength,
+                               nextHeaderCompressed);
+}
+
 void MeshForwarder::SendIcmpErrorIfDstUnreach(const Message &     aMessage,
                                               const Mac::Address &aMacSource,
                                               const Mac::Address &aMacDest)
@@ -818,25 +826,23 @@ void MeshForwarder::UpdateRoutes(const uint8_t *     aFrame,
                                  const Mac::Address &aMeshSource,
                                  const Mac::Address &aMeshDest)
 {
-    Ip6::Headers ip6Headers;
-    Neighbor *   neighbor;
+    Ip6::Header ip6Header;
+    Neighbor *  neighbor;
 
     VerifyOrExit(!aMeshDest.IsBroadcast() && aMeshSource.IsShort());
+    SuccessOrExit(GetIp6Header(aFrame, aFrameLength, aMeshSource, aMeshDest, ip6Header));
 
-    SuccessOrExit(ip6Headers.DecompressFrom(aFrame, aFrameLength, aMeshSource, aMeshDest, GetInstance()));
-
-    if (!ip6Headers.GetSourceAddress().GetIid().IsLocator() &&
-        Get<NetworkData::Leader>().IsOnMesh(ip6Headers.GetSourceAddress()))
+    if (!ip6Header.GetSource().GetIid().IsLocator() &&
+        Get<NetworkData::Leader>().IsOnMesh(ip6Header.GetSource()) /* only for on mesh address which may require AQ */)
     {
         // FTDs MAY add/update EID-to-RLOC Map Cache entries by
-        // inspecting packets being received only for on mesh
-        // addresses.
+        // inspecting packets being received.
 
-        Get<AddressResolver>().UpdateSnoopedCacheEntry(ip6Headers.GetSourceAddress(), aMeshSource.GetShort(),
+        Get<AddressResolver>().UpdateSnoopedCacheEntry(ip6Header.GetSource(), aMeshSource.GetShort(),
                                                        aMeshDest.GetShort());
     }
 
-    neighbor = Get<NeighborTable>().FindNeighbor(ip6Headers.GetSourceAddress());
+    neighbor = Get<NeighborTable>().FindNeighbor(ip6Header.GetSource());
     VerifyOrExit(neighbor != nullptr && !neighbor->IsFullThreadDevice());
 
     if (!Mle::Mle::RouterIdMatch(aMeshSource.GetShort(), Get<Mac::Mac>().GetShortAddress()))
@@ -886,18 +892,11 @@ void MeshForwarder::UpdateFragmentPriority(Lowpan::FragmentHeader &aFragmentHead
         ExitNow();
     }
 
-#if OPENTHREAD_CONFIG_DELAY_AWARE_QUEUE_MANAGEMENT_ENABLE
-    OT_UNUSED_VARIABLE(aFragmentLength);
-#else
-    // We can clear the entry in `mFragmentPriorityList` if it is the
-    // last fragment. But if "delay aware active queue management" is
-    // used we need to keep entry until the message is sent.
     if (aFragmentHeader.GetDatagramOffset() + aFragmentLength >= aFragmentHeader.GetDatagramSize())
     {
         entry->Clear();
     }
     else
-#endif
     {
         entry->ResetLifetime();
     }
@@ -934,7 +933,6 @@ MeshForwarder::FragmentPriorityList::Entry *MeshForwarder::FragmentPriorityList:
     {
         if (entry.IsExpired())
         {
-            entry.Clear();
             entry.mSrcRloc16   = aSrcRloc16;
             entry.mDatagramTag = aTag;
             entry.mPriority    = aPriority;
@@ -1069,20 +1067,97 @@ exit:
     return error;
 }
 
+Error MeshForwarder::DecompressIp6UdpTcpHeader(const Message &     aMessage,
+                                               uint16_t            aOffset,
+                                               const Mac::Address &aMeshSource,
+                                               const Mac::Address &aMeshDest,
+                                               Ip6::Header &       aIp6Header,
+                                               uint16_t &          aChecksum,
+                                               uint16_t &          aSourcePort,
+                                               uint16_t &          aDestPort)
+{
+    Error    error = kErrorParse;
+    int      headerLength;
+    bool     nextHeaderCompressed;
+    uint8_t  frameBuffer[sizeof(Ip6::Header)];
+    uint16_t frameLength;
+    union
+    {
+        Ip6::Udp::Header udp;
+        Ip6::Tcp::Header tcp;
+    } header;
+
+    aChecksum   = 0;
+    aSourcePort = 0;
+    aDestPort   = 0;
+
+    // Read and decompress the IPv6 header
+
+    frameLength = aMessage.ReadBytes(aOffset, frameBuffer, sizeof(frameBuffer));
+
+    headerLength = Get<Lowpan::Lowpan>().DecompressBaseHeader(aIp6Header, nextHeaderCompressed, aMeshSource, aMeshDest,
+                                                              frameBuffer, frameLength);
+    VerifyOrExit(headerLength >= 0);
+
+    aOffset += headerLength;
+
+    // Read and decompress UDP or TCP header
+
+    switch (aIp6Header.GetNextHeader())
+    {
+    case Ip6::kProtoUdp:
+        if (nextHeaderCompressed)
+        {
+            frameLength  = aMessage.ReadBytes(aOffset, frameBuffer, sizeof(Ip6::Udp::Header));
+            headerLength = Get<Lowpan::Lowpan>().DecompressUdpHeader(header.udp, frameBuffer, frameLength);
+            VerifyOrExit(headerLength >= 0);
+        }
+        else
+        {
+            SuccessOrExit(aMessage.Read(aOffset, header.udp));
+        }
+
+        aChecksum   = header.udp.GetChecksum();
+        aSourcePort = header.udp.GetSourcePort();
+        aDestPort   = header.udp.GetDestinationPort();
+        break;
+
+    case Ip6::kProtoTcp:
+        SuccessOrExit(aMessage.Read(aOffset, header.tcp));
+        aChecksum   = header.tcp.GetChecksum();
+        aSourcePort = header.tcp.GetSourcePort();
+        aDestPort   = header.tcp.GetDestinationPort();
+        break;
+
+    default:
+        break;
+    }
+
+    error = kErrorNone;
+
+exit:
+    return error;
+}
+
 void MeshForwarder::LogMeshIpHeader(const Message &     aMessage,
                                     uint16_t            aOffset,
                                     const Mac::Address &aMeshSource,
                                     const Mac::Address &aMeshDest,
                                     LogLevel            aLogLevel)
 {
-    Ip6::Headers headers;
+    uint16_t    checksum;
+    uint16_t    sourcePort;
+    uint16_t    destPort;
+    Ip6::Header ip6Header;
 
-    SuccessOrExit(headers.DecompressFrom(aMessage, aOffset, aMeshSource, aMeshDest));
+    SuccessOrExit(DecompressIp6UdpTcpHeader(aMessage, aOffset, aMeshSource, aMeshDest, ip6Header, checksum, sourcePort,
+                                            destPort));
 
-    LogAt(aLogLevel, "    IPv6 %s msg, chksum:%04x, ecn:%s, prio:%s", Ip6::Ip6::IpProtoToString(headers.GetIpProto()),
-          headers.GetChecksum(), Ip6::Ip6::EcnToString(headers.GetEcn()), MessagePriorityToString(aMessage));
+    LogAt(aLogLevel, "    IPv6 %s msg, chksum:%04x, ecn:%s, prio:%s",
+          Ip6::Ip6::IpProtoToString(ip6Header.GetNextHeader()), checksum, Ip6::Ip6::EcnToString(ip6Header.GetEcn()),
+          MessagePriorityToString(aMessage));
 
-    LogIp6SourceDestAddresses(headers, aLogLevel);
+    LogIp6SourceDestAddresses(ip6Header, sourcePort, destPort, aLogLevel);
 
 exit:
     return;

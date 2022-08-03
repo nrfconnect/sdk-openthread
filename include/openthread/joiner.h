@@ -94,7 +94,7 @@ typedef struct otJoinerDiscerner
 typedef void (*otJoinerCallback)(otError aError, void *aContext);
 
 /**
- * Enables the Thread Joiner role.
+ * This function enables the Thread Joiner role.
  *
  * @param[in]  aInstance         A pointer to an OpenThread instance.
  * @param[in]  aPskd             A pointer to the PSKd.
@@ -123,7 +123,7 @@ otError otJoinerStart(otInstance *     aInstance,
                       void *           aContext);
 
 /**
- * Disables the Thread Joiner role.
+ * This function disables the Thread Joiner role.
  *
  * @param[in]  aInstance  A pointer to an OpenThread instance.
  *
@@ -131,7 +131,7 @@ otError otJoinerStart(otInstance *     aInstance,
 void otJoinerStop(otInstance *aInstance);
 
 /**
- * Gets the Joiner State.
+ * This function returns the Joiner State.
  *
  * @param[in]  aInstance  A pointer to an OpenThread instance.
  *
@@ -146,12 +146,12 @@ void otJoinerStop(otInstance *aInstance);
 otJoinerState otJoinerGetState(otInstance *aInstance);
 
 /**
- * Gets the Joiner ID.
+ * This function gets the Joiner ID.
  *
  * If a Joiner Discerner is not set, Joiner ID is the first 64 bits of the result of computing SHA-256 over
  * factory-assigned IEEE EUI-64. Otherwise the Joiner ID is calculated from the Joiner Discerner value.
  *
- * The Joiner ID is also used as the device's IEEE 802.15.4 Extended Address during the commissioning process.
+ * The Joiner ID is also used as the device's IEEE 802.15.4 Extended Address during commissioning process.
  *
  * @param[in]   aInstance  A pointer to the OpenThread instance.
  *
@@ -161,11 +161,13 @@ otJoinerState otJoinerGetState(otInstance *aInstance);
 const otExtAddress *otJoinerGetId(otInstance *aInstance);
 
 /**
- * Sets the Joiner Discerner.
+ * This function sets the Joiner Discerner.
  *
- * The Joiner Discerner is used to calculate the Joiner ID during the Thread Commissioning process. For more
- * information, refer to #otJoinerGetId.
- * @note The Joiner Discerner takes the place of the Joiner EUI-64 during the joiner session of Thread Commissioning.
+ * The Joiner Discerner is used to calculate the Joiner ID used during commissioning/joining process.
+ *
+ * By default (when a discerner is not provided or set to NULL), Joiner ID is derived as first 64 bits of the result
+ * of computing SHA-256 over factory-assigned IEEE EUI-64. Note that this is the main behavior expected by Thread
+ * specification.
  *
  * @param[in]   aInstance    A pointer to the OpenThread instance.
  * @param[in]   aDiscerner   A pointer to a Joiner Discerner. If NULL clears any previously set discerner.
@@ -178,7 +180,7 @@ const otExtAddress *otJoinerGetId(otInstance *aInstance);
 otError otJoinerSetDiscerner(otInstance *aInstance, otJoinerDiscerner *aDiscerner);
 
 /**
- * Gets the Joiner Discerner. For more information, refer to #otJoinerSetDiscerner.
+ * This function gets the Joiner Discerner.
  *
  * @param[in]   aInstance       A pointer to the OpenThread instance.
  *

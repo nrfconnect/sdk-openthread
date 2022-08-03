@@ -394,9 +394,10 @@ Error LeaderBase::SetNetworkData(uint8_t        aVersion,
     }
 
 #if OPENTHREAD_FTD
+    // Synchronize internal 6LoWPAN Context ID Set with recently obtained Network Data.
     if (Get<Mle::MleRouter>().IsLeader())
     {
-        Get<Leader>().HandleNetworkDataRestoredAfterReset();
+        Get<Leader>().UpdateContextsAfterReset();
     }
 #endif
 

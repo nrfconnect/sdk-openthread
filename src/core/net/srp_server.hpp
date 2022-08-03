@@ -130,12 +130,6 @@ public:
     typedef otSrpServerServiceUpdateId ServiceUpdateId;
 
     /**
-     * The SRP server lease information of a host/service.
-     *
-     */
-    typedef otSrpServerLeaseInfo LeaseInfo;
-
-    /**
      * This enumeration represents the address mode used by the SRP server.
      *
      * Address mode specifies how the address and port number are determined by the SRP server and how this info ins
@@ -260,14 +254,6 @@ public:
         Error GetServiceSubTypeLabel(char *aLabel, uint8_t aMaxSize) const;
 
         /**
-         * This method returns the TTL of the service instance.
-         *
-         * @returns The TTL of the service instance.
-         *
-         */
-        uint32_t GetTtl(void) const { return mDescription->mTtl; }
-
-        /**
          * This method returns the port of the service instance.
          *
          * @returns  The port of the service.
@@ -316,22 +302,6 @@ public:
         const Host &GetHost(void) const { return *mDescription->mHost; }
 
         /**
-         * This method returns the LEASE time of the service.
-         *
-         * @returns  The LEASE time in seconds.
-         *
-         */
-        uint32_t GetLease(void) const { return mDescription->mLease; }
-
-        /**
-         * This method returns the KEY-LEASE time of the key of the service.
-         *
-         * @returns  The KEY-LEASE time in seconds.
-         *
-         */
-        uint32_t GetKeyLease(void) const { return mDescription->mKeyLease; }
-
-        /**
          * This method returns the expire time (in milliseconds) of the service.
          *
          * @returns  The service expire time in milliseconds.
@@ -346,15 +316,6 @@ public:
          *
          */
         TimeMilli GetKeyExpireTime(void) const;
-
-        /**
-         * This method gets the LEASE and KEY-LEASE information of a given service.
-         *
-         * @param[out]  aLeaseInfo  A reference to a LeaseInfo instance. It contains the LEASE time, KEY-LEASE time,
-         *                          remaining LEASE time and the remaining KEY-LEASE time.
-         *
-         */
-        void GetLeaseInfo(LeaseInfo &aLeaseInfo) const;
 
         /**
          * This method indicates whether this service matches a given service instance name.
@@ -398,7 +359,6 @@ public:
             uint16_t     mPriority;
             uint16_t     mWeight;
             uint16_t     mPort;
-            uint32_t     mTtl;      // The TTL in seconds.
             uint32_t     mLease;    // The LEASE time in seconds.
             uint32_t     mKeyLease; // The KEY-LEASE time in seconds.
             TimeMilli    mUpdateTime;
@@ -477,14 +437,6 @@ public:
         }
 
         /**
-         * This method returns the TTL of the host.
-         *
-         * @returns The TTL of the host.
-         *
-         */
-        uint32_t GetTtl(void) const { return mTtl; }
-
-        /**
          * This method returns the LEASE time of the host.
          *
          * @returns  The LEASE time in seconds.
@@ -499,15 +451,6 @@ public:
          *
          */
         uint32_t GetKeyLease(void) const { return mKeyLease; }
-
-        /**
-         * This method gets the LEASE and KEY-LEASE information of a given host.
-         *
-         * @param[out]  aLeaseInfo  A reference to a LeaseInfo instance. It contains the LEASE time, KEY-LEASE time,
-         *                          remaining LEASE time and the remaining KEY-LEASE time.
-         *
-         */
-        void GetLeaseInfo(LeaseInfo &aLeaseInfo) const;
 
         /**
          * This method returns the KEY resource record of the host.
@@ -572,20 +515,16 @@ public:
         Host(Instance &aInstance, TimeMilli aUpdateTime);
         ~Host(void);
 
-        Error SetFullName(const char *aFullName);
-        void  SetKeyRecord(Dns::Ecdsa256KeyRecord &aKeyRecord);
-        void  SetTtl(uint32_t aTtl) { mTtl = aTtl; }
-        void  SetLease(uint32_t aLease) { mLease = aLease; }
-        void  SetKeyLease(uint32_t aKeyLease) { mKeyLease = aKeyLease; }
-        Error ProcessTtl(uint32_t aTtl);
-
+        Error                SetFullName(const char *aFullName);
+        void                 SetKeyRecord(Dns::Ecdsa256KeyRecord &aKeyRecord);
+        void                 SetLease(uint32_t aLease) { mLease = aLease; }
+        void                 SetKeyLease(uint32_t aKeyLease) { mKeyLease = aKeyLease; }
         LinkedList<Service> &GetServices(void) { return mServices; }
         Service *            AddNewService(const char *aServiceName,
                                            const char *aInstanceName,
                                            bool        aIsSubType,
                                            TimeMilli   aUpdateTime);
         void                 RemoveService(Service *aService, RetainName aRetainName, NotifyMode aNotifyServiceHandler);
-        Error                AddCopyOfServiceAsDeletedIfNotPresent(const Service &aService, TimeMilli aUpdateTime);
         void                 FreeAllServices(void);
         void                 ClearResources(void);
         Error                MergeServicesAndResourcesFrom(Host &aHost);
@@ -595,8 +534,6 @@ public:
         const RetainPtr<Service::Description> FindServiceDescription(const char *aInstanceName) const;
         Service *                             FindService(const char *aServiceName, const char *aInstanceName);
         const Service *                       FindService(const char *aServiceName, const char *aInstanceName) const;
-        Service *                             FindBaseService(const char *aInstanceName);
-        const Service *                       FindBaseService(const char *aInstanceName) const;
 
         Host *                    mNext;
         Heap::String              mFullName;
@@ -605,31 +542,10 @@ public:
         // TODO(wgtdkp): there is no necessary to save the entire resource
         // record, saving only the ECDSA-256 public key should be enough.
         Dns::Ecdsa256KeyRecord mKeyRecord;
-        uint32_t               mTtl;      // The TTL in seconds.
         uint32_t               mLease;    // The LEASE time in seconds.
         uint32_t               mKeyLease; // The KEY-LEASE time in seconds.
         TimeMilli              mUpdateTime;
         LinkedList<Service>    mServices;
-    };
-
-    /**
-     * This class handles TTL configuration.
-     *
-     */
-    class TtlConfig : public otSrpServerTtlConfig
-    {
-        friend class Server;
-
-    public:
-        /**
-         * This constructor initializes to default TTL configuration.
-         *
-         */
-        TtlConfig(void);
-
-    private:
-        bool     IsValid(void) const { return mMinTtl <= mMaxTtl; }
-        uint32_t GrantTtl(uint32_t aLease, uint32_t aTtl) const;
     };
 
     /**
@@ -789,39 +705,12 @@ public:
     State GetState(void) const { return mState; }
 
     /**
-     * This method tells the port the SRP server is listening to.
-     *
-     * @returns  An integer that represents the port of the server. It returns 0 if the SRP server is not running.
-     *
-     */
-    uint16_t GetPort(void) const { return IsRunning() ? mPort : 0; }
-
-    /**
      * This method enables/disables the SRP server.
      *
      * @param[in]  aEnabled  A boolean to enable/disable the SRP server.
      *
      */
     void SetEnabled(bool aEnabled);
-
-    /**
-     * This method returns the TTL configuration.
-     *
-     * @param[out]  aTtlConfig  A reference to the `TtlConfig` instance.
-     *
-     */
-    void GetTtlConfig(TtlConfig &aTtlConfig) const { aTtlConfig = mTtlConfig; }
-
-    /**
-     * This method sets the TTL configuration.
-     *
-     * @param[in]  aTtlConfig  A reference to the `TtlConfig` instance.
-     *
-     * @retval  kErrorNone         Successfully set the TTL configuration
-     * @retval  kErrorInvalidArgs  The TTL range is not valid.
-     *
-     */
-    Error SetTtlConfig(const TtlConfig &aTtlConfig);
 
     /**
      * This method returns the LEASE and KEY-LEASE configurations.
@@ -857,14 +746,6 @@ public:
     const Host *GetNextHost(const Host *aHost);
 
     /**
-     * This method returns the response counters of the SRP server.
-     *
-     * @returns  A pointer to the response counters of the SRP server.
-     *
-     */
-    const otSrpServerResponseCounters *GetResponseCounters(void) const { return &mResponseCounters; }
-
-    /**
      * This method receives the service update result from service handler set by
      * SetServiceHandler.
      *
@@ -877,8 +758,6 @@ public:
 private:
     static constexpr uint16_t kUdpPayloadSize = Ip6::kMaxDatagramLength - sizeof(Ip6::Udp::Header);
 
-    static constexpr uint32_t kDefaultMinTtl               = 60u;             // 1 min (in seconds).
-    static constexpr uint32_t kDefaultMaxTtl               = 3600u * 2;       // 2 hours (in seconds).
     static constexpr uint32_t kDefaultMinLease             = 60u * 30;        // 30 min (in seconds).
     static constexpr uint32_t kDefaultMaxLease             = 3600u * 2;       // 2 hours (in seconds).
     static constexpr uint32_t kDefaultMinKeyLease          = 3600u * 24;      // 1 day (in seconds).
@@ -901,7 +780,6 @@ private:
         Dns::Zone               mDnsZone;
         uint16_t                mOffset;
         TimeMilli               mRxTime;
-        TtlConfig               mTtlConfig;
         LeaseConfig             mLeaseConfig;
         const Ip6::MessageInfo *mMessageInfo; // Set to `nullptr` when from SRPL.
     };
@@ -919,7 +797,6 @@ private:
         TimeMilli                GetExpireTime(void) const { return mExpireTime; }
         const Dns::UpdateHeader &GetDnsHeader(void) const { return mDnsHeader; }
         ServiceUpdateId          GetId(void) const { return mId; }
-        const TtlConfig &        GetTtlConfig(void) const { return mTtlConfig; }
         const LeaseConfig &      GetLeaseConfig(void) const { return mLeaseConfig; }
         Host &                   GetHost(void) { return mHost; }
         const Ip6::MessageInfo & GetMessageInfo(void) const { return mMessageInfo; }
@@ -933,7 +810,6 @@ private:
         TimeMilli         mExpireTime;
         Dns::UpdateHeader mDnsHeader;
         ServiceUpdateId   mId;          // The ID of this service update transaction.
-        TtlConfig         mTtlConfig;   // TTL config to use when processing the message.
         LeaseConfig       mLeaseConfig; // Lease config to use when processing the message.
         Host &            mHost;        // The `UpdateMetadata` has no ownership of this host.
         Ip6::MessageInfo  mMessageInfo; // Valid when `mIsDirectRxFromClient` is true.
@@ -955,19 +831,16 @@ private:
 
     ServiceUpdateId AllocateId(void) { return mServiceUpdateId++; }
 
-    void  InformUpdateHandlerOrCommit(Error aError, Host &aHost, const MessageMetadata &aMetadata);
     void  CommitSrpUpdate(Error aError, Host &aHost, const MessageMetadata &aMessageMetadata);
     void  CommitSrpUpdate(Error aError, UpdateMetadata &aUpdateMetadata);
     void  CommitSrpUpdate(Error                    aError,
                           Host &                   aHost,
                           const Dns::UpdateHeader &aDnsHeader,
                           const Ip6::MessageInfo * aMessageInfo,
-                          const TtlConfig &        aTtlConfig,
                           const LeaseConfig &      aLeaseConfig);
     Error ProcessMessage(Message &aMessage, const Ip6::MessageInfo &aMessageInfo);
     Error ProcessMessage(Message &               aMessage,
                          TimeMilli               aRxTime,
-                         const TtlConfig &       aTtlConfig,
                          const LeaseConfig &     aLeaseConfig,
                          const Ip6::MessageInfo *aMessageInfo);
     void  ProcessDnsUpdate(Message &aMessage, MessageMetadata &aMetadata);
@@ -980,7 +853,6 @@ private:
                           uint16_t                      aSigRdataOffset,
                           uint16_t                      aSigRdataLength,
                           const char *                  aSignerName) const;
-    Error ValidateServiceSubTypes(Host &aHost, const MessageMetadata &aMetadata);
     Error ProcessZoneSection(const Message &aMessage, MessageMetadata &aMetadata) const;
     Error ProcessHostDescriptionInstruction(Host &                 aHost,
                                             const Message &        aMessage,
@@ -1014,15 +886,12 @@ private:
     const UpdateMetadata *FindOutstandingUpdate(const MessageMetadata &aMessageMetadata) const;
     static const char *   AddressModeToString(AddressMode aMode);
 
-    void UpdateResponseCounters(Dns::Header::Response aResponseCode);
-
     Ip6::Udp::Socket                mSocket;
     otSrpServerServiceUpdateHandler mServiceUpdateHandler;
     void *                          mServiceUpdateHandlerContext;
 
     Heap::String mDomain;
 
-    TtlConfig   mTtlConfig;
     LeaseConfig mLeaseConfig;
 
     LinkedList<Host> mHosts;
@@ -1037,13 +906,10 @@ private:
     AddressMode     mAddressMode;
     uint8_t         mAnycastSequenceNumber;
     bool            mHasRegisteredAnyService : 1;
-
-    otSrpServerResponseCounters mResponseCounters;
 };
 
 } // namespace Srp
 
-DefineCoreType(otSrpServerTtlConfig, Srp::Server::TtlConfig);
 DefineCoreType(otSrpServerLeaseConfig, Srp::Server::LeaseConfig);
 DefineCoreType(otSrpServerHost, Srp::Server::Host);
 DefineCoreType(otSrpServerService, Srp::Server::Service);

@@ -31,7 +31,6 @@
 import unittest
 
 import thread_cert
-import config
 from pktverify.consts import ICMPV6_TYPE_DESTINATION_UNREACHABLE
 from pktverify.packet_verifier import PacketVerifier
 
@@ -64,7 +63,7 @@ class TestMleMustNotSendIcmpv6DestinationUnreachable(thread_cert.TestCase):
 
     def test(self):
         self.nodes[PBBR].start()
-        self.simulator.go(config.LEADER_STARTUP_DELAY)
+        self.simulator.go(5)
         self.assertEqual('leader', self.nodes[PBBR].get_state())
         self.nodes[PBBR].enable_backbone_router()
         self.simulator.go(3)

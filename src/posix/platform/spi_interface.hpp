@@ -159,14 +159,6 @@ public:
      */
     otError ResetConnection(void) { return OT_ERROR_NONE; }
 
-    /**
-     * This method returns the RCP interface metrics.
-     *
-     * @returns The RCP interface metrics.
-     *
-     */
-    const otRcpInterfaceMetrics *GetRcpInterfaceMetrics(void) const { return &mInterfaceMetrics; }
-
 private:
     int     SetupGpioHandle(int aFd, uint8_t aLine, uint32_t aHandleFlags, const char *aLabel);
     int     SetupGpioEvent(int aFd, uint8_t aLine, uint32_t aHandleFlags, uint32_t aEventFlags, const char *aLabel);
@@ -236,8 +228,15 @@ private:
     uint32_t mSpiSpeedHz;
 
     uint64_t mSlaveResetCount;
+    uint64_t mSpiFrameCount;
+    uint64_t mSpiValidFrameCount;
+    uint64_t mSpiGarbageFrameCount;
     uint64_t mSpiDuplexFrameCount;
     uint64_t mSpiUnresponsiveFrameCount;
+    uint64_t mSpiRxFrameCount;
+    uint64_t mSpiRxFrameByteCount;
+    uint64_t mSpiTxFrameCount;
+    uint64_t mSpiTxFrameByteCount;
 
     bool     mSpiTxIsReady;
     uint16_t mSpiTxRefusedCount;
@@ -248,8 +247,6 @@ private:
     uint16_t mSpiSlaveDataLen;
 
     bool mDidRxFrame;
-
-    otRcpInterfaceMetrics mInterfaceMetrics;
 
     // Non-copyable, intentionally not implemented.
     SpiInterface(const SpiInterface &);

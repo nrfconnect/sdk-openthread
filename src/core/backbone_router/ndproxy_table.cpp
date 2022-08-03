@@ -251,7 +251,7 @@ void NdProxyTable::HandleTimer(void)
 
     for (NdProxy &proxy : Iterate(kFilterDadInProcess))
     {
-        if (proxy.IsDadAttemptsComplete())
+        if (proxy.IsDadAttamptsComplete())
         {
             proxy.mDadFlag = false;
             NotifyDuaRegistrationOnBackboneLink(proxy, /* aIsRenew */ false);
@@ -262,7 +262,7 @@ void NdProxyTable::HandleTimer(void)
 
             if (Get<BackboneRouter::Manager>().SendBackboneQuery(GetDua(proxy)) == kErrorNone)
             {
-                proxy.IncreaseDadAttempts();
+                proxy.IncreaseDadAttampts();
             }
         }
     }

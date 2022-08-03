@@ -81,7 +81,7 @@ class Firewall(thread_cert.TestCase):
         host = self.nodes[HOST]
 
         br1.start()
-        self.simulator.go(config.LEADER_STARTUP_DELAY)
+        self.simulator.go(5)
         self.assertEqual('leader', br1.get_state())
 
         router1.start()

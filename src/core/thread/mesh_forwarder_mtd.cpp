@@ -42,7 +42,6 @@ Error MeshForwarder::SendMessage(Message &aMessage)
     aMessage.SetDirectTransmission();
     aMessage.SetOffset(0);
     aMessage.SetDatagramTag(0);
-    aMessage.SetTimestampToNow();
 
     mSendQueue.Enqueue(aMessage);
     mScheduleTransmissionTask.Post();
@@ -54,11 +53,6 @@ Error MeshForwarder::EvictMessage(Message::Priority aPriority)
 {
     Error    error = kErrorNotFound;
     Message *message;
-
-#if OPENTHREAD_CONFIG_DELAY_AWARE_QUEUE_MANAGEMENT_ENABLE
-    error = RemoveAgedMessages();
-    VerifyOrExit(error == kErrorNotFound);
-#endif
 
     VerifyOrExit((message = mSendQueue.GetTail()) != nullptr);
 

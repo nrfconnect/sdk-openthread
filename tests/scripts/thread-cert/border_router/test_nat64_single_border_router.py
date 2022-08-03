@@ -84,7 +84,7 @@ class Nat64SingleBorderRouter(thread_cert.TestCase):
         self.simulator.go(5)
 
         br.start()
-        self.simulator.go(config.LEADER_STARTUP_DELAY)
+        self.simulator.go(5)
         self.assertEqual('leader', br.get_state())
 
         router.start()
@@ -130,7 +130,7 @@ class Nat64SingleBorderRouter(thread_cert.TestCase):
         self.assertEqual(len(br.get_netdata_nat64_prefix()), 0)
 
         br.enable_br()
-        self.simulator.go(config.BORDER_ROUTER_STARTUP_DELAY)
+        self.simulator.go(5)
 
         # Same NAT64 prefix is advertised to Network Data.
         self.assertEqual(len(br.get_netdata_nat64_prefix()), 1)

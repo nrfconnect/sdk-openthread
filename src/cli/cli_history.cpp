@@ -112,9 +112,7 @@ template <> otError History::Process<Cmd("ipaddr")>(Arg aArgs[])
 
         if (!isList)
         {
-            size_t len = strlen(addressString);
-
-            snprintf(&addressString[len], sizeof(addressString) - len, "/%d", info->mPrefixLength);
+            sprintf(&addressString[strlen(addressString)], "/%d", info->mPrefixLength);
 
             OutputLine("| %20s | %-7s | %-43s | %-6s | %3d | %c | %c | %c |", ageString,
                        Stringify(info->mEvent, kSimpleEventStrings), addressString,
@@ -602,7 +600,7 @@ template <> otError History::Process<Cmd("prefix")>(Arg aArgs[])
         OutputLine(isList ? "%s -> event:%s prefix:%s flags:%s pref:%s rloc16:0x%04x"
                           : "| %20s | %-7s | %-43s | %-9s | %-4s | 0x%04x |",
                    ageString, Stringify(info->mEvent, kSimpleEventStrings), prefixString, flagsString,
-                   Interpreter::PreferenceToString(info->mPrefix.mPreference), info->mPrefix.mRloc16);
+                   NetworkData::PreferenceToString(info->mPrefix.mPreference), info->mPrefix.mRloc16);
     }
 
 exit:
@@ -652,7 +650,7 @@ template <> otError History::Process<Cmd("route")>(Arg aArgs[])
         OutputLine(isList ? "%s -> event:%s route:%s flags:%s pref:%s rloc16:0x%04x"
                           : "| %20s | %-7s | %-43s | %-9s | %-4s | 0x%04x |",
                    ageString, Stringify(info->mEvent, kSimpleEventStrings), prefixString, flagsString,
-                   Interpreter::PreferenceToString(info->mRoute.mPreference), info->mRoute.mRloc16);
+                   NetworkData::PreferenceToString(info->mRoute.mPreference), info->mRoute.mRloc16);
     }
 
 exit:
