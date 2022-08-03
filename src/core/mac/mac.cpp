@@ -2267,24 +2267,27 @@ exit:
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 void Mac::UpdateCsl(void)
 {
-    uint16_t period  = IsCslEnabled() ? GetCslPeriod() : 0;
-    uint8_t  channel = GetCslChannel() ? GetCslChannel() : mRadioChannel;
+    uint16_t period;
+    uint8_t  channel;
+
+    VerifyOrExit(IsCslSupported());
+
+    period  = Get<Mle::Mle>().IsRxOnWhenIdle() ? 0 : GetCslPeriod();
+    channel = GetCslChannel() ? GetCslChannel() : mRadioChannel;
 
     if (mLinks.UpdateCsl(period, channel, Get<Mle::Mle>().GetParent().GetRloc16(),
                          &Get<Mle::Mle>().GetParent().GetExtAddress()))
     {
-        if (Get<Mle::Mle>().IsChild())
+        Get<DataPollSender>().RecalculatePollPeriod();
+        if (period)
         {
-            Get<DataPollSender>().RecalculatePollPeriod();
-
-            if (period != 0)
-            {
-                Get<Mle::Mle>().ScheduleChildUpdateRequest();
-            }
+            Get<Mle::Mle>().ScheduleChildUpdateRequest();
         }
-
         UpdateIdleMode();
     }
+
+exit:
+    return;
 }
 
 void Mac::SetCslChannel(uint8_t aChannel)
