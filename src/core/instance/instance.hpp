@@ -97,6 +97,7 @@
 #include "net/sntp_client.hpp"
 #include "net/srp_client.hpp"
 #include "net/srp_server.hpp"
+#include "radio/ble_secure.hpp"
 #include "thread/address_resolver.hpp"
 #include "thread/announce_begin_server.hpp"
 #include "thread/announce_sender.hpp"
@@ -520,7 +521,7 @@ private:
     MeshCoP::Commissioner mCommissioner;
 #endif
 
-#if OPENTHREAD_CONFIG_DTLS_ENABLE
+#if OPENTHREAD_CONFIG_SECURE_TRANSPORT_ENABLE
     Tmf::SecureAgent mTmfSecureAgent;
 #endif
 
@@ -589,6 +590,10 @@ private:
 
 #if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
     Coap::CoapSecure mApplicationCoapSecure;
+#endif
+
+#if OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
+    Ble::BleSecure mApplicationBleSecure;
 #endif
 
 #if OPENTHREAD_CONFIG_PING_SENDER_ENABLE
@@ -801,7 +806,7 @@ template <> inline Ip6::Mpl &Instance::Get(void) { return mIp6.mMpl; }
 
 template <> inline Tmf::Agent &Instance::Get(void) { return mTmfAgent; }
 
-#if OPENTHREAD_CONFIG_DTLS_ENABLE
+#if OPENTHREAD_CONFIG_SECURE_TRANSPORT_ENABLE
 template <> inline Tmf::SecureAgent &Instance::Get(void) { return mTmfSecureAgent; }
 #endif
 
@@ -986,6 +991,10 @@ template <> inline Nat64::Translator &Instance::Get(void) { return mNat64Transla
 
 #if OPENTHREAD_CONFIG_SRP_SERVER_ENABLE
 template <> inline Srp::Server &Instance::Get(void) { return mSrpServer; }
+#endif
+
+#if OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
+template <> inline Ble::BleSecure &Instance::Get(void) { return mApplicationBleSecure; }
 #endif
 
 #endif // OPENTHREAD_MTD || OPENTHREAD_FTD
