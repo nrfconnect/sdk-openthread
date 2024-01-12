@@ -542,4 +542,19 @@
 #define OPENTHREAD_CONFIG_OPERATIONAL_DATASET_AUTO_INIT 0
 #endif
 
+/**
+ * @def OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
+ *
+ * Define to 1 to enable TCAT over BLE support.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
+#define OPENTHREAD_CONFIG_BLE_TCAT_ENABLE 0
+#endif
+
+/**
+ * @}
+ *
+ */
+
 #endif // CONFIG_MISC_H_
