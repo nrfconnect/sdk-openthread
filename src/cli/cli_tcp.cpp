@@ -193,7 +193,7 @@ template <> otError TcpExample::Process<Cmd("init")>(Arg aArgs[])
     {
         otTcpEndpointInitializeArgs endpointArgs;
 
-        memset(&endpointArgs, 0x00, sizeof(endpointArgs));
+        ClearAllBytes(endpointArgs);
         endpointArgs.mEstablishedCallback = HandleTcpEstablishedCallback;
         if (mUseCircularSendBuffer)
         {
@@ -215,7 +215,7 @@ template <> otError TcpExample::Process<Cmd("init")>(Arg aArgs[])
     {
         otTcpListenerInitializeArgs listenerArgs;
 
-        memset(&listenerArgs, 0x00, sizeof(listenerArgs));
+        ClearAllBytes(listenerArgs);
         listenerArgs.mAcceptReadyCallback = HandleTcpAcceptReadyCallback;
         listenerArgs.mAcceptDoneCallback  = HandleTcpAcceptDoneCallback;
         listenerArgs.mContext             = this;

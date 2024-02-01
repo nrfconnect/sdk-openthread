@@ -72,7 +72,7 @@ Commissioner::Commissioner(Instance &aInstance)
     , mPanIdQuery(aInstance)
     , mState(kStateDisabled)
 {
-    memset(reinterpret_cast<void *>(mJoiners), 0, sizeof(mJoiners));
+    ClearAllBytes(mJoiners);
 
     mCommissionerAloc.Clear();
     mCommissionerAloc.mPrefixLength       = 64;
@@ -491,7 +491,7 @@ exit:
 
 void Commissioner::Joiner::CopyToJoinerInfo(otJoinerInfo &aJoiner) const
 {
-    memset(&aJoiner, 0, sizeof(aJoiner));
+    ClearAllBytes(aJoiner);
 
     switch (mType)
     {

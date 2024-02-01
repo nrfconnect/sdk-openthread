@@ -33,6 +33,7 @@
 
 #include "meshcop.hpp"
 
+#include "common/clearable.hpp"
 #include "common/crc16.hpp"
 #include "common/debug.hpp"
 #include "common/locator_getters.hpp"
@@ -190,7 +191,7 @@ void SteeringData::Init(uint8_t aLength)
 {
     OT_ASSERT(aLength <= kMaxLength);
     mLength = aLength;
-    memset(m8, 0, sizeof(m8));
+    ClearAllBytes(m8);
 }
 
 void SteeringData::SetToPermitAllJoiners(void)
@@ -338,7 +339,7 @@ Error GeneratePskc(const char          *aPassPhrase,
                      (networkNameLen <= OT_NETWORK_NAME_MAX_SIZE),
                  error = kErrorInvalidArgs);
 
-    memset(salt, 0, sizeof(salt));
+    ClearAllBytes(salt);
     memcpy(salt, saltPrefix, sizeof(saltPrefix) - 1);
     saltLen += static_cast<uint16_t>(sizeof(saltPrefix) - 1);
 
