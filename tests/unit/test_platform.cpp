@@ -623,4 +623,162 @@ void otPlatDnsCancelUpstreamQuery(otInstance *aInstance, otPlatDnsUpstreamQuery 
 }
 #endif
 
+OT_TOOL_WEAK otError otPlatRadioGetCcaEnergyDetectThreshold(otInstance *, int8_t *) { return OT_ERROR_NONE; }
+
+OT_TOOL_WEAK otError otPlatRadioGetCoexMetrics(otInstance *, otRadioCoexMetrics *) { return OT_ERROR_NONE; }
+
+OT_TOOL_WEAK otError otPlatRadioGetTransmitPower(otInstance *, int8_t *) { return OT_ERROR_NONE; }
+
+OT_TOOL_WEAK bool otPlatRadioIsCoexEnabled(otInstance *) { return true; }
+
+OT_TOOL_WEAK otError otPlatRadioSetCoexEnabled(otInstance *, bool) { return OT_ERROR_NOT_IMPLEMENTED; }
+
+#if OPENTHREAD_CONFIG_PLATFORM_POWER_CALIBRATION_ENABLE
+OT_TOOL_WEAK otError otPlatRadioSetChannelTargetPower(otInstance *aInstance, uint8_t aChannel, int16_t aTargetPower)
+{
+    return OT_ERROR_NONE;
+}
+
+OT_TOOL_WEAK otError otPlatRadioAddCalibratedPower(otInstance    *aInstance,
+                                                   uint8_t        aChannel,
+                                                   int16_t        aActualPower,
+                                                   const uint8_t *aRawPowerSetting,
+                                                   uint16_t       aRawPowerSettingLength)
+{
+    return OT_ERROR_NONE;
+}
+
+OT_TOOL_WEAK otError otPlatRadioClearCalibratedPowers(otInstance *aInstance) { return OT_ERROR_NONE; }
+#endif // OPENTHREAD_CONFIG_PLATFORM_POWER_CALIBRATION_ENABLE
+
+#if OPENTHREAD_CONFIG_NCP_ENABLE_MCU_POWER_STATE_CONTROL
+OT_TOOL_WEAK otPlatMcuPowerState otPlatGetMcuPowerState(otInstance *aInstance) { return OT_PLAT_MCU_POWER_STATE_ON; }
+
+OT_TOOL_WEAK otError otPlatSetMcuPowerState(otInstance *aInstance, otPlatMcuPowerState aState) { return OT_ERROR_NONE; }
+#endif // OPENTHREAD_CONFIG_NCP_ENABLE_MCU_POWER_STATE_CONTROL
+#ifdef OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
+otError otPlatBleEnable(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+
+otError otPlatBleDisable(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+
+otError otPlatBleGapAdvStart(otInstance *aInstance, uint16_t aInterval)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aInterval);
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+
+otError otPlatBleGapAdvStop(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+
+otError otPlatBleGapDisconnect(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+
+otError otPlatBleGattMtuGet(otInstance *aInstance, uint16_t *aMtu)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aMtu);
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+
+otError otPlatBleGattServerIndicate(otInstance *aInstance, uint16_t aHandle, const otBleRadioPacket *aPacket)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aHandle);
+    OT_UNUSED_VARIABLE(aPacket);
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+#endif // OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
+
+#if OPENTHREAD_CONFIG_PLATFORM_DNSSD_ENABLE
+
+OT_TOOL_WEAK otPlatDnssdState otPlatDnssdGetState(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    return OT_PLAT_DNSSD_STOPPED;
+}
+
+OT_TOOL_WEAK void otPlatDnssdRegisterService(otInstance                 *aInstance,
+                                             const otPlatDnssdService   *aService,
+                                             otPlatDnssdRequestId        aRequestId,
+                                             otPlatDnssdRegisterCallback aCallback)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aService);
+    OT_UNUSED_VARIABLE(aRequestId);
+    OT_UNUSED_VARIABLE(aCallback);
+}
+
+OT_TOOL_WEAK void otPlatDnssdUnregisterService(otInstance                 *aInstance,
+                                               const otPlatDnssdService   *aService,
+                                               otPlatDnssdRequestId        aRequestId,
+                                               otPlatDnssdRegisterCallback aCallback)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aService);
+    OT_UNUSED_VARIABLE(aRequestId);
+    OT_UNUSED_VARIABLE(aCallback);
+}
+
+OT_TOOL_WEAK void otPlatDnssdRegisterHost(otInstance                 *aInstance,
+                                          const otPlatDnssdHost      *aHost,
+                                          otPlatDnssdRequestId        aRequestId,
+                                          otPlatDnssdRegisterCallback aCallback)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aHost);
+    OT_UNUSED_VARIABLE(aRequestId);
+    OT_UNUSED_VARIABLE(aCallback);
+}
+
+OT_TOOL_WEAK void otPlatDnssdUnregisterHost(otInstance                 *aInstance,
+                                            const otPlatDnssdHost      *aHost,
+                                            otPlatDnssdRequestId        aRequestId,
+                                            otPlatDnssdRegisterCallback aCallback)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aHost);
+    OT_UNUSED_VARIABLE(aRequestId);
+    OT_UNUSED_VARIABLE(aCallback);
+}
+
+OT_TOOL_WEAK void otPlatDnssdRegisterKey(otInstance                 *aInstance,
+                                         const otPlatDnssdKey       *aKey,
+                                         otPlatDnssdRequestId        aRequestId,
+                                         otPlatDnssdRegisterCallback aCallback)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aKey);
+    OT_UNUSED_VARIABLE(aRequestId);
+    OT_UNUSED_VARIABLE(aCallback);
+}
+
+OT_TOOL_WEAK void otPlatDnssdUnregisterKey(otInstance                 *aInstance,
+                                           const otPlatDnssdKey       *aKey,
+                                           otPlatDnssdRequestId        aRequestId,
+                                           otPlatDnssdRegisterCallback aCallback)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aKey);
+    OT_UNUSED_VARIABLE(aRequestId);
+    OT_UNUSED_VARIABLE(aCallback);
+}
+
+#endif // OPENTHREAD_CONFIG_PLATFORM_DNSSD_ENABLE
+
 } // extern "C"
