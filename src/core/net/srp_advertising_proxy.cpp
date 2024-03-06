@@ -41,7 +41,7 @@
 #include "common/log.hpp"
 #include "common/serial_number.hpp"
 #include "common/type_traits.hpp"
-#include "instance/instance.hpp"
+#include "common/instance.hpp"
 
 namespace ot {
 namespace Srp {
