@@ -103,8 +103,14 @@ class BleStreamSecure:
 
         self.incoming.write(data)
         while True:
+            decode = []
             try:
-                decode = self.ssl_object.read(4096)
+                # try decode all available data
+                while True:
+                    decode.append(self.ssl_object.read(4096))
+
+                    if self.incoming.pending <= 0:
+                        break
                 break
             # if recv called before entire message was received from the link
             except ssl.SSLWantReadError:
@@ -113,6 +119,8 @@ class BleStreamSecure:
                     await asyncio.sleep(0.1)
                     more = await self.ble_stream.recv(buffersize)
                 self.incoming.write(more)
+        if len(decode) == 1:
+            return decode[0]
         return decode
 
     async def send_with_resp(self, bytes):

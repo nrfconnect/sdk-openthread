@@ -29,7 +29,7 @@
 import readline
 import shlex
 from ble.ble_stream_secure import BleStreamSecure
-from cli.base_commands import (HelpCommand, HelloCommand, CommissionCommand, ThreadStateCommand, ScanCommand)
+from cli.base_commands import (HelpCommand, HelloCommand, CommissionCommand, ThreadStateCommand, ScanCommand, TbrWiFiCommand, TbrCommand)
 from cli.dataset_commands import (DatasetCommand)
 from dataset.dataset import ThreadDataset
 from typing import Optional
@@ -45,6 +45,8 @@ class CLI:
             'dataset': DatasetCommand(),
             'thread': ThreadStateCommand(),
             'scan': ScanCommand(),
+            'wifi': TbrWiFiCommand(),
+            'tbr' : TbrCommand(),
         }
         self._context = {'ble_sstream': ble_sstream, 'dataset': dataset, 'commands': self._commands}
         readline.set_completer(self.completer)
