@@ -371,6 +371,7 @@ void KeyManager::SetCurrentKeySequence(uint32_t aKeySequence)
         if (mKeySwitchGuardEnabled)
         {
             // Check if the guard timer has expired if key rotation is requested.
+            LogWarn("tok3: mHoursSinceKeyRotation %d, mKeySwitchGuardTime %d",mHoursSinceKeyRotation, mKeySwitchGuardTime);
             VerifyOrExit(mHoursSinceKeyRotation >= mKeySwitchGuardTime);
             StartKeyRotationTimer();
         }
@@ -381,6 +382,7 @@ void KeyManager::SetCurrentKeySequence(uint32_t aKeySequence)
     mKeySequence = aKeySequence;
     UpdateKeyMaterial();
 
+    LogWarn("tok3: before counters reset");
     SetAllMacFrameCounters(0, /* aSetIfLarger */ false);
     mMleFrameCounter = 0;
 
@@ -414,6 +416,7 @@ const Mac::KeyMaterial &KeyManager::GetTemporaryTrelMacKey(uint32_t aKeySequence
 
 void KeyManager::SetAllMacFrameCounters(uint32_t aFrameCounter, bool aSetIfLarger)
 {
+    LogWarn("tok3: in SetAllMacFrameCounters, fc to set: %d", aFrameCounter);
     mMacFrameCounters.SetAll(aFrameCounter);
 
 #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
@@ -498,6 +501,9 @@ void KeyManager::HandleKeyRotationTimer(void)
 {
     mHoursSinceKeyRotation++;
 
+    LogWarn("tok3: mHoursSinceKeyRotation %d", mHoursSinceKeyRotation);
+    LogWarn("tok3: mRotationTime %d", mSecurityPolicy.mRotationTime);
+
     // Order of operations below is important. We should restart the timer (from
     // last fire time for one hour interval) before potentially calling
     // `SetCurrentKeySequence()`. `SetCurrentKeySequence()` uses the fact that
@@ -509,6 +515,7 @@ void KeyManager::HandleKeyRotationTimer(void)
 
     if (mHoursSinceKeyRotation >= mSecurityPolicy.mRotationTime)
     {
+        LogWarn("tok3: call SetCurrentKeySequence");
         SetCurrentKeySequence(mKeySequence + 1);
     }
 }
