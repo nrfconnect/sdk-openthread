@@ -114,6 +114,19 @@ Mle::Mle(Instance &aInstance)
     , mDelayedResponseTimer(aInstance)
     , mMessageTransmissionTimer(aInstance)
     , mDetachGracefullyTimer(aInstance)
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    , mWakeupTxScheduler(aInstance)
+    , mCslPeripheralAttachState(kPeripheralDetached)
+    , mCslPeripheral(nullptr)
+    , mCslPeripheralAttachTimer(aInstance)
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    , mCslCentralAttachTime(0)
+    , mCslCentralAttachWindow(0)
+#if OPENTHREAD_CONFIG_MLE_ATTACH_BACKOFF_ENABLE
+    , mAttachFireTime(0)
+#endif
+#endif
 {
     mParent.Init(aInstance);
     mParentCandidate.Init(aInstance);
@@ -200,7 +213,7 @@ Error Mle::Start(StartMode aMode)
 
     SetRloc16(GetRloc16());
 
-    mAttachCounter = 0;
+    ResetAttachCounter();
 
     Get<KeyManager>().Start();
 
@@ -248,6 +261,15 @@ void Mle::Stop(StopMode aMode)
     Get<ThreadNetif>().UnsubscribeMulticast(mLinkLocalAllThreadNodes);
     Get<ThreadNetif>().RemoveUnicastAddress(mMeshLocal16);
     Get<ThreadNetif>().RemoveUnicastAddress(mMeshLocal64);
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    if (GetCslPeripheral() != nullptr)
+    {
+        Get<MleRouter>().RemoveNeighbor(*GetCslPeripheral());
+    }
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    IgnoreError(DetachFromCslCentral());
+#endif
 
     SetRole(kRoleDisabled);
 
@@ -364,6 +386,45 @@ exit:
     return;
 }
 
+void Mle::ResetAttachCounter(void)
+{
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    VerifyOrExit(!IsCslCentralPresent());
+
+#if OPENTHREAD_CONFIG_MLE_ATTACH_BACKOFF_ENABLE
+    mAttachFireTime = TimeMilli(0);
+#endif
+#endif
+
+    mAttachCounter = 0;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+exit:
+#endif
+    return;
+}
+
+void Mle::IncrementAttachCounter(void)
+{
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    VerifyOrExit(!IsCslCentralPresent());
+#endif
+
+    mAttachCounter++;
+
+    if (mAttachCounter == 0)
+    {
+        mAttachCounter--;
+    }
+
+    mCounters.mAttachAttempts++;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+exit:
+#endif
+    return;
+}
+
 void Mle::Restore(void)
 {
     Settings::NetworkInfo networkInfo;
@@ -391,6 +452,11 @@ void Mle::Restore(void)
     // force re-attach when version mismatch.
     VerifyOrExit(networkInfo.GetVersion() == kThreadVersion);
 
+    // Thread version is only saved when the device is attached,
+    // so the extended address and iid should already be initialized.
+    Get<Mac::Mac>().SetExtAddress(networkInfo.GetExtAddress());
+    mMeshLocal64.GetAddress().SetIid(networkInfo.GetMeshLocalIid());
+
     switch (networkInfo.GetRole())
     {
     case kRoleChild:
@@ -409,9 +475,6 @@ void Mle::Restore(void)
         Get<Mac::Mac>().SetShortAddress(networkInfo.GetRloc16());
         mRloc16 = networkInfo.GetRloc16();
     }
-    Get<Mac::Mac>().SetExtAddress(networkInfo.GetExtAddress());
-
-    mMeshLocal64.GetAddress().SetIid(networkInfo.GetMeshLocalIid());
 
     if (networkInfo.GetRloc16() == Mac::kShortAddrInvalid)
     {
@@ -466,9 +529,29 @@ Error Mle::Store(void)
     Error                 error = kErrorNone;
     Settings::NetworkInfo networkInfo;
 
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    VerifyOrExit(!IsCslPeripheralAttaching());
+#endif
+
     networkInfo.Init();
 
-    if (IsAttached())
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    if (IsAttached() && IsCslCentralPresent())
+    {
+        // The link between central and peripheral is temporary so the location
+        // of the device in the mesh network should not be updated. On the other
+        // hand, the MAC extended address and mesh-local IID should not change
+        // even if the link with the central was the first in the history of
+        // this device, so they must be persisted.
+        IgnoreError(Get<Settings>().Read(networkInfo));
+
+        networkInfo.SetExtAddress(Get<Mac::Mac>().GetExtAddress());
+        networkInfo.SetMeshLocalIid(mMeshLocal64.GetAddress().GetIid());
+        networkInfo.SetVersion(kThreadVersion);
+    }
+    else
+#endif
+        if (IsAttached())
     {
         // Only update network information while we are attached to
         // avoid losing/overwriting previous information when a reboot
@@ -546,6 +629,13 @@ Error Mle::BecomeDetached(void)
     SetStateDetached();
     mParent.SetState(Neighbor::kStateInvalid);
     SetRloc16(Mac::kShortAddrInvalid);
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    if (DetachFromCslCentral() == kErrorNone)
+    {
+        // DetachFromCslCentral() already initiated reattach if needed.
+        ExitNow();
+    }
+#endif
     Attach(kAnyPartition);
 
 exit:
@@ -582,7 +672,7 @@ void Mle::Attach(AttachMode aMode)
 
     if (!IsDetached())
     {
-        mAttachCounter = 0;
+        ResetAttachCounter();
     }
 
     if (mReattachState == kReattachStart)
@@ -597,7 +687,13 @@ void Mle::Attach(AttachMode aMode)
         }
     }
 
-    mParentCandidate.Clear();
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    if (!IsCslCentralPresent())
+#endif
+    {
+        mParentCandidate.Clear();
+    }
+
     SetAttachState(kAttachStateStart);
     mAttachMode = aMode;
 
@@ -619,14 +715,7 @@ void Mle::Attach(AttachMode aMode)
 
     if (IsDetached())
     {
-        mAttachCounter++;
-
-        if (mAttachCounter == 0)
-        {
-            mAttachCounter--;
-        }
-
-        mCounters.mAttachAttempts++;
+        IncrementAttachCounter();
 
         if (!IsRxOnWhenIdle())
         {
@@ -638,12 +727,34 @@ exit:
     return;
 }
 
-uint32_t Mle::GetAttachStartDelay(void) const
+uint32_t Mle::GetAttachStartDelay(void)
 {
     uint32_t delay = 1;
     uint32_t jitter;
 
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    TimeMilli nowMs = TimerMilli::GetNow();
+#endif
+
     VerifyOrExit(IsDetached());
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    if (IsCslCentralPresent())
+    {
+        delay = (mCslCentralAttachTime > nowMs) ? (mCslCentralAttachTime - nowMs) : 0;
+        ExitNow();
+    }
+#if OPENTHREAD_CONFIG_MLE_ATTACH_BACKOFF_ENABLE
+    else if (mAttachFireTime.GetValue() > 0)
+    {
+        // Resume previously scheduled attach attempt.
+        delay           = (mAttachFireTime > nowMs) ? (mAttachFireTime - nowMs) : 0;
+        mAttachCounter  = (mAttachCounter > 0) ? (mAttachCounter - 1) : mAttachCounter;
+        mAttachFireTime = TimeMilli(0);
+        ExitNow();
+    }
+#endif
+#endif
 
     if (mAttachCounter == 0)
     {
@@ -718,6 +829,9 @@ void Mle::SetStateDetached(void)
 #endif
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     Get<Mac::Mac>().UpdateCsl();
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    SetIsParentCslAccuracySet(false);
 #endif
 }
 
@@ -861,7 +975,7 @@ Error Mle::SetDeviceMode(DeviceMode aDeviceMode)
 
         if (shouldReattach)
         {
-            mAttachCounter = 0;
+            ResetAttachCounter();
             IgnoreError(BecomeDetached());
             ExitNow();
         }
@@ -869,7 +983,7 @@ Error Mle::SetDeviceMode(DeviceMode aDeviceMode)
 
     if (IsDetached())
     {
-        mAttachCounter = 0;
+        ResetAttachCounter();
         SetStateDetached();
         Attach(kAnyPartition);
     }
@@ -1098,6 +1212,12 @@ void Mle::InitNeighbor(Neighbor &aNeighbor, const RxInfo &aRxInfo)
     aNeighbor.SetLastHeard(TimerMilli::GetNow());
 }
 
+void Mle::InitParentCandidate(Mac::ExtAddress &aAddress)
+{
+    mParentCandidate.Clear();
+    mParentCandidate.SetExtAddress(aAddress);
+}
+
 void Mle::HandleNotifierEvents(Events aEvents)
 {
     VerifyOrExit(!IsDisabled());
@@ -1160,7 +1280,7 @@ void Mle::HandleNotifierEvents(Events aEvents)
         else
 #endif
         {
-            if (!aEvents.Contains(kEventThreadRoleChanged))
+            if (IsChild() && !aEvents.Contains(kEventThreadRoleChanged))
             {
                 ScheduleChildUpdateRequest();
             }
@@ -1310,7 +1430,7 @@ exit:
 
 #endif // OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
 
-Error Mle::DetermineParentRequestType(ParentRequestType &aType) const
+Error Mle::DetermineParentRequestType(ParentRequestType &aType, uint32_t *aTimeout) const
 {
     // This method determines the Parent Request type to use during an
     // attach cycle based on `mAttachMode`, `mAttachCounter` and
@@ -1326,6 +1446,26 @@ Error Mle::DetermineParentRequestType(ParentRequestType &aType) const
     Error error = kErrorNone;
 
     OT_ASSERT(mAttachState == kAttachStateParentRequest);
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    if (IsCslCentralPresent())
+    {
+        aType = kToCslCentral;
+
+        if (aTimeout != nullptr)
+        {
+            TimeMilli now = TimerMilli::GetNow();
+            TimeMilli windowEnd = mCslCentralAttachTime + mCslCentralAttachWindow;
+
+            VerifyOrExit(now < windowEnd, error = kErrorNotFound);
+            // Let the connection window only limit the duration of Parent Request transmissions,
+            // but wait for Parent Response a bit longer than that.
+            *aTimeout = (windowEnd - now) + kWorParentResponseTimeout;
+        }
+
+        ExitNow();
+    }
+#endif
 
     aType = kToRoutersAndReeds;
 
@@ -1356,6 +1496,11 @@ Error Mle::DetermineParentRequestType(ParentRequestType &aType) const
         {
             aType = kToRouters;
         }
+    }
+
+    if (aTimeout != nullptr)
+    {
+        *aTimeout = (aType == kToRouters) ? kParentRequestRouterTimeout : kParentRequestReedTimeout;
     }
 
 exit:
@@ -1424,13 +1569,20 @@ void Mle::HandleAttachTimer(void)
     {
         SetAttachState(kAttachStateChildIdRequest);
         delay = kChildIdResponseTimeout;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        if (IsCslCentralPresent())
+        {
+            delay = kWorChildIdResponseTimeout;
+        }
+#endif
         ExitNow();
     }
 
     switch (mAttachState)
     {
     case kAttachStateIdle:
-        mAttachCounter = 0;
+        ResetAttachCounter();
         break;
 
     case kAttachStateProcessAnnounce:
@@ -1438,8 +1590,17 @@ void Mle::HandleAttachTimer(void)
         break;
 
     case kAttachStateStart:
-        LogNote("Attach attempt %d, %s %s", mAttachCounter, AttachModeToString(mAttachMode),
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        if (IsCslCentralPresent())
+        {
+            LogNote("Attach attempt to Wake-up Coordinator");
+        }
+        else
+#endif
+        {
+            LogNote("Attach attempt %d, %s %s", mAttachCounter, AttachModeToString(mAttachMode),
                 ReattachStateToString(mReattachState));
+        }
 
         SetAttachState(kAttachStateParentRequest);
         mParentCandidate.SetState(Neighbor::kStateInvalid);
@@ -1451,10 +1612,9 @@ void Mle::HandleAttachTimer(void)
 
     case kAttachStateParentRequest:
         mParentRequestCounter++;
-        if (DetermineParentRequestType(type) == kErrorNone)
+        if (DetermineParentRequestType(type, &delay) == kErrorNone)
         {
             SendParentRequest(type);
-            delay = (type == kToRouters) ? kParentRequestRouterTimeout : kParentRequestReedTimeout;
             break;
         }
 
@@ -1491,6 +1651,9 @@ void Mle::HandleAttachTimer(void)
 
     case kAttachStateChildIdRequest:
         SetAttachState(kAttachStateIdle);
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        IgnoreError(DetachFromCslCentral());
+#endif
         mParentCandidate.Clear();
         delay = Reattach();
         break;
@@ -1511,6 +1674,10 @@ bool Mle::PrepareAnnounceState(void)
 
     VerifyOrExit(!IsChild() && (mReattachState == kReattachStop) &&
                  (Get<MeshCoP::ActiveDatasetManager>().IsPartiallyComplete() || !IsFullThreadDevice()));
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    VerifyOrExit(!IsCslCentralPresent());
+#endif
 
     if (Get<MeshCoP::ActiveDatasetManager>().GetChannelMask(channelMask) != kErrorNone)
     {
@@ -1698,11 +1865,20 @@ void Mle::SendParentRequest(ParentRequestType aType)
     {
     case kToRouters:
         scanMask = ScanMaskTlv::kRouterFlag;
+        destination.SetToLinkLocalAllRoutersMulticast();
         break;
 
     case kToRoutersAndReeds:
         scanMask = ScanMaskTlv::kRouterFlag | ScanMaskTlv::kEndDeviceFlag;
+        destination.SetToLinkLocalAllRoutersMulticast();
         break;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    case kToCslCentral:
+        scanMask = ScanMaskTlv::kRouterFlag | ScanMaskTlv::kEndDeviceFlag;
+        destination.SetToLinkLocalAddress(mCslCentral);
+        break;
+#endif
     }
 
     VerifyOrExit((message = NewMleMessage(kCommandParentRequest)) != nullptr, error = kErrorNoBufs);
@@ -1713,8 +1889,13 @@ void Mle::SendParentRequest(ParentRequestType aType)
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
     SuccessOrExit(error = message->AppendTimeRequestTlv());
 #endif
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    if (aType == kToCslCentral)
+    {
+        SuccessOrExit(error = message->AppendCslClockAccuracyTlv());
+    }
+#endif
 
-    destination.SetToLinkLocalAllRoutersMulticast();
     SuccessOrExit(error = message->SendTo(destination));
 
     switch (aType)
@@ -1726,6 +1907,13 @@ void Mle::SendParentRequest(ParentRequestType aType)
     case kToRoutersAndReeds:
         Log(kMessageSend, kTypeParentRequestToRoutersReeds, destination);
         break;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    case kToCslCentral:
+        Log(kMessageSend, kTypeParentRequestToCslCentral, destination);
+        LogInfo("Sent Parent Request FC: %lu", ToUlong(Get<KeyManager>().GetMleFrameCounter() - 1));
+        break;
+#endif
     }
 
 exit:
@@ -1796,7 +1984,7 @@ Error Mle::SendChildIdRequest(void)
     SuccessOrExit(error = message->AppendModeTlv(mDeviceMode));
     SuccessOrExit(error = message->AppendTimeoutTlv(mTimeout));
     SuccessOrExit(error = message->AppendVersionTlv());
-    SuccessOrExit(error = message->AppendSupervisionIntervalTlv(Get<SupervisionListener>().GetInterval()));
+    SuccessOrExit(error = message->AppendSupervisionIntervalTlv(Get<SupervisionListener>().GetCurrentInterval()));
 
     if (!IsFullThreadDevice())
     {
@@ -2074,7 +2262,7 @@ Error Mle::SendChildUpdateRequest(ChildUpdateRequestMode aMode)
         SuccessOrExit(error = message->AppendSourceAddressTlv());
         SuccessOrExit(error = message->AppendLeaderDataTlv());
         SuccessOrExit(error = message->AppendTimeoutTlv((aMode == kAppendZeroTimeout) ? 0 : mTimeout));
-        SuccessOrExit(error = message->AppendSupervisionIntervalTlv(Get<SupervisionListener>().GetInterval()));
+        SuccessOrExit(error = message->AppendSupervisionIntervalTlv(Get<SupervisionListener>().GetCurrentInterval()));
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
         if (Get<Mac::Mac>().IsCslEnabled())
         {
@@ -2170,7 +2358,8 @@ Error Mle::SendChildUpdateResponse(const TlvList      &aTlvList,
             break;
 
         case Tlv::kSupervisionInterval:
-            SuccessOrExit(error = message->AppendSupervisionIntervalTlv(Get<SupervisionListener>().GetInterval()));
+            SuccessOrExit(error =
+                              message->AppendSupervisionIntervalTlv(Get<SupervisionListener>().GetCurrentInterval()));
             break;
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
@@ -2213,6 +2402,13 @@ void Mle::SendAnnounce(uint8_t aChannel, const Ip6::Address &aDestination, Annou
     MeshCoP::Timestamp activeTimestamp;
     TxMessage         *message = nullptr;
 
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    // Suppress Announcement for Sleepy Router
+    VerifyOrExit(!IsRouterOrLeader() || IsRxOnWhenIdle(), error = kErrorInvalidState);
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    VerifyOrExit(!IsCslCentralPresent(), error = kErrorInvalidState);
+#endif
     VerifyOrExit(Get<Mac::Mac>().GetSupportedChannelMask().ContainsChannel(aChannel), error = kErrorInvalidArgs);
     VerifyOrExit((message = NewMleMessage(kCommandAnnounce)) != nullptr, error = kErrorNoBufs);
     message->SetLinkSecurityEnabled(true);
@@ -2473,6 +2669,10 @@ void Mle::HandleUdpReceive(Message &aMessage, const Ip6::MessageInfo &aMessageIn
 
     SuccessOrExit(
         error = ProcessMessageSecurity(Crypto::AesCcm::kDecrypt, aMessage, aMessageInfo, aMessage.GetOffset(), header));
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    Get<Mac::Mac>().ApplyEnhCsl();
+#endif
 
     IgnoreError(aMessage.Read(aMessage.GetOffset(), command));
     aMessage.MoveOffset(sizeof(command));
@@ -3149,6 +3349,11 @@ void Mle::HandleParentResponse(RxInfo &aRxInfo)
     TimeParameterTlv timeParameterTlv;
 #endif
 
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    // For CSL peripheral, accept only the first Parent Response.
+    VerifyOrExit(!IsCslCentralPresent() || mParentCandidate.IsStateInvalid(), error = kErrorInvalidState);
+#endif
+
     // Source Address
     SuccessOrExit(error = Tlv::Find<SourceAddressTlv>(aRxInfo.mMessage, sourceAddress));
 
@@ -3173,13 +3378,48 @@ void Mle::HandleParentResponse(RxInfo &aRxInfo)
     SuccessOrExit(error = aRxInfo.mMessage.ReadLeaderDataTlv(leaderData));
 
     // Link Margin
-    SuccessOrExit(error = Tlv::Find<LinkMarginTlv>(aRxInfo.mMessage, linkMarginFromTlv));
+    error = Tlv::Find<LinkMarginTlv>(aRxInfo.mMessage, linkMarginFromTlv);
+
+    if (error != kErrorNone)
+    {
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        // For CSL peripheral, accept Parent Response without Link Margin TLV
+        VerifyOrExit(IsCslCentralPresent());
+        linkMarginFromTlv = UINT8_MAX;
+#else
+        ExitNow();
+#endif
+    }
+
     linkMargin  = Min(Get<Mac::Mac>().ComputeLinkMargin(rss), linkMarginFromTlv);
     linkQuality = LinkQualityForLinkMargin(linkMargin);
 
     // Connectivity
-    SuccessOrExit(error = Tlv::FindTlv(aRxInfo.mMessage, connectivityTlv));
-    VerifyOrExit(connectivityTlv.IsValid(), error = kErrorParse);
+    error = Tlv::FindTlv(aRxInfo.mMessage, connectivityTlv);
+
+    if (error != kErrorNone)
+    {
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        // For CSL peripheral, accept Parent Response without Connectivity TLV
+        VerifyOrExit(IsCslCentralPresent());
+        connectivityTlv.Init();
+        connectivityTlv.SetParentPriority(0);
+        connectivityTlv.SetLinkQuality3(0);
+        connectivityTlv.SetLinkQuality2(0);
+        connectivityTlv.SetLinkQuality1(0);
+        connectivityTlv.SetLeaderCost(0);
+        connectivityTlv.SetActiveRouters(1);
+        connectivityTlv.SetIdSequence(0);
+        connectivityTlv.SetSedBufferSize(OPENTHREAD_CONFIG_DEFAULT_SED_BUFFER_SIZE);
+        connectivityTlv.SetSedDatagramCount(OPENTHREAD_CONFIG_DEFAULT_SED_DATAGRAM_COUNT);
+#else
+        ExitNow();
+#endif
+    }
+    else
+    {
+        VerifyOrExit(connectivityTlv.IsValid(), error = kErrorParse);
+    }
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     // CSL Accuracy
@@ -3195,6 +3435,12 @@ void Mle::HandleParentResponse(RxInfo &aRxInfo)
     }
 #else
     cslAccuracy.Init();
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    if (IsCslCentralPresent())
+    {
+        Get<Mac::Mac>().SetCslParentAccuracy(cslAccuracy);
+    }
 #endif
 
 #if OPENTHREAD_CONFIG_MLE_PARENT_RESPONSE_CALLBACK_API_ENABLE
@@ -3329,6 +3575,25 @@ void Mle::HandleParentResponse(RxInfo &aRxInfo)
     mParentCandidate.mLeaderData       = leaderData;
     mParentCandidate.mIsSingleton      = connectivityTlv.GetActiveRouters() <= 1;
     mParentCandidate.mLinkMargin       = linkMargin;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    if (IsCslCentralPresent())
+    {
+        // If Parent Response is received while Parent Request TX is still in progress,
+        // cancel the TX operation as it probably means that the ACK for Parent Request
+        // has been lost.
+        Get<EnhCslSender>().ClearAllMessagesForCslPeer(mParentCandidate);
+
+        mParentCandidate.ResetEnhCslMaxTxAttempts();
+        ProcessKeySequence(aRxInfo);
+        HandleAttachTimer();
+
+        if (!IsRxOnWhenIdle())
+        {
+            Get<MeshForwarder>().SetRxOnWhenIdle(false);
+        }
+    }
+#endif
 
 exit:
     LogProcessError(kTypeParentResponse, error);
@@ -3727,6 +3992,10 @@ void Mle::HandleAnnounce(RxInfo &aRxInfo)
 
     Log(kMessageReceive, kTypeAnnounce, aRxInfo.mMessageInfo.GetPeerAddr());
 
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    VerifyOrExit(!IsCslCentralPresent(), error = kErrorInvalidState);
+#endif
+
     SuccessOrExit(error = Tlv::Find<ChannelTlv>(aRxInfo.mMessage, channelTlvValue));
     channel = static_cast<uint8_t>(channelTlvValue.GetChannel());
 
@@ -3775,7 +4044,7 @@ void Mle::HandleAnnounce(RxInfo &aRxInfo)
         mAlternatePanId     = panId;
         SetAttachState(kAttachStateProcessAnnounce);
         mAttachTimer.Start(kAnnounceProcessTimeout);
-        mAttachCounter = 0;
+        ResetAttachCounter();
 
         LogNote("Delay processing Announce - channel %d, panid 0x%02x", channel, panId);
     }
@@ -3938,6 +4207,10 @@ void Mle::InformPreviousParent(void)
     Error            error   = kErrorNone;
     Message         *message = nullptr;
     Ip6::MessageInfo messageInfo;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    VerifyOrExit(!IsCslCentralPresent());
+#endif
 
     VerifyOrExit((message = Get<Ip6::Ip6>().NewMessage(0)) != nullptr, error = kErrorNoBufs);
     SuccessOrExit(error = message->SetLength(0));
@@ -4167,6 +4440,9 @@ const char *Mle::MessageTypeToString(MessageType aType)
         "Link Metrics Management Response", // (30) kTypeLinkMetricsManagementResponse
         "Link Probe",                       // (31) kTypeLinkProbe
 #endif
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        "Parent Request", // kTypeParentRequestToCslCentral
+#endif
     };
 
     static_assert(kTypeAdvertisement == 0, "kTypeAdvertisement value is incorrect");
@@ -4364,6 +4640,138 @@ uint64_t Mle::CalcParentCslMetric(const Mac::CslAccuracy &aCslAccuracy) const
 
     return k * (k + 1) * cslPeriodUs / usInSecond * aCslAccuracy.GetClockAccuracy() +
            aCslAccuracy.GetUncertaintyInMicrosec() * k;
+}
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+void Mle::HandleCslPeripheralAttachTimer(void)
+{
+    switch (mCslPeripheralAttachState)
+    {
+    case kPeripheralWakeUp:
+        // Open the connection window
+        mCslPeripheralAttachState = kPeripheralAwaitParentRequest;
+        mCslPeripheralAttachTimer.FireAt(mWakeupTxScheduler.GetTxEndTime() +
+                                         mWakeupTxScheduler.GetConnectionWindowUs());
+        Get<MeshForwarder>().SetRxOnWhenIdle(true);
+        LogInfo("Connection window open");
+        break;
+    case kPeripheralAwaitParentRequest:
+        // Close the connection window
+        mCslPeripheralAttachState = kPeripheralDetached;
+
+        if (!IsRxOnWhenIdle())
+        {
+            Get<MeshForwarder>().SetRxOnWhenIdle(false);
+        }
+
+        LogInfo("Connection window closed");
+        break;
+    default:
+        break;
+    }
+}
+
+Error Mle::AttachCslPeripheral(const Mac::ExtAddress &aTarget, uint16_t aIntervalUs, uint16_t aDurationMs)
+{
+    Error error = kErrorNone;
+
+    VerifyOrExit(mCslPeripheralAttachState == kPeripheralDetached, error = kErrorInvalidState);
+
+    mCslPeripheralAttachState = kPeripheralWakeUp;
+
+    SuccessOrExit(error = mWakeupTxScheduler.WakeUp(aTarget, aIntervalUs, aDurationMs));
+
+    mCslPeripheralAttachTimer.Start(0);
+
+exit:
+    return error;
+}
+
+Error Mle::DetachCslPeripheral(void)
+{
+    Error     error    = kErrorNone;
+    Neighbor *neighbor = GetCslPeripheral();
+
+    VerifyOrExit(IsCslPeripheralAttached(), error = kErrorInvalidState);
+    VerifyOrExit(neighbor != nullptr, error = kErrorInvalidState);
+
+    // Special value 0 for CST period instructs radio to set CST phase to 0 as well.
+    // SubMac::UpdateCsl will properly configure radio again when connecting to a new peer.
+    IgnoreError(Get<Radio>().EnableCst(0, neighbor->GetRloc16(), &neighbor->GetExtAddress()));
+    mCslPeripheralAttachState = kPeripheralDetaching;
+    Get<ChildSupervisor>().SendMessage(static_cast<Child &>(*neighbor));
+
+exit:
+    return error;
+}
+
+void Mle::HandleSentFrameToNeighbor(Neighbor &aNeighbor)
+{
+    if (mCslPeripheralAttachState == kPeripheralDetaching)
+    {
+        Get<MleRouter>().RemoveNeighbor(aNeighbor);
+    }
+}
+#endif // OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+void Mle::AttachToCslCentral(const Mac::ExtAddress &aCentral, TimeMilli aAttachTime, uint32_t aAttachWindowMs)
+{
+#if OPENTHREAD_CONFIG_MLE_ATTACH_BACKOFF_ENABLE
+    if (mAttachTimer.IsRunning())
+    {
+        mAttachFireTime = mAttachTimer.GetFireTime();
+    }
+#endif
+
+    mPreviousRole = mRole;
+    SetStateDetached();
+    mParent.Clear();
+    SetRloc16(Mac::kShortAddrInvalid);
+    // Clear the current network data to avoid needless address registrations as
+    // the CSL central acts as a leader and establishes new network data, anyway.
+    Get<NetworkData::Leader>().Reset();
+
+    mCslCentral             = aCentral;
+    mCslCentralAttachTime   = aAttachTime;
+    mCslCentralAttachWindow = aAttachWindowMs;
+
+    Attach(kAnyPartition);
+}
+
+Error Mle::DetachFromCslCentral(void)
+{
+    Error error = kErrorNone;
+
+    VerifyOrExit(IsCslCentralPresent(), error = kErrorInvalidState);
+
+    LogInfo("Detaching from CSL central");
+
+    mCslCentralAttachWindow = 0;
+    Get<EnhCslSender>().ClearAllMessagesForCslPeer(mParent);
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+    Get<Mac::Mac>().RestoreCslPeriod();
+#endif
+    Get<Mac::Mac>().WorEnable(true);
+
+    switch (mPreviousRole)
+    {
+    case kRoleChild:
+        mChildUpdateAttempts = 0;
+        Restore();
+        IgnoreError(SendChildUpdateRequest());
+        break;
+    case kRoleDetached:
+        Attach(kAnyPartition);
+        break;
+    default:
+        Stop();
+        break;
+    }
+
+exit:
+    return error;
 }
 #endif
 
@@ -4826,10 +5234,24 @@ Error Mle::TxMessage::AppendCslTimeoutTlv(void)
 Error Mle::TxMessage::AppendCslClockAccuracyTlv(void)
 {
     CslClockAccuracyTlv cslClockAccuracyTlv;
+    uint8_t             uncertainty = Get<Radio>().GetCslUncertainty();
+
+#if OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ENABLE
+    if (
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        Get<Mle>().IsCslCentralPresent()
+#elif OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+        Get<Mle>().IsCslPeripheralPresent()
+#endif
+    )
+    {
+        uncertainty = ClampToUint8(static_cast<uint32_t>(uncertainty + (Mac::kCslExtraCcaAttempts * 128 + 9) / 10));
+    }
+#endif /* OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ENABLE */
 
     cslClockAccuracyTlv.Init();
     cslClockAccuracyTlv.SetCslClockAccuracy(Get<Radio>().GetCslAccuracy());
-    cslClockAccuracyTlv.SetCslUncertainty(Get<Radio>().GetCslUncertainty());
+    cslClockAccuracyTlv.SetCslUncertainty(uncertainty);
 
     return Append(cslClockAccuracyTlv);
 }

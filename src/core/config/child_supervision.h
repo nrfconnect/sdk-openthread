@@ -78,6 +78,35 @@
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_WOR_CHILD_SUPERVISION_INTERVAL
+ *
+ * The supervision interval in the units of 100 milliseconds to use in Wake On Radio End Device
+ * when it is attached to Wakeup Coordinator.
+ *
+ * Child supervision feature provides a mechanism for parent to ensure that a message is sent to each sleepy child
+ * within the supervision interval. If there is no transmission to the child within the supervision interval, child
+ * supervisor will enqueue and send a supervision message (a data message with empty payload) to the child.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_WOR_CHILD_SUPERVISION_INTERVAL
+#define OPENTHREAD_CONFIG_WOR_CHILD_SUPERVISION_INTERVAL 2
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_CHILD_SUPERVISION_CHECK_TIMEOUT
+ *
+ * The supervision check timeout in the units of 100 milliseconds to use in Wake On Radio End Device
+ * when it is attached to Wakeup Coordinator.
+ *
+ * If the sleepy child does not hear from its parent within the specified timeout interval, it initiates the re-attach
+ * process (MLE Child Update Request/Response exchange with its parent).
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_WOR_CHILD_SUPERVISION_CHECK_TIMEOUT
+#define OPENTHREAD_CONFIG_WOR_CHILD_SUPERVISION_CHECK_TIMEOUT 20
+#endif
+
+/**
  * @def OPENTHREAD_CONFIG_CHILD_SUPERVISION_OLDER_VERSION_CHILD_DEFAULT_INTERVAL
  *
  * Specifies the default supervision interval to use on parent for children that do not explicitly indicate their

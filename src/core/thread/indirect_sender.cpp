@@ -93,8 +93,6 @@ void IndirectSender::AddMessageForSleepyChild(Message &aMessage, Child &aChild)
 {
     uint16_t childIndex;
 
-    OT_ASSERT(!aChild.IsRxOnWhenIdle());
-
     childIndex = Get<ChildTable>().GetChildIndex(aChild);
     VerifyOrExit(!aMessage.GetChildMask(childIndex));
 
@@ -540,6 +538,13 @@ void IndirectSender::HandleSentFrameToChild(const Mac::TxFrame &aFrame,
     }
 
     UpdateIndirectMessage(aChild);
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    if (Get<Mle::Mle>().IsCslPeripheralPresent())
+    {
+        Get<Mle::MleRouter>().HandleSentFrameToNeighbor(static_cast<Neighbor &>(aChild));
+    }
+#endif
 
 exit:
     if (mEnabled)

@@ -74,6 +74,9 @@ public:
     {
         friend class IndirectSender;
         friend class CslTxScheduler;
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        friend class EnhCslSender;
+#endif
 
     private:
         uint16_t mMessageNextOffset; ///< The next offset into the message associated with the prepared frame.

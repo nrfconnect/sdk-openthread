@@ -1159,6 +1159,69 @@ otError otThreadDetachGracefully(otInstance *aInstance, otDetachGracefullyCallba
 void otConvertDurationInSecondsToString(uint32_t aDuration, char *aBuffer, uint16_t aSize);
 
 /**
+ * This function attempts to attach a CSL peripheral device.
+ *
+ * It performs the wake-up sequence and then awaits a link-establishment request from the target device.
+ *
+ * This function is only available when `OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE` is enabled.
+ *
+ * @param[in] aInstance         A pointer to an OpenThread instance.
+ * @param[in] aTarget           The extended address of the target device.
+ * @param[in] aWakeupIntervalUs An interval between consecutive wake-up frames (in microseconds).
+ * @param[in] aWakeupDurationMs Duration of the wake-up sequence (in milliseconds).
+ *
+ * @retval OT_ERROR_NONE          Successfully started the attachment.
+ * @retval OT_ERROR_INVALID_STATE The previous attachment request is still in progress.
+ */
+otError otThreadAttachCslPeripheral(otInstance         *aInstance,
+                                    const otExtAddress *aTarget,
+                                    uint16_t            aWakeupIntervalUs,
+                                    uint16_t            aWakeupDurationMs);
+
+/**
+ * This function detaches the currently linked CSL peer device, if any.
+ *
+ * This function is only available when `OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE` is enabled
+ * or when OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE is enabled.
+ *
+ * @param[in] aInstance  A pointer to an OpenThread instance.
+ *
+ * @retval OT_ERROR_NONE          Successfully started the unlink process.
+ * @retval OT_ERROR_INVALID_STATE No previous link exists.
+ */
+otError otThreadDetachEnhCslPeer(otInstance *aInstance);
+
+/**
+ * This function indicates whether an enhanced CSL link is being established, from the moment
+ * a wake up sequence has been sent to the moment in which the CSL peripheral completes the
+ * attachment or the connection window times out.
+ *
+ * This function is only available when `OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE` is enabled
+ * or when OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE is enabled.
+ *
+ * @param[in] aInstance A pointer to an OpenThread instance.
+ *
+ * @returns TRUE if the enhanced CSL device is expecting for a CSL peer to establish a link,
+ * FALSE otherwise.
+ *
+ */
+bool otThreadIsEnhCslPeerLinking(otInstance *aInstance);
+
+/**
+ * This function indicates whether an enhanced CSL peer has established a link with this
+ * enhanced CSL device.
+ *
+ * This function is only available when `OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE` is enabled
+ * or when OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE is enabled.
+ *
+ * @param[in] aInstance A pointer to an OpenThread instance.
+ *
+ * @returns TRUE if an enhanced CSL peer has established a link, FALSE otherwise.
+ *
+ */
+bool otThreadIsEnhCslPeerLinked(otInstance *aInstance);
+
+/**
  * @}
  *
  */

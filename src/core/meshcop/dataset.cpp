@@ -75,6 +75,7 @@ Error Dataset::Info::GenerateRandom(Instance &aInstance)
     mActiveTimestamp.mAuthoritative = false;
     mChannel                        = preferredChannels.ChooseRandomChannel();
     mChannelMask                    = supportedChannels.GetMask();
+    mWakeupChannel                  = supportedChannels.GetWakeupChannel(mChannel);
     mPanId                          = Mac::GenerateRandomPanId();
     AsCoreType(&mSecurityPolicy).SetToDefault();
 
@@ -92,6 +93,7 @@ Error Dataset::Info::GenerateRandom(Instance &aInstance)
     mComponents.mIsMeshLocalPrefixPresent = true;
     mComponents.mIsPanIdPresent           = true;
     mComponents.mIsChannelPresent         = true;
+    mComponents.mIsWakeupChannelPresent   = true;
     mComponents.mIsPskcPresent            = true;
     mComponents.mIsSecurityPolicyPresent  = true;
     mComponents.mIsChannelMaskPresent     = true;
@@ -195,6 +197,10 @@ void Dataset::ConvertTo(Info &aDatasetInfo) const
 
         case Tlv::kChannel:
             aDatasetInfo.SetChannel(cur->ReadValueAs<ChannelTlv>().GetChannel());
+            break;
+
+        case Tlv::kWakeupChannel:
+            aDatasetInfo.SetWakeupChannel(cur->ReadValueAs<WakeupChannelTlv>().GetChannel());
             break;
 
         case Tlv::kChannelMask:
@@ -308,6 +314,14 @@ Error Dataset::SetFrom(const Info &aDatasetInfo)
 
         channelValue.SetChannelAndPage(aDatasetInfo.GetChannel());
         IgnoreError(Write<ChannelTlv>(channelValue));
+    }
+
+    if (aDatasetInfo.IsWakeupChannelPresent())
+    {
+        ChannelTlvValue channelValue;
+
+        channelValue.SetChannelAndPage(aDatasetInfo.GetWakeupChannel());
+        IgnoreError(Write<WakeupChannelTlv>(channelValue));
     }
 
     if (aDatasetInfo.IsChannelMaskPresent())
@@ -537,8 +551,17 @@ Error Dataset::ApplyConfiguration(Instance &aInstance, bool *aIsNetworkKeyUpdate
                 ExitNow();
             }
 
+            if (!Contains<WakeupChannelTlv>())
+            {
+                mac.SetWorChannel(mac.GetSupportedChannelMask().GetWakeupChannel(channel));
+            }
+
             break;
         }
+
+        case Tlv::kWakeupChannel:
+            mac.SetWorChannel(cur->ReadValueAs<WakeupChannelTlv>().GetChannel());
+            break;
 
         case Tlv::kPanId:
             mac.SetPanId(cur->ReadValueAs<PanIdTlv>());

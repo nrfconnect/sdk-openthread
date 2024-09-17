@@ -50,6 +50,11 @@ bool Tlv::IsValid(const Tlv &aTlv)
 
     switch (aTlv.GetType())
     {
+    case Tlv::kWakeupChannel:
+        VerifyOrExit(aTlv.GetLength() >= sizeof(ChannelTlvValue), isValid = false);
+        isValid = aTlv.ReadValueAs<WakeupChannelTlv>().IsValid();
+        break;
+
     case Tlv::kPanId:
         minLength = sizeof(PanIdTlv::UintValueType);
         break;

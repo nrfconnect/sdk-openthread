@@ -414,6 +414,17 @@ OT_TOOL_WEAK uint8_t otPlatRadioGetCslAccuracy(otInstance *)
 }
 #endif
 
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+OT_TOOL_WEAK otError otPlatRadioEnableCst(otInstance *, uint32_t, otShortAddress, const otExtAddress *)
+{
+    return OT_ERROR_NONE;
+}
+
+OT_TOOL_WEAK void otPlatRadioUpdateCstSampleTime(otInstance *, uint32_t)
+{
+}
+#endif
+
 #if OPENTHREAD_CONFIG_OTNS_ENABLE
 OT_TOOL_WEAK void otPlatOtnsStatus(const char *) {}
 #endif

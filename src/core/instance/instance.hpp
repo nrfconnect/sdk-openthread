@@ -125,6 +125,7 @@
 #include "thread/thread_netif.hpp"
 #include "thread/time_sync_service.hpp"
 #include "thread/tmf.hpp"
+#include "thread/wakeup_tx_scheduler.hpp"
 #include "utils/channel_manager.hpp"
 #include "utils/channel_monitor.hpp"
 #include "utils/heap.hpp"
@@ -808,6 +809,20 @@ template <> inline MeshCoP::Leader &Instance::Get(void) { return mLeader; }
 
 template <> inline MeshCoP::JoinerRouter &Instance::Get(void) { return mJoinerRouter; }
 #endif // OPENTHREAD_FTD
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+template <> inline WakeupTxScheduler &Instance::Get(void)
+{
+    return mMleRouter.mWakeupTxScheduler;
+}
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+template <> inline EnhCslSender &Instance::Get(void)
+{
+    return mMeshForwarder.mEnhCslSender;
+}
+#endif
 
 template <> inline AnnounceBeginServer &Instance::Get(void) { return mAnnounceBegin; }
 

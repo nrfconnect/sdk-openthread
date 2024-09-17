@@ -35,16 +35,31 @@
 
 #if OPENTHREAD_MTD
 
+#include "common/locator_getters.hpp"
+
 namespace ot {
 
 void MeshForwarder::SendMessage(OwnedPtr<Message> aMessagePtr)
 {
     Message &message = *aMessagePtr.Release();
 
-    message.SetDirectTransmission();
-    message.SetOffset(0);
-    message.SetDatagramTag(0);
-    message.SetTimestampToNow();
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    // TODO: better neighbor filter
+    Neighbor *neighbor = Get<EnhCslSender>().GetParent();
+
+    if ((neighbor != nullptr) && neighbor->IsEnhCslSynchronized())
+    {
+        // Destined for an enhanced CSL peer
+        mEnhCslSender.AddMessageForCslPeer(message, *neighbor);
+    }
+    else
+#endif
+    {
+        message.SetDirectTransmission();
+        message.SetOffset(0);
+        message.SetDatagramTag(0);
+        message.SetTimestampToNow();
+    }
 
     mSendQueue.Enqueue(message);
     mScheduleTransmissionTask.Post();

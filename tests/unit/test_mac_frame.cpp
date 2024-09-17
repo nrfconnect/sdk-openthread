@@ -769,6 +769,116 @@ void TestMacFrameAckGeneration(void)
 #endif // (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
 }
 
+void TestMacWakeupFrameGeneration(void)
+{
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    constexpr uint16_t kMpFcfLongFrame       = 1 << 3;
+    constexpr uint16_t kMpFcfDstAddrShift    = 4;
+    constexpr uint16_t kMpFcfDstAddrExt      = 3 << kMpFcfDstAddrShift;
+    constexpr uint16_t kMpFcfSrcAddrShift    = 6;
+    constexpr uint16_t kMpFcfSrcAddrExt      = 3 << kMpFcfSrcAddrShift;
+    constexpr uint16_t kMpFcfPanidPresent    = 1 << 8;
+    constexpr uint16_t kMpFcfSecurityEnabled = 1 << 9;
+    constexpr uint16_t kMpFcfDsnSuppression  = 1 << 10;
+    constexpr uint16_t kMpFcfIePresent       = 1 << 15;
+
+    constexpr uint8_t kSource[]    = {0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55};
+    constexpr uint8_t kDest[]      = {0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD};
+    // clang-format off
+    constexpr uint8_t kFramePsdu[] = {
+        // Frame Control
+        Mac::Frame::kTypeMultipurpose | kMpFcfLongFrame | kMpFcfDstAddrExt | kMpFcfSrcAddrExt,
+        (kMpFcfPanidPresent | kMpFcfSecurityEnabled | kMpFcfDsnSuppression | kMpFcfIePresent) >> 8,
+        // PAN ID
+        0xCE,
+        0xFA,
+        // Destination Address
+        0xDD,
+        0xDD,
+        0xDD,
+        0xDD,
+        0xDD,
+        0xDD,
+        0xDD,
+        0xDD,
+        // Source Address
+        0x55,
+        0x55,
+        0x55,
+        0x55,
+        0x55,
+        0x55,
+        0x55,
+        0x55,
+        // Security Header
+        Mac::Frame::kKeyIdMode2 | Mac::Frame::kSecurityEncMic32,
+        0xFC,
+        0xFC,
+        0xFC,
+        0xFC,
+        0x00,
+        0x00,
+        0x00,
+        0x1C,
+        0x1D,
+        // Rendezvous Time IE
+        0x82,
+        0x0E,
+        0xCD,
+        0xAB,
+        // Connection IE
+        0x05,
+        0x00,
+        0x9B,
+        0xB8,
+        0xEA,
+        0x01,
+        0x1C, //< Connection Window
+    };
+    // clang-format on
+
+    uint8_t            psdu[OT_RADIO_FRAME_MAX_SIZE];
+    Mac::Address       source;
+    Mac::Address       dest;
+    Mac::TxFrame       txFrame;
+    Mac::Frame         rxFrame;
+    Mac::ConnectionIe *connectionIe;
+    const uint8_t      keySource[] = {0, 0, 0, 0x1C};
+
+    source.SetExtended(kSource);
+    dest.SetExtended(kDest);
+    txFrame.mPsdu      = psdu;
+    txFrame.mLength    = 0;
+    txFrame.mRadioType = 0;
+
+    SuccessOrQuit(txFrame.GenerateWakeupFrame(0xface, dest, source));
+
+    VerifyOrQuit(txFrame.GetType() == Mac::Frame::kTypeMultipurpose);
+    VerifyOrQuit(!txFrame.GetAckRequest());
+    VerifyOrQuit(txFrame.GetHeaderIe(Mac::RendezvousTimeIe::kHeaderIeId) != nullptr);
+    VerifyOrQuit(txFrame.GetHeaderIe(Mac::ConnectionIe::kHeaderIeId) != nullptr);
+    VerifyOrQuit(txFrame.GetPayloadLength() == 0);
+
+    // Initialize variable fields and validate the frame payload
+    txFrame.SetFrameCounter(0xFCFCFCFC);
+    txFrame.SetKeySource(keySource);
+    txFrame.SetKeyId(0x1D);
+    txFrame.GetRendezvousTimeIe()->SetRendezvousTime(0xABCD);
+    connectionIe = txFrame.GetConnectionIe();
+    connectionIe->SetRetryInterval(1);
+    connectionIe->SetRetryCount(12);
+
+    VerifyOrQuit(txFrame.GetLength() == sizeof(kFramePsdu) + txFrame.GetFooterLength());
+    VerifyOrQuit(memcmp(psdu, kFramePsdu, sizeof(kFramePsdu)) == 0);
+
+    // Initialize RX Frame with the same payload is recognized as wake-up frame
+    rxFrame.mPsdu      = psdu;
+    rxFrame.mLength    = txFrame.GetLength();
+    rxFrame.mRadioType = 0;
+
+    VerifyOrQuit(rxFrame.IsWakeupFrame());
+#endif
+}
 } // namespace ot
 
 int main(void)
@@ -778,6 +888,7 @@ int main(void)
     ot::TestMacChannelMask();
     ot::TestMacFrameApi();
     ot::TestMacFrameAckGeneration();
+    ot::TestMacWakeupFrameGeneration();
     printf("All tests passed\n");
     return 0;
 }

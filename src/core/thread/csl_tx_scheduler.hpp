@@ -37,6 +37,7 @@
 #include "common/message.hpp"
 #include "common/non_copyable.hpp"
 #include "common/time.hpp"
+#include "config/mac.h"
 #include "mac/mac.hpp"
 #include "mac/mac_frame.hpp"
 #include "thread/indirect_sender_frame_context.hpp"
@@ -64,7 +65,8 @@ class CslTxScheduler : public InstanceLocator, private NonCopyable
     friend class IndirectSender;
 
 public:
-    static constexpr uint8_t kMaxCslTriggeredTxAttempts = OPENTHREAD_CONFIG_MAC_MAX_TX_ATTEMPTS_INDIRECT_POLLS;
+    static constexpr uint8_t kMaxCslTriggeredTxAttempts    = OPENTHREAD_CONFIG_MAC_MAX_TX_ATTEMPTS_INDIRECT_POLLS;
+    static constexpr uint8_t kMaxEnhCslTriggeredTxAttempts = OPENTHREAD_CONFIG_MAC_ENH_CSL_TX_ATTEMPTS;
 
     /**
      * Defines all the child info required for scheduling CSL transmissions.
@@ -81,6 +83,12 @@ public:
 
         bool IsCslSynchronized(void) const { return mCslSynchronized && mCslPeriod > 0; }
         void SetCslSynchronized(bool aCslSynchronized) { mCslSynchronized = aCslSynchronized; }
+
+        bool IsCslPrevSnValid(void) const { return mCslPrevSnValid; }
+        void SetCslPrevSnValid(bool aCslPrevSnValid) { mCslPrevSnValid = aCslPrevSnValid; }
+
+        uint8_t GetCslPrevSn(void) const { return mCslPrevSn; }
+        void    SetCslPrevSn(uint8_t aCslPrevSn) { mCslPrevSn = aCslPrevSn; }
 
         uint8_t GetCslChannel(void) const { return mCslChannel; }
         void    SetCslChannel(uint8_t aChannel) { mCslChannel = aChannel; }
@@ -101,8 +109,10 @@ public:
         void     SetLastRxTimestamp(uint64_t aLastRxTimestamp) { mLastRxTimestamp = aLastRxTimestamp; }
 
     private:
-        uint8_t  mCslTxAttempts : 7;   ///< Number of CSL triggered tx attempts.
+        uint8_t  mCslTxAttempts : 6;   ///< Number of CSL triggered tx attempts.
         bool     mCslSynchronized : 1; ///< Indicates whether or not the child is CSL synchronized.
+        bool     mCslPrevSnValid : 1;  ///< Indicates whether or not the previous MAC frame sequence number was set.
+        uint8_t  mCslPrevSn;           ///< The previous MAC frame sequence number (for MAC-level frame deduplication).
         uint8_t  mCslChannel;          ///< The channel the device will listen on.
         uint32_t mCslTimeout;          ///< The sync timeout, in seconds.
         uint16_t mCslPeriod; ///< CSL sampled listening period between consecutive channel samples in units of 10

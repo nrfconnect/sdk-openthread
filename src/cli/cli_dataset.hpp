@@ -96,6 +96,7 @@ private:
 
     void OutputActiveTimestamp(const otOperationalDataset &aDataset);
     void OutputChannel(const otOperationalDataset &aDataset);
+    void OutputWakeupChannel(const otOperationalDataset &aDataset);
     void OutputChannelMask(const otOperationalDataset &aDataset);
     void OutputDelay(const otOperationalDataset &aDataset);
     void OutputExtendedPanId(const otOperationalDataset &aDataset);
@@ -109,6 +110,7 @@ private:
 
     otError ParseActiveTimestamp(Arg *&aArgs, otOperationalDataset &aDataset);
     otError ParseChannel(Arg *&aArgs, otOperationalDataset &aDataset);
+    otError ParseWakeupChannel(Arg *&aArgs, otOperationalDataset &aDataset);
     otError ParseChannelMask(Arg *&aArgs, otOperationalDataset &aDataset);
     otError ParseDelay(Arg *&aArgs, otOperationalDataset &aDataset);
     otError ParseExtendedPanId(Arg *&aArgs, otOperationalDataset &aDataset);

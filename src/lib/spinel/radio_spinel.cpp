@@ -875,9 +875,9 @@ void RadioSpinel::RadioReceive(void)
         switch (mState)
         {
         case kStateDisabled:
-        case kStateSleep:
             ExitNow();
 
+        case kStateSleep:
         case kStateReceive:
         case kStateTransmitting:
         case kStateTransmitDone:
@@ -1806,24 +1806,26 @@ otError RadioSpinel::Transmit(otRadioFrame &aFrame)
     // `otPlatRadioTxStarted()` is triggered immediately for now, which may be earlier than real started time.
     mCallbacks.mTxStarted(mInstance, mTransmitFrame);
 
-    error = Request(SPINEL_CMD_PROP_VALUE_SET, SPINEL_PROP_STREAM_RAW,
-                    SPINEL_DATATYPE_DATA_WLEN_S                                      // Frame data
-                        SPINEL_DATATYPE_UINT8_S                                      // Channel
-                            SPINEL_DATATYPE_UINT8_S                                  // MaxCsmaBackoffs
-                                SPINEL_DATATYPE_UINT8_S                              // MaxFrameRetries
-                                    SPINEL_DATATYPE_BOOL_S                           // CsmaCaEnabled
-                                        SPINEL_DATATYPE_BOOL_S                       // IsHeaderUpdated
-                                            SPINEL_DATATYPE_BOOL_S                   // IsARetx
-                                                SPINEL_DATATYPE_BOOL_S               // IsSecurityProcessed
-                                                    SPINEL_DATATYPE_UINT32_S         // TxDelay
-                                                        SPINEL_DATATYPE_UINT32_S     // TxDelayBaseTime
-                                                            SPINEL_DATATYPE_UINT8_S, // RxChannelAfterTxDone
-                    mTransmitFrame->mPsdu, mTransmitFrame->mLength, mTransmitFrame->mChannel,
-                    mTransmitFrame->mInfo.mTxInfo.mMaxCsmaBackoffs, mTransmitFrame->mInfo.mTxInfo.mMaxFrameRetries,
-                    mTransmitFrame->mInfo.mTxInfo.mCsmaCaEnabled, mTransmitFrame->mInfo.mTxInfo.mIsHeaderUpdated,
-                    mTransmitFrame->mInfo.mTxInfo.mIsARetx, mTransmitFrame->mInfo.mTxInfo.mIsSecurityProcessed,
-                    mTransmitFrame->mInfo.mTxInfo.mTxDelay, mTransmitFrame->mInfo.mTxInfo.mTxDelayBaseTime,
-                    mTransmitFrame->mInfo.mTxInfo.mRxChannelAfterTxDone);
+    error =
+        Request(SPINEL_CMD_PROP_VALUE_SET, SPINEL_PROP_STREAM_RAW,
+                SPINEL_DATATYPE_DATA_WLEN_S                                          // Frame data
+                    SPINEL_DATATYPE_UINT8_S                                          // Channel
+                        SPINEL_DATATYPE_UINT8_S                                      // MaxCsmaBackoffs
+                            SPINEL_DATATYPE_UINT8_S                                  // MaxFrameRetries
+                                SPINEL_DATATYPE_BOOL_S                               // CsmaCaEnabled
+                                    SPINEL_DATATYPE_BOOL_S                           // IsHeaderUpdated
+                                        SPINEL_DATATYPE_BOOL_S                       // IsARetx
+                                            SPINEL_DATATYPE_BOOL_S                   // IsSecurityProcessed
+                                                SPINEL_DATATYPE_UINT32_S             // TxDelay
+                                                    SPINEL_DATATYPE_UINT32_S         // TxDelayBaseTime
+                                                        SPINEL_DATATYPE_UINT8_S      // RxChannelAfterTxDone
+                                                            SPINEL_DATATYPE_UINT8_S, // ExtraCcaAttempts
+                mTransmitFrame->mPsdu, mTransmitFrame->mLength, mTransmitFrame->mChannel,
+                mTransmitFrame->mInfo.mTxInfo.mMaxCsmaBackoffs, mTransmitFrame->mInfo.mTxInfo.mMaxFrameRetries,
+                mTransmitFrame->mInfo.mTxInfo.mCsmaCaEnabled, mTransmitFrame->mInfo.mTxInfo.mIsHeaderUpdated,
+                mTransmitFrame->mInfo.mTxInfo.mIsARetx, mTransmitFrame->mInfo.mTxInfo.mIsSecurityProcessed,
+                mTransmitFrame->mInfo.mTxInfo.mTxDelay, mTransmitFrame->mInfo.mTxInfo.mTxDelayBaseTime,
+                mTransmitFrame->mInfo.mTxInfo.mRxChannelAfterTxDone, mTransmitFrame->mInfo.mTxInfo.mExtraCcaAttempts);
 
     if (error == OT_ERROR_NONE)
     {
@@ -2394,6 +2396,69 @@ otError RadioSpinel::ConfigureEnhAckProbing(otLinkMetrics         aLinkMetrics,
         Set(SPINEL_PROP_RCP_ENH_ACK_PROBING, SPINEL_DATATYPE_UINT16_S SPINEL_DATATYPE_EUI64_S SPINEL_DATATYPE_UINT8_S,
             aShortAddress, aExtAddress.m8, flags);
 
+    return error;
+}
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+Error RadioSpinel::ReceiveAt(uint8_t aChannel, uint32_t aStart, uint32_t aDuration, uint8_t aSlotId)
+{
+    otError error;
+
+    SuccessOrExit(
+        error = Set(SPINEL_PROP_MAC_RAW_STREAM_ENABLE_AT,
+                    SPINEL_DATATYPE_UINT8_S SPINEL_DATATYPE_UINT32_S SPINEL_DATATYPE_UINT32_S SPINEL_DATATYPE_UINT8_S,
+                    aChannel, aStart, aDuration, aSlotId));
+
+exit:
+    return error;
+}
+#endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+Error RadioSpinel::UpdateCslSampleTime(uint32_t aCslSampleTime)
+{
+    otError error;
+
+    SuccessOrExit(error = Set(SPINEL_PROP_RCP_CSL_SAMPLE_TIME, SPINEL_DATATYPE_UINT32_S, aCslSampleTime));
+
+exit:
+    return error;
+}
+
+Error RadioSpinel::EnableCsl(uint32_t aCslPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr)
+{
+    otError error;
+
+    SuccessOrExit(error = Set(SPINEL_PROP_RCP_CSL_ENABLE,
+                              SPINEL_DATATYPE_UINT32_S SPINEL_DATATYPE_UINT16_S SPINEL_DATATYPE_EUI64_S, aCslPeriod,
+                              aShortAddr, aExtAddr));
+
+exit:
+    return error;
+}
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+Error RadioSpinel::UpdateCstSampleTime(uint32_t aCstSampleTime)
+{
+    otError error;
+
+    SuccessOrExit(error = Set(SPINEL_PROP_RCP_CST_SAMPLE_TIME, SPINEL_DATATYPE_UINT32_S, aCstSampleTime));
+
+exit:
+    return error;
+}
+
+Error RadioSpinel::EnableCst(uint32_t aCstPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr)
+{
+    otError error;
+
+    SuccessOrExit(error = Set(SPINEL_PROP_RCP_CST_ENABLE,
+                              SPINEL_DATATYPE_UINT32_S SPINEL_DATATYPE_UINT16_S SPINEL_DATATYPE_EUI64_S, aCstPeriod,
+                              aShortAddr, aExtAddr));
+
+exit:
     return error;
 }
 #endif

@@ -73,6 +73,36 @@ exit:
     return error;
 }
 
+uint8_t ChannelMask::GetNextChannelWithRollOver(uint8_t aChannel) const
+{
+    uint8_t nextChannel = aChannel;
+
+    if (IsEmpty())
+    {
+        if (++nextChannel > Radio::kChannelMax)
+        {
+            nextChannel = Radio::kChannelMin;
+        }
+    }
+    else if (GetNextChannel(nextChannel) == kErrorNotFound)
+    {
+        nextChannel = Mac::ChannelMask::kChannelIteratorFirst;
+        IgnoreError(GetNextChannel(nextChannel));
+    }
+
+    return nextChannel;
+}
+
+uint8_t ChannelMask::GetWakeupChannel(uint8_t aChannel) const
+{
+    // Temporary workaround
+    OT_UNUSED_VARIABLE(aChannel);
+    return OPENTHREAD_CONFIG_DEFAULT_WAKEUP_CHANNEL;
+
+    // Wake-up channel is Thread channel + 2 (among the valid channels)
+    // return GetNextChannelWithRollOver(GetNextChannelWithRollOver(aChannel));
+}
+
 uint8_t ChannelMask::ChooseRandomChannel(void) const
 {
     uint8_t channel = kChannelIteratorFirst;

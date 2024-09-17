@@ -450,6 +450,7 @@ otError NcpBase::DecodeStreamRawTxRequest(otRadioFrame &aFrame)
     aFrame.mInfo.mTxInfo.mRxChannelAfterTxDone = aFrame.mChannel;
     aFrame.mInfo.mTxInfo.mMaxCsmaBackoffs      = OPENTHREAD_CONFIG_MAC_MAX_CSMA_BACKOFFS_DIRECT;
     aFrame.mInfo.mTxInfo.mMaxFrameRetries      = OPENTHREAD_CONFIG_MAC_DEFAULT_MAX_FRAME_RETRIES_DIRECT;
+    aFrame.mInfo.mTxInfo.mExtraCcaAttempts     = 0;
     aFrame.mInfo.mTxInfo.mCsmaCaEnabled        = true;
     aFrame.mInfo.mTxInfo.mIsHeaderUpdated      = false;
     aFrame.mInfo.mTxInfo.mIsARetx              = false;
@@ -480,6 +481,7 @@ otError NcpBase::DecodeStreamRawTxRequest(otRadioFrame &aFrame)
     SuccessOrExit(mDecoder.ReadUint32(aFrame.mInfo.mTxInfo.mTxDelay));
     SuccessOrExit(mDecoder.ReadUint32(aFrame.mInfo.mTxInfo.mTxDelayBaseTime));
     SuccessOrExit(mDecoder.ReadUint8(aFrame.mInfo.mTxInfo.mRxChannelAfterTxDone));
+    SuccessOrExit(mDecoder.ReadUint8(aFrame.mInfo.mTxInfo.mExtraCcaAttempts));
 
 exit:
     return error;
@@ -612,6 +614,91 @@ template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_RCP_ENH_ACK_PROBING>(
 exit:
     return error;
 }
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_RCP_CSL_SAMPLE_TIME>(void)
+{
+    otError  error = OT_ERROR_NONE;
+    uint32_t cslSampleTime;
+
+    SuccessOrExit(error = mDecoder.ReadUint32(cslSampleTime));
+
+    otPlatRadioUpdateCslSampleTime(mInstance, cslSampleTime);
+
+exit:
+    return error;
+}
+
+template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_MAC_RAW_STREAM_ENABLE_AT>(void)
+{
+    otError  error = OT_ERROR_NONE;
+    uint8_t  channel;
+    uint32_t startTime;
+    uint32_t duration;
+    uint8_t  slotId;
+
+    SuccessOrExit(error = mDecoder.ReadUint8(channel));
+    SuccessOrExit(error = mDecoder.ReadUint32(startTime));
+    SuccessOrExit(error = mDecoder.ReadUint32(duration));
+    SuccessOrExit(error = mDecoder.ReadUint8(slotId));
+
+    error = otPlatRadioReceiveAt(mInstance, channel, startTime, duration, slotId);
+
+exit:
+    return error;
+}
+
+template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_RCP_CSL_ENABLE>(void)
+{
+    otError             error = OT_ERROR_NONE;
+    uint32_t            cslPeriod;
+    uint16_t            shortAddress;
+    const otExtAddress *extAddress;
+
+    SuccessOrExit(error = mDecoder.ReadUint32(cslPeriod));
+    SuccessOrExit(error = mDecoder.ReadUint16(shortAddress));
+    SuccessOrExit(error = mDecoder.ReadEui64(extAddress));
+
+    error = otPlatRadioEnableCsl(mInstance, cslPeriod, shortAddress, extAddress);
+
+exit:
+    return error;
+}
+
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_RCP_CST_SAMPLE_TIME>(void)
+{
+    otError  error = OT_ERROR_NONE;
+    uint32_t cstSampleTime;
+
+    SuccessOrExit(error = mDecoder.ReadUint32(cstSampleTime));
+
+    otPlatRadioUpdateCstSampleTime(mInstance, cstSampleTime);
+
+exit:
+    return error;
+}
+
+template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_RCP_CST_ENABLE>(void)
+{
+    otError             error = OT_ERROR_NONE;
+    uint32_t            cstPeriod;
+    uint16_t            shortAddress;
+    const otExtAddress *extAddress;
+
+    SuccessOrExit(error = mDecoder.ReadUint32(cstPeriod));
+    SuccessOrExit(error = mDecoder.ReadUint16(shortAddress));
+    SuccessOrExit(error = mDecoder.ReadEui64(extAddress));
+
+    error = otPlatRadioEnableCst(mInstance, cstPeriod, shortAddress, extAddress);
+
+exit:
+    return error;
+}
+
 #endif
 
 } // namespace Ncp

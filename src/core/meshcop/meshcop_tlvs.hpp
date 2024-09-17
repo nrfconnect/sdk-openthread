@@ -111,6 +111,7 @@ public:
         kPeriod                  = OT_MESHCOP_TLV_PERIOD,                   ///< Period TLV
         kScanDuration            = OT_MESHCOP_TLV_SCAN_DURATION,            ///< Scan Duration TLV
         kEnergyList              = OT_MESHCOP_TLV_ENERGY_LIST,              ///< Energy List TLV
+        kWakeupChannel           = OT_MESHCOP_TLV_WAKEUP_CHANNEL,           ///< Wake-up Channel TLV
         kDiscoveryRequest        = OT_MESHCOP_TLV_DISCOVERYREQUEST,         ///< Discovery Request TLV
         kDiscoveryResponse       = OT_MESHCOP_TLV_DISCOVERYRESPONSE,        ///< Discovery Response TLV
         kJoinerAdvertisement     = OT_MESHCOP_TLV_JOINERADVERTISEMENT,      ///< Joiner Advertisement TLV
@@ -262,6 +263,12 @@ typedef Mle::ChannelTlvValue ChannelTlvValue;
  *
  */
 typedef SimpleTlvInfo<Tlv::kChannel, ChannelTlvValue> ChannelTlv;
+
+/**
+ * Defines Wakeup Channel TLV constants and types.
+ *
+ */
+typedef SimpleTlvInfo<Tlv::kWakeupChannel, ChannelTlvValue> WakeupChannelTlv;
 
 /**
  * Defines PAN ID TLV constants and types.

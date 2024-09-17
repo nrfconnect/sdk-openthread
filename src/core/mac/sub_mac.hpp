@@ -82,6 +82,10 @@ namespace Mac {
 #error "OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE is required for OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE."
 #endif
 
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE && !OPENTHREAD_MTD
+#error "OPENTHREAD_MTD is required for OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE."
+#endif
+
 #if OPENTHREAD_RADIO || OPENTHREAD_CONFIG_LINK_RAW_ENABLE
 class LinkRaw;
 #endif
@@ -395,16 +399,21 @@ public:
     /**
      * Configures CSL parameters in 'SubMac'.
      *
-     * @param[in]  aPeriod    The CSL period (in unit of 10 symbols).
-     * @param[in]  aChannel   The CSL channel.
-     * @param[in]  aShortAddr The short source address of CSL receiver's peer.
-     * @param[in]  aExtAddr   The extended source address of CSL receiver's peer.
+     * @param[in]  aPeriod      The CSL period (in unit of 10 symbols).
+     * @param[in]  aChannel     The CSL channel.
+     * @param[in]  aShortAddr   The short source address of CSL receiver's peer.
+     * @param[in]  aExtAddr     The extended source address of CSL receiver's peer.
+     * @param[in]  aSampleTime  The CSL sample time.
      *
      * @retval  TRUE if CSL Period or CSL Channel changed.
      * @retval  FALSE if CSL Period and CSL Channel did not change.
      *
      */
-    bool UpdateCsl(uint16_t aPeriod, uint8_t aChannel, otShortAddress aShortAddr, const otExtAddress *aExtAddr);
+    bool UpdateCsl(uint16_t            aPeriod,
+                   uint8_t             aChannel,
+                   otShortAddress      aShortAddr,
+                   const otExtAddress *aExtAddr,
+                   uint32_t           &aSampleTime);
 
     /**
      * Lets `SubMac` start CSL sample mode given a configured non-zero CSL period.
@@ -413,6 +422,16 @@ public:
      *
      */
     void CslSample(void);
+
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    /**
+     * Notifies `SubMac` whether a link with a WED is active/inactive.
+     *
+     * @param[in]  aPresent   TRUE if WED is present. FALSE otherwise.
+     */
+    void WedPresent(bool aPresent);
+#endif
 
     /**
      * Returns parent CSL accuracy (clock accuracy and uncertainty).
@@ -430,7 +449,24 @@ public:
      */
     void SetCslParentAccuracy(const CslAccuracy &aCslAccuracy) { mCslParentAccuracy = aCslAccuracy; }
 
+    /**
+     * This method returns last CSL sample time.
+     */
+    uint32_t GetLastCslSampleTime(void) const { return mCslSampleTime.GetValue() - mCslPeriod * kUsPerTenSymbols; }
+
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    /**
+     * This method configures WoR parameters in 'SubMac'.
+     *
+     * @param[in]  aInterval  The WoR LISTEN_INTERVAL.
+     * @param[in]  aDuration  The WoR LISTEN_DURATION.
+     * @param[in]  aChannel   The WoR channel.
+     *
+     */
+    void UpdateWor(uint16_t aInterval, uint16_t aDuration, uint8_t aChannel);
+#endif
 
     /**
      * Sets MAC keys and key index.
@@ -528,10 +564,16 @@ private:
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     static void HandleCslTimer(Timer &aTimer);
     void        HandleCslTimer(void);
+    void        RestartCslTimer(TimeMicro aSampleTime);
     void        GetCslWindowEdges(uint32_t &aAhead, uint32_t &aAfter);
 #if OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE
     void LogReceived(RxFrame *aFrame);
 #endif
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    static void HandleWorTimer(Timer &aTimer);
+    void        HandleWorTimer(void);
 #endif
 
     static constexpr uint8_t  kCsmaMinBe         = 3;   // macMinBE (IEEE 802.15.4-2006).
@@ -575,7 +617,12 @@ private:
     static constexpr uint32_t kMinReceiveOnAhead = OPENTHREAD_CONFIG_MIN_RECEIVE_ON_AHEAD;
     static constexpr uint32_t kMinReceiveOnAfter = OPENTHREAD_CONFIG_MIN_RECEIVE_ON_AFTER;
 
-    // CSL receivers would wake up `kCslReceiveTimeAhead` earlier
+    // Slot Id for the CSL delayed reception operations
+    static constexpr uint8_t kCslSlotId = 0;
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    // CSL/WoR receivers would wake up `kCslReceiveTimeAhead` earlier
     // than expected sample window. The value is in usec.
     static constexpr uint32_t kCslReceiveTimeAhead = OPENTHREAD_CONFIG_CSL_RECEIVE_TIME_AHEAD;
 #endif
@@ -585,6 +632,16 @@ private:
     // than expected delayed transmit time. The value is in usec.
     // Only for radios not supporting OT_RADIO_CAPS_TRANSMIT_TIMING.
     static constexpr uint32_t kCslTransmitTimeAhead = OPENTHREAD_CONFIG_CSL_TRANSMIT_TIME_AHEAD;
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    // Slot Id for the WoR delayed reception operations
+    static constexpr uint8_t kWorSlotId = 1;
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE && OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    // Margin to be applied to detect WoR receive slots overlaps with CSL slots, in us
+    static constexpr uint32_t kWorOverlapMargin = 600;
 #endif
 
     /**
@@ -631,6 +688,10 @@ private:
     void               SetState(State aState);
     static const char *StateToString(State aState);
 
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE && OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    uint16_t GetNeededShift(uint32_t aCslStart);
+#endif
+
     using SubMacTimer =
 #if OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE
         TimerMicroIn<SubMac, &SubMac::HandleTimer>;
@@ -665,14 +726,28 @@ private:
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     uint16_t mCslPeriod;      // The CSL sample period, in units of 10 symbols (160 microseconds).
-    uint8_t  mCslChannel : 7; // The CSL sample channel.
+    uint8_t  mCslChannel : 6; // The CSL sample channel.
     bool mIsCslSampling : 1;  // Indicates that the radio is receiving in CSL state for platforms not supporting delayed
                               // reception.
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    bool mWedPresent : 1; // Indicates that a WoR connection is active (there is a WED peer).
+#endif
     uint16_t    mCslPeerShort;      // The CSL peer short address.
+    ExtAddress  mCslPeerExt;        // The CSL peer extended address.
     TimeMicro   mCslSampleTime;     // The CSL sample time of the current period relative to the local radio clock.
     TimeMicro   mCslLastSync;       // The timestamp of the last successful CSL synchronization.
     CslAccuracy mCslParentAccuracy; // The parent's CSL accuracy (clock accuracy and uncertainty).
+    uint32_t    mCslWinStart;       // The current CSL receive window start time in microseconds.
+    uint16_t    mCslWinDur;         // The current CSL receive window duration in microseconds.
     TimerMicro  mCslTimer;
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    uint16_t   mWorInterval;   // The WoR sample period, in units of 10 symbols (160 microseconds).
+    uint16_t   mWorDuration;   // The WoR sample duration, in units of microseconds.
+    uint8_t    mWorChannel;    // The WoR sample channel.
+    TimeMicro  mWorSampleTime; // The WoR sample time of the current interval.
+    TimerMicro mWorTimer;
 #endif
 };
 

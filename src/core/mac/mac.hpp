@@ -55,6 +55,7 @@
 #include "radio/trel_link.hpp"
 #include "thread/key_manager.hpp"
 #include "thread/link_quality.hpp"
+#include "thread/wakeup_coord_table.hpp"
 
 namespace ot {
 
@@ -89,6 +90,11 @@ constexpr uint8_t kMaxFrameRetriesCsl             = 0;
 constexpr uint8_t kTxNumBcast = OPENTHREAD_CONFIG_MAC_TX_NUM_BCAST; ///< Num of times broadcast frame is tx.
 
 constexpr uint16_t kMinCslIePeriod = OPENTHREAD_CONFIG_MAC_CSL_MIN_PERIOD;
+
+constexpr uint16_t kDefaultWakeupInterval = OPENTHREAD_CONFIG_MAC_CSL_WAKEUP_INTERVAL;
+constexpr uint16_t kDefaultWorInterval    = OPENTHREAD_CONFIG_WOR_INTERVAL;
+constexpr uint16_t kDefaultWorDuration    = OPENTHREAD_CONFIG_WOR_SAMPLE_DURATION;
+constexpr uint8_t  kCslExtraCcaAttempts   = OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ATTEMPTS;
 
 /**
  * Defines the function pointer called on receiving an IEEE 802.15.4 Beacon during an Active Scan.
@@ -226,6 +232,24 @@ public:
     void RequestCslFrameTransmission(uint32_t aDelay);
 #endif
 
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    /**
+     * This method requests `Mac` to start an enhanced CSL tx operation after a delay of @p aDelay time.
+     *
+     * @param[in]  aDelay  Delay time for `Mac` to start an enhanced CSL tx, in units of milliseconds.
+     *
+     */
+    void RequestEnhCslFrameTransmission(uint32_t aDelay);
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    /**
+     * This method requests `Mac` to start a wake-up frame transmission.
+     *
+     */
+    void RequestWakeupFrameTransmission();
 #endif
 
     /**
@@ -611,8 +635,10 @@ public:
     /**
      * Centralizes CSL state switching conditions evaluating, configuring SubMac accordingly.
      *
+     * @param[in]  aPeer        The CSL peer. If not specified, it is assumed to be the parent.
+     *
      */
-    void UpdateCsl(void);
+    void UpdateCsl(Neighbor *aPeer = nullptr);
 
     /**
      * Gets the CSL period.
@@ -640,6 +666,25 @@ public:
      *
      */
     void SetCslPeriod(uint16_t aPeriod);
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    /**
+     * This method replaces the CSL period and backs up the old one.
+     * It also backs up the CSL channel and configures it as 0 to track the
+     * current MAC channel.
+     *
+     * @param[in]  aPeriod      The CSL period in 10 symbols.
+     * @param[in]  aSampleTime  The CSL sample time to be used by SubMac.
+     * @param[in]  aPeer        The CSL peer.
+     *
+     */
+    void ReplaceCslPeriod(uint16_t aPeriod, uint32_t aSampleTime, Neighbor *aPeer);
+
+    /**
+     * This method restores the backed up CSL period and channel.
+     */
+    void RestoreCslPeriod(void);
+#endif
 
     /**
      * This method converts a given CSL period in units of 10 symbols to microseconds.
@@ -692,11 +737,94 @@ public:
      * @param[in] aCslAccuracy  The parent CSL accuracy.
      *
      */
-    void SetCslParentAccuracy(const CslAccuracy &aCslAccuracy)
-    {
-        mLinks.GetSubMac().SetCslParentAccuracy(aCslAccuracy);
-    }
+    void SetCslParentAccuracy(const CslAccuracy &aCslAccuracy);
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    /**
+     * This method indicates whether CST is started at the moment.
+     *
+     * TODO: Rethink API for enabling CST. For now, CST is enabled whenever CSL is enabled and the device is a router.
+     *
+     * @retval TRUE   If CST is enabled.
+     * @retval FALSE  If CST is not enabled.
+     *
+     */
+    bool IsCstEnabled(void) const;
+#endif
+
+    /**
+     * This method gets the WoR channel.
+     *
+     * @returns WoR channel.
+     *
+     */
+    uint8_t GetWorChannel(void) const { return mWorChannel; }
+
+    /**
+     * This method sets the WoR channel.
+     *
+     * @param[in]  aChannel  The WoR channel.
+     *
+     */
+    void SetWorChannel(uint8_t aChannel);
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    /**
+     * This method gets the WoR interval.
+     *
+     * @returns WoR interval in units of 10 symbols.
+     *
+     */
+    uint16_t GetWorInterval(void) const { return mWorInterval; }
+
+    /**
+     * This method sets the WoR interval.
+     *
+     * @param[in]  aInterval  The WoR interval in units of 10 symbols.
+     *
+     */
+    void SetWorInterval(uint16_t aInterval);
+
+    /**
+     * This method gets the WoR sample duration.
+     *
+     * @returns WoR sample duration in us.
+     *
+     */
+    uint16_t GetWorDuration(void) const { return mWorDuration; }
+
+    /**
+     * This method sets the WoR sample duration.
+     *
+     * @param[in]  aDuration  The WoR sample duration in us.
+     *
+     */
+    void SetWorDuration(uint16_t aDuration);
+
+    /**
+     * This method enables/disables Wake on Radio sampling.
+     *
+     * @param[in]  aEnable  TRUE to enable WoR sampling, FALSE otherwise
+     *
+     * @retval kErrorNone          Successfully enabled/disabled WoR sampling.
+     * @retval kErrorInvalidState  Could not enable/disable WoR sampling.
+     */
+    Error WorEnable(bool aEnable);
+
+    /**
+     * This method returns whether Wake on Radio sampling is enabled.
+     *
+     * @retval TRUE   If Wake on Radio sampling is enabled.
+     * @retval FALSE  If Wake on Radio sampling is not enabled.
+     */
+    bool IsWorEnabled(void) const { return mWorEnabled; }
+
+    /**
+     * Applies previously saved CSL and CST IEs.
+     */
+    void ApplyEnhCsl(void);
+#endif // OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
 
 #if OPENTHREAD_CONFIG_MAC_FILTER_ENABLE && OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
     /**
@@ -769,6 +897,12 @@ private:
         kOperationTransmitDataCsl,
 #endif
 #endif
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+        kOperationTransmitWakeup,
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        kOperationTransmitDataEnhCsl,
+#endif
     };
 
 #if OPENTHREAD_CONFIG_MAC_RETRY_SUCCESS_HISTOGRAM_ENABLE
@@ -834,7 +968,12 @@ private:
 #endif
 
 #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
-    void ProcessCsl(const RxFrame &aFrame, const Address &aSrcAddr);
+    Error ProcessCsl(const RxFrame &aFrame, const Address &aSrcAddr);
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    Error HandleWakeupFrame(const RxFrame &aFrame);
+    Error ProcessEnhCsl(const RxFrame &aFrame);
+    void UpdateWor(void);
 #endif
 #if OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE
     void ProcessEnhAckProbing(const RxFrame &aFrame, const Neighbor &aNeighbor);
@@ -855,6 +994,10 @@ private:
 #if OPENTHREAD_CONFIG_MAC_STAY_AWAKE_BETWEEN_FRAGMENTS
     bool mShouldDelaySleep : 1;
     bool mDelayingSleep : 1;
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    bool mWorEnabled : 1;
+    bool mIsCslPeriodReplaced : 1;
 #endif
     Operation   mOperation;
     uint16_t    mPendingOperations;
@@ -879,6 +1022,25 @@ private:
     // When Mac::mCslChannel is 0, it indicates that CSL channel has not been specified by the upper layer.
     uint8_t  mCslChannel;
     uint16_t mCslPeriod;
+#endif
+    uint8_t   mWorChannel;
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    WakeupCoordTable mWakeupCoordTable;
+
+    uint64_t  mCslPeerTimestamp;
+    uint64_t  mPrevCslPeerTimestamp;
+    uint32_t  mCslSampleTime;
+    uint16_t  mCslPeriodBak;
+    uint8_t   mCslChannelBak;
+    uint16_t  mWorInterval;
+    uint16_t  mWorDuration;
+    TimeMilli mEnhCslTxFireTime;
+    uint16_t  mCstIePeriod;
+    uint16_t  mCstIePhase;
+    uint16_t  mCslIePeriod;
+    uint16_t  mCslIePhase;
+    bool      mCstIeSet : 1;
+    bool      mCslIeSet : 1;
 #endif
 
     union

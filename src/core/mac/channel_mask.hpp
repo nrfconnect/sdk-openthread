@@ -211,6 +211,27 @@ public:
     Error GetNextChannel(uint8_t &aChannel) const;
 
     /**
+     * Gets the next channel in the channel mask, rolling over the last one.
+     * If the mask is empty, returns the next valid channel, with roll-over.
+     *
+     * @param[in] aChannel       A reference channel to find the next one.
+     *
+     * @returns The next channel after @p aChannel.
+     *
+     */
+    uint8_t GetNextChannelWithRollOver(uint8_t aChannel) const;
+
+    /**
+     * Return the wake-up channel based on the provided Thread channel.
+     *
+     * @param[in] aChannel       A reference channel to find the wake-up channel.
+     *
+     * @returns The wake-up channel based on @p aChannel.
+     *
+     */
+    uint8_t GetWakeupChannel(uint8_t aChannel) const;
+
+    /**
      * Randomly chooses a channel from the channel mask.
      *
      * @returns A randomly chosen channel from the given mask, or `kChannelIteratorFirst` if the mask is empty.

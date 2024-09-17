@@ -421,7 +421,7 @@ void MleRouter::SetStateRouterOrLeader(DeviceRole aRole, uint16_t aRloc16, Leade
     SetRole(aRole);
 
     SetAttachState(kAttachStateIdle);
-    mAttachCounter = 0;
+    ResetAttachCounter();
     mAttachTimer.Stop();
     mMessageTransmissionTimer.Stop();
     StopAdvertiseTrickleTimer();
@@ -429,7 +429,11 @@ void MleRouter::SetStateRouterOrLeader(DeviceRole aRole, uint16_t aRloc16, Leade
 
     Get<ThreadNetif>().SubscribeAllRoutersMulticast();
     mPreviousPartitionIdRouter = mLeaderData.GetPartitionId();
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    Get<Mac::Mac>().SetBeaconEnabled(IsRxOnWhenIdle()); // Disable beacons for Sleepy Router
+#else
     Get<Mac::Mac>().SetBeaconEnabled(true);
+#endif
 
     if (aRole == kRoleLeader)
     {
@@ -527,6 +531,9 @@ void MleRouter::SendAdvertisement(void)
     // The candidate parent then removes the attaching device because the Source Address TLV includes an RLOC16 that
     // indicates a Router role (i.e. a Child ID equal to zero).
     VerifyOrExit(!IsAttaching());
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    VerifyOrExit(IsRxOnWhenIdle()); // Suppress MLE Advertisement for Sleepy Router
+#endif
 
     // Suppress MLE Advertisements when transitioning to the router role.
     //
@@ -662,8 +669,10 @@ void MleRouter::HandleLinkRequest(RxInfo &aRxInfo)
     Log(kMessageReceive, kTypeLinkRequest, aRxInfo.mMessageInfo.GetPeerAddr());
 
     VerifyOrExit(IsRouterOrLeader(), error = kErrorInvalidState);
-
     VerifyOrExit(!IsAttaching(), error = kErrorInvalidState);
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    VerifyOrExit(IsRxOnWhenIdle(), error = kErrorInvalidState); // Ignore Link Request for Sleepy Router
+#endif
 
     // Challenge
     SuccessOrExit(error = aRxInfo.mMessage.ReadChallengeTlv(challenge));
@@ -1183,6 +1192,10 @@ Error MleRouter::HandleAdvertisement(RxInfo &aRxInfo, uint16_t aSourceAddress, c
     Router  *router;
     uint8_t  routerId;
 
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    VerifyOrExit(!IsCslPeripheralAttaching() && !IsCslPeripheralAttached(), error = kErrorDrop);
+#endif
+
     switch (aRxInfo.mMessage.ReadRouteTlv(routeTlv))
     {
     case kErrorNone:
@@ -1367,10 +1380,21 @@ void MleRouter::HandleParentRequest(RxInfo &aRxInfo)
     Child          *child;
     uint8_t         modeBitmask;
     DeviceMode      mode;
+    uint16_t        delay;
 
     Log(kMessageReceive, kTypeParentRequest, aRxInfo.mMessageInfo.GetPeerAddr());
 
+#if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_INFO) && OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    if (IsCslPeripheralAttaching())
+    {
+        LogInfo("Received Parent Request FC: %lu", ToUlong(aRxInfo.mFrameCounter));
+    }
+#endif
+
     VerifyOrExit(IsRouterEligible(), error = kErrorInvalidState);
+
+    // rx-on-when-idle routers handle only multicast whereas sleepy routers only unicast Parent Requests
+    VerifyOrExit(IsRxOnWhenIdle() == aRxInfo.mMessageInfo.GetSockAddr().IsMulticast(), error = kErrorInvalidState);
 
     // A Router/REED MUST NOT send an MLE Parent Response if:
 
@@ -1440,6 +1464,27 @@ void MleRouter::HandleParentRequest(RxInfo &aRxInfo)
             child->SetDeviceMode(mode);
             child->SetVersion(version);
         }
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+        if (mCslPeripheralAttachState == kPeripheralAwaitParentRequest)
+        {
+            Mac::CslAccuracy cslAccuracy;
+
+            // CSL Accuracy
+            switch (aRxInfo.mMessage.ReadCslClockAccuracyTlv(cslAccuracy))
+            {
+            case kErrorNone:
+                break;
+            case kErrorNotFound:
+                cslAccuracy.Init(); // Use worst-case values if TLV is not found
+                break;
+            default:
+                ExitNow(error = kErrorParse);
+            }
+
+            Get<Mac::Mac>().SetCslParentAccuracy(cslAccuracy);
+        }
+#endif
     }
     else if (TimerMilli::GetNow() - child->GetLastHeard() < kParentRequestRouterTimeout - kParentRequestDuplicateMargin)
     {
@@ -1452,10 +1497,38 @@ void MleRouter::HandleParentRequest(RxInfo &aRxInfo)
         child->SetTimeout(Time::MsecToSec(kChildIdRequestTimeout));
     }
 
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    if (mCslPeripheralAttachState == kPeripheralAwaitParentRequest)
+    {
+        mWakeupTxScheduler.Stop();
+        mCslPeripheralAttachState = kPeripheralAttached;
+        SetCslPeripheral(child);
+        child->SetTimeout(Time::MsecToSec(kWorChildIdRequestTimeout));
+
+        if (!IsRxOnWhenIdle())
+        {
+            Get<MeshForwarder>().SetRxOnWhenIdle(false);
+        }
+
+        Get<Mac::Mac>().UpdateCsl();
+    }
+#endif
+
     aRxInfo.mClass = RxInfo::kPeerMessage;
     ProcessKeySequence(aRxInfo);
 
-    SendParentResponse(child, challenge, !ScanMaskTlv::IsEndDeviceFlagSet(scanMask));
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    if (!aRxInfo.mMessageInfo.GetSockAddr().IsMulticast())
+    {
+        delay = 0;
+    }
+    else
+#endif
+    {
+        delay = ScanMaskTlv::IsEndDeviceFlagSet(scanMask) ? kParentResponseMaxDelayAll : kParentResponseMaxDelayRouters;
+    }
+
+    SendParentResponse(child, challenge, delay);
 
 exit:
     LogProcessError(kTypeParentRequest, error);
@@ -1581,7 +1654,10 @@ void MleRouter::HandleTimeTick(void)
     // update children state
     for (Child &child : Get<ChildTable>().Iterate(Child::kInStateAnyExceptInvalid))
     {
-        uint32_t timeout = 0;
+        uint32_t timeout         = 0;
+        bool     checkTimeout    = true;
+        bool     checkCslTimeout = true;
+        OT_UNUSED_VARIABLE(checkCslTimeout);
 
         switch (child.GetState())
         {
@@ -1602,16 +1678,37 @@ void MleRouter::HandleTimeTick(void)
         }
 
 #if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
-        if (child.IsCslSynchronized() &&
-            TimerMilli::GetNow() - child.GetCslLastHeard() >= Time::SecToMsec(child.GetCslTimeout()))
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+        if (IsCslPeripheralPresent())
         {
-            LogInfo("Child CSL synchronization expired");
-            child.SetCslSynchronized(false);
-            Get<CslTxScheduler>().Update();
+            // For enhanced CSL links:
+            // - never check the CSL timeout
+            // - check the child timeout only until the child supervision mechanism is established
+            checkCslTimeout = false;
+            checkTimeout    = (child.GetSupervisionInterval() == 0);
         }
 #endif
 
-        if (TimerMilli::GetNow() - child.GetLastHeard() >= timeout)
+        if (checkCslTimeout && child.IsCslSynchronized())
+        {
+            if (TimerMilli::GetNow() - child.GetCslLastHeard() >= Time::SecToMsec(child.GetCslTimeout()))
+            {
+                LogInfo("Child CSL synchronization expired");
+                child.SetCslSynchronized(false);
+                child.SetCslPrevSnValid(false);
+                Get<CslTxScheduler>().Update();
+            }
+            else
+            {
+                // Thread 1.3 specification, section 4.6.3. Timing Out Children:
+                // "Rx-off-when-idle SSED Children and Parents do not need to send specific keep-alive
+                // messages as long as the link is CSL synchronized."
+                checkTimeout = false;
+            }
+        }
+#endif
+
+        if (checkTimeout && TimerMilli::GetNow() - child.GetLastHeard() >= timeout)
         {
             LogInfo("Child timeout expired");
             RemoveNeighbor(child);
@@ -1700,12 +1797,11 @@ exit:
     return;
 }
 
-void MleRouter::SendParentResponse(Child *aChild, const RxChallenge &aChallenge, bool aRoutersOnlyRequest)
+void MleRouter::SendParentResponse(Child *aChild, const RxChallenge &aChallenge, uint16_t aDelayMs)
 {
     Error        error = kErrorNone;
     Ip6::Address destination;
     TxMessage   *message;
-    uint16_t     delay;
 
     VerifyOrExit((message = NewMleMessage(kCommandParentResponse)) != nullptr, error = kErrorNoBufs);
     message->SetDirectTransmission();
@@ -1729,16 +1825,20 @@ void MleRouter::SendParentResponse(Child *aChild, const RxChallenge &aChallenge,
 #endif
     aChild->GenerateChallenge();
     SuccessOrExit(error = message->AppendChallengeTlv(aChild->GetChallenge()));
-    SuccessOrExit(error = message->AppendLinkMarginTlv(aChild->GetLinkInfo().GetLinkMargin()));
-    SuccessOrExit(error = message->AppendConnectivityTlv());
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    if (!IsCslPeripheralPresent())
+#endif
+    {
+        SuccessOrExit(error = message->AppendLinkMarginTlv(aChild->GetLinkInfo().GetLinkMargin()));
+        SuccessOrExit(error = message->AppendConnectivityTlv());
+    }
+
     SuccessOrExit(error = message->AppendVersionTlv());
 
     destination.SetToLinkLocalAddress(aChild->GetExtAddress());
 
-    delay = 1 + Random::NonCrypto::GetUint16InRange(0, aRoutersOnlyRequest ? kParentResponseMaxDelayRouters
-                                                                           : kParentResponseMaxDelayAll);
-
-    SuccessOrExit(error = message->SendAfterDelay(destination, delay));
+    SuccessOrExit(error = message->SendAfterDelay(destination, aDelayMs));
 
     Log(kMessageDelay, kTypeParentResponse, destination);
 
@@ -2352,6 +2452,7 @@ void MleRouter::HandleChildUpdateRequest(RxInfo &aRxInfo)
         {
             // Clear CSL synchronization state
             child->SetCslSynchronized(false);
+            child->SetCslPrevSnValid(false);
         }
 #endif
 
@@ -2687,6 +2788,9 @@ void MleRouter::HandleDiscoveryRequest(RxInfo &aRxInfo)
 
     // only Routers and REEDs respond
     VerifyOrExit(IsRouterEligible(), error = kErrorInvalidState);
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    VerifyOrExit(IsRxOnWhenIdle(), error = kErrorInvalidState); // Ignore Discovery Request for Sleepy Router
+#endif
 
     SuccessOrExit(error = Tlv::FindTlvValueStartEndOffsets(aRxInfo.mMessage, Tlv::kDiscovery, offset, end));
 
@@ -2908,6 +3012,12 @@ Error MleRouter::SendChildIdResponse(Child &aChild)
     if (aChild.IsTimeSyncEnabled())
     {
         message->SetTimeSync(true);
+    }
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    if (IsCslPeripheralPresent())
+    {
+        Get<Mac::Mac>().UpdateCsl();
     }
 #endif
 
@@ -3258,6 +3368,15 @@ void MleRouter::RemoveNeighbor(Neighbor &aNeighbor)
     aNeighbor.SetState(Neighbor::kStateInvalid);
 #if OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
     aNeighbor.RemoveAllForwardTrackingSeriesInfo();
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    if (&aNeighbor == GetCslPeripheral())
+    {
+        mCslPeripheralAttachState = kPeripheralDetached;
+        Get<Mac::Mac>().UpdateCsl();
+        SetCslPeripheral(nullptr);
+        LogInfo("CSL peripheral detached");
+    }
 #endif
 
 exit:
@@ -4001,6 +4120,7 @@ exit:
 }
 #endif // OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
 
+
 //----------------------------------------------------------------------------------------------------------------------
 // RouterRoleTransition
 
@@ -4026,7 +4146,6 @@ bool MleRouter::RouterRoleTransition::HandleTimeTick(void)
 exit:
     return expired;
 }
-
 } // namespace Mle
 } // namespace ot
 

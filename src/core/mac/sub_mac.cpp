@@ -61,6 +61,9 @@ SubMac::SubMac(Instance &aInstance)
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     , mCslTimer(aInstance, SubMac::HandleCslTimer)
 #endif
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    , mWorTimer(aInstance, SubMac::HandleWorTimer)
+#endif
 {
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     mCslParentAccuracy.Init();
@@ -96,13 +99,21 @@ void SubMac::Init(void)
     mTimer.Stop();
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-    mCslPeriod     = 0;
-    mCslChannel    = 0;
-    mCslPeerShort  = 0;
+    mCslPeriod    = 0;
+    mCslChannel   = 0;
+    mCslPeerShort = 0;
+    mCslPeerExt.Clear();
     mIsCslSampling = false;
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    mWedPresent = false;
+#endif
     mCslSampleTime = TimeMicro{0};
     mCslLastSync   = TimeMicro{0};
     mCslTimer.Stop();
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    mWorInterval = 0;
+    mWorTimer.Stop();
 #endif
 }
 
@@ -217,6 +228,9 @@ Error SubMac::Disable(void)
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     mCslTimer.Stop();
 #endif
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    mWorTimer.Stop();
+#endif
 
     mTimer.Stop();
     SuccessOrExit(error = Get<Radio>().Sleep());
@@ -297,6 +311,13 @@ void SubMac::CslSample(void)
 exit:
     return;
 }
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+void SubMac::WedPresent(bool aPresent)
+{
+    mWedPresent = aPresent;
+}
+#endif
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
 #if OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE
@@ -372,8 +393,14 @@ void SubMac::HandleReceiveDone(RxFrame *aFrame, Error aError)
 #if OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE
         LogReceived(aFrame);
 #endif
+        bool shouldSync = (mCslPeriod > 0) && aFrame->mInfo.mRxInfo.mAckedWithSecEnhAck;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        shouldSync = shouldSync || (aFrame->GetHeaderIe(CstIe::kHeaderIeId) != nullptr);
+#endif
+
         // Assuming the risk of the parent missing the Enh-ACK in favor of smaller CSL receive window
-        if ((mCslPeriod > 0) && aFrame->mInfo.mRxInfo.mAckedWithSecEnhAck)
+        if (shouldSync)
         {
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_LOCAL_TIME_SYNC
             mCslLastSync = TimerMicro::GetNow();
@@ -456,8 +483,23 @@ void SubMac::ProcessTransmitSecurity(void)
         mTransmitFrame.SetKeyId(mKeyId);
     }
 
-    VerifyOrExit(ShouldHandleTransmitSecurity());
-    VerifyOrExit(keyIdMode == Frame::kKeyIdMode1);
+    VerifyOrExit(ShouldHandleTransmitSecurity()
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+                 // TODO: Support Multipurpose Frame encryption in radio
+                 || (mTransmitFrame.GetType() == Frame::kTypeMultipurpose)
+#endif
+    );
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    if (mTransmitFrame.IsWakeupFrame())
+    {
+        VerifyOrExit(keyIdMode == Frame::kKeyIdMode2);
+    }
+    else
+#endif
+    {
+        VerifyOrExit(keyIdMode == Frame::kKeyIdMode1);
+    }
 
     mTransmitFrame.SetAesKey(GetCurrentMacKey());
 
@@ -638,14 +680,15 @@ void SubMac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aErro
             mCallbacks.RecordCcaStatus(ccaSuccess, aFrame.GetChannel());
         }
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-        // Actual synchronization timestamp should be from the sent frame instead of the current time.
-        // Assuming the error here since it is bounded and has very small effect on the final window duration.
         if (aAckFrame != nullptr && aFrame.GetHeaderIe(CslIe::kHeaderIeId) != nullptr)
         {
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_LOCAL_TIME_SYNC
             mCslLastSync = TimerMicro::GetNow();
 #else
-            mCslLastSync = TimeMicro(static_cast<uint32_t>(otPlatRadioGetNow(&GetInstance())));
+            // Calculate transmitted frame timestamp based on ACK timestamp
+            mCslLastSync = TimeMicro(static_cast<uint32_t>(aAckFrame->mInfo.mRxInfo.mTimestamp));
+            mCslLastSync -= kAifsDuration;
+            mCslLastSync -= aFrame.GetLength() * kOctetDuration;
 #endif
         }
 #endif
@@ -724,6 +767,16 @@ void SubMac::SignalFrameCounterUsedOnTxDone(const TxFrame &aFrame)
     bool     allowError = false;
 
     OT_UNUSED_VARIABLE(allowError);
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    if (aFrame.GetType() == Frame::kTypeMultipurpose && aFrame.GetFrameCounter(frameCounter) == kErrorNone)
+    {
+        // As long as Multipurpose frames are encrypted at the sub-mac layer, we have to
+        // update the frame counter used by the radio driver after Multipurpose frame TX.
+        // TODO: Support Multipurpose Frame encryption in radio
+        Get<Radio>().SetMacFrameCounter(frameCounter + 1);
+    }
+#endif
 
     VerifyOrExit(!ShouldHandleTransmitSecurity() && aFrame.GetSecurityEnabled() && aFrame.IsHeaderUpdated());
 
@@ -1144,30 +1197,48 @@ const char *SubMac::StateToString(State aState)
 // CSL Receiver methods
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-bool SubMac::UpdateCsl(uint16_t aPeriod, uint8_t aChannel, otShortAddress aShortAddr, const otExtAddress *aExtAddr)
+bool SubMac::UpdateCsl(uint16_t            aPeriod,
+                       uint8_t             aChannel,
+                       otShortAddress      aShortAddr,
+                       const otExtAddress *aExtAddr,
+                       uint32_t           &aSampleTime)
 {
     bool diffPeriod  = aPeriod != mCslPeriod;
     bool diffChannel = aChannel != mCslChannel;
-    bool diffPeer    = aShortAddr != mCslPeerShort;
-    bool retval      = diffPeriod || diffChannel || diffPeer;
+    bool diffShort   = aShortAddr != mCslPeerShort;
+    bool diffExt     = AsCoreType(aExtAddr) != mCslPeerExt;
+    bool diffTime    = aSampleTime != 0;
+    bool retval      = diffPeriod || diffChannel || diffShort || diffExt || diffTime;
 
     VerifyOrExit(retval);
     mCslChannel = aChannel;
 
-    VerifyOrExit(diffPeriod || diffPeer);
+    VerifyOrExit(diffPeriod || diffShort || diffExt || diffTime);
     mCslPeriod    = aPeriod;
     mCslPeerShort = aShortAddr;
+    mCslPeerExt   = AsCoreType(aExtAddr);
     IgnoreError(Get<Radio>().EnableCsl(aPeriod, aShortAddr, aExtAddr));
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    // TODO: Rethink API for enabling CST. For now, enable it with CSL.
+    if (mWedPresent)
+    {
+        IgnoreError(Get<Radio>().EnableCst(aPeriod, aShortAddr, aExtAddr));
+    }
+#endif
+
+    // Only modify the sample time when CSL period or sample time change
+    VerifyOrExit(diffPeriod || diffTime);
 
     mCslTimer.Stop();
+    mIsCslSampling = false;
+
     if (mCslPeriod > 0)
     {
-        mCslSampleTime = TimeMicro(static_cast<uint32_t>(otPlatRadioGetNow(&GetInstance())));
-        mIsCslSampling = false;
-        HandleCslTimer();
+        RestartCslTimer(TimeMicro(aSampleTime));
     }
 
 exit:
+    aSampleTime = mCslSampleTime.GetValue();
     return retval;
 }
 
@@ -1210,15 +1281,16 @@ void SubMac::HandleCslTimer(void)
      *          sample                   sleep                        sample                    sleep
      *
      */
-    uint32_t periodUs = mCslPeriod * kUsPerTenSymbols;
-    uint32_t timeAhead, timeAfter, winStart, winDuration;
+    uint32_t  periodUs = mCslPeriod * kUsPerTenSymbols;
+    uint32_t  timeAhead, timeAfter, winStart, winDuration;
+    TimeMicro nextFireTime, now, radioNow;
 
     GetCslWindowEdges(timeAhead, timeAfter);
 
     if (mIsCslSampling)
     {
         mIsCslSampling = false;
-        mCslTimer.FireAt(mCslSampleTime - timeAhead);
+        nextFireTime   = mCslSampleTime - timeAhead;
         if (mState == kStateCslSample)
         {
 #if !OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE
@@ -1231,13 +1303,13 @@ void SubMac::HandleCslTimer(void)
     {
         if (RadioSupportsReceiveTiming())
         {
-            mCslTimer.FireAt(mCslSampleTime - timeAhead + periodUs);
+            nextFireTime = mCslSampleTime - timeAhead + periodUs;
             timeAhead -= kCslReceiveTimeAhead;
             winStart = mCslSampleTime.GetValue() - timeAhead;
         }
         else
         {
-            mCslTimer.FireAt(mCslSampleTime + timeAfter);
+            nextFireTime   = mCslSampleTime + timeAfter;
             mIsCslSampling = true;
             winStart       = ot::TimerMicro::GetNow().GetValue();
         }
@@ -1246,12 +1318,21 @@ void SubMac::HandleCslTimer(void)
         mCslSampleTime += periodUs;
 
         Get<Radio>().UpdateCslSampleTime(mCslSampleTime.GetValue());
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+        // TODO: Rethink API for configuring CST. For now, set CST sample time to CSL sample time + period/2
+        if (mWedPresent)
+        {
+            Get<Radio>().UpdateCstSampleTime(mCslSampleTime.GetValue() + periodUs / 2);
+        }
+#endif
 
         // Schedule reception window for any state except RX - so that CSL RX Window has lower priority
         // than scanning or RX after the data poll.
         if (RadioSupportsReceiveTiming() && (mState != kStateDisabled) && (mState != kStateReceive))
         {
-            IgnoreError(Get<Radio>().ReceiveAt(mCslChannel, winStart, winDuration));
+            mCslWinStart = winStart;
+            mCslWinDur   = winDuration;
+            IgnoreError(Get<Radio>().ReceiveAt(mCslChannel, winStart, winDuration, kCslSlotId));
         }
         else if (mState == kStateCslSample)
         {
@@ -1260,6 +1341,47 @@ void SubMac::HandleCslTimer(void)
 
         LogDebg("CSL window start %lu, duration %lu", ToUlong(winStart), ToUlong(winDuration));
     }
+
+    /*
+     * Convert the next timer fire time from the radio to the host domain.
+     * The host and the radio time may be different when the radio runs on a different core or
+     * a different device.
+     */
+    radioNow     = TimeMicro(static_cast<uint32_t>(otPlatRadioGetNow(&GetInstance())));
+    now          = TimerMicro::GetNow();
+    nextFireTime = (nextFireTime >= radioNow) ? now + (nextFireTime - radioNow) : now;
+
+    mCslTimer.FireAt(nextFireTime);
+}
+
+void SubMac::RestartCslTimer(TimeMicro aSampleTime)
+{
+    uint32_t timeAhead;
+    uint32_t timeAfter;
+    GetCslWindowEdges(timeAhead, timeAfter);
+
+    const uint32_t periodUs = mCslPeriod * kUsPerTenSymbols;
+    TimeMicro      radioNow = TimeMicro(static_cast<uint32_t>(otPlatRadioGetNow(&GetInstance())));
+
+    if (aSampleTime.GetValue())
+    {
+        mCslSampleTime = TimeMicro::SoonestPeriodicEvent(radioNow, aSampleTime - timeAhead, periodUs) + timeAhead;
+    }
+    else
+    {
+        mCslSampleTime = radioNow + periodUs;
+    }
+
+    Get<Radio>().UpdateCslSampleTime(mCslSampleTime.GetValue());
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    // TODO: Rethink API for configuring CST. For now, set CST sample time to CSL sample time + period/2
+    if (mWedPresent)
+    {
+        Get<Radio>().UpdateCstSampleTime(mCslSampleTime.GetValue() + periodUs / 2);
+    }
+#endif
+
+    mCslTimer.Start(mCslSampleTime - timeAhead - radioNow);
 }
 
 void SubMac::GetCslWindowEdges(uint32_t &aAhead, uint32_t &aAfter)
@@ -1283,7 +1405,83 @@ void SubMac::GetCslWindowEdges(uint32_t &aAhead, uint32_t &aAfter)
     aAhead = Min(semiPeriod, semiWindow + kMinReceiveOnAhead + kCslReceiveTimeAhead);
     aAfter = Min(semiPeriod, semiWindow + kMinReceiveOnAfter);
 }
+
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+void SubMac::UpdateWor(uint16_t aInterval, uint16_t aDuration, uint8_t aChannel)
+{
+    OT_ASSERT(RadioSupportsReceiveTiming());
+
+    VerifyOrExit(aInterval != mWorInterval || aDuration != mWorDuration || aChannel != mWorChannel);
+
+    mWorInterval = aInterval;
+    mWorDuration = aDuration;
+    mWorChannel  = aChannel;
+    mWorTimer.Stop();
+
+    if (mWorInterval > 0)
+    {
+        mWorSampleTime = TimeMicro(otPlatRadioGetNow(&GetInstance())) + kCslReceiveTimeAhead;
+        HandleWorTimer();
+    }
+
+exit:
+    return;
+}
+
+void SubMac::HandleWorTimer(Timer &aTimer) { aTimer.Get<SubMac>().HandleWorTimer(); }
+
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+uint16_t SubMac::GetNeededShift(uint32_t aCslStart)
+{
+    // Apply margin to every edge
+    uint32_t x1 = mWorSampleTime.GetValue() - kWorOverlapMargin;
+    uint32_t x2 = mWorSampleTime.GetValue() + mWorDuration + kWorOverlapMargin;
+    uint32_t y1 = aCslStart - kWorOverlapMargin;
+    uint32_t y2 = aCslStart + mCslWinDur + kWorOverlapMargin;
+
+    if (x2 < y1 || y2 < x1)
+    {
+        // WoR:                                   x1-#####################################-x2
+        // CSL:   y1-################-y2
+        return 0;
+    }
+    else
+    {
+        // WoR:              x1-#####################################-x2
+        // CSL:   y1-################-y2
+        //
+        // WoR:   x1-#####################################-x2
+        // CSL:                                  y1-################-y2
+        return y2 - x1;
+    }
+}
+#endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
+void SubMac::HandleWorTimer(void)
+{
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+    // Shift WoR receive slot if it overlaps with regular CSL receive windows
+
+    // Shift will come either from the overlap with the currently scheduled CSL slot or with the next one, but
+    // not from both (thus we can sum here assuming one is 0)
+    uint16_t shift = GetNeededShift(mCslWinStart) + GetNeededShift(mCslWinStart + mCslPeriod * kUsPerTenSymbols);
+    if (shift)
+    {
+        mWorSampleTime += shift;
+        LogDebg("WoR slot delayed %u us", shift);
+    }
+#endif
+
+    if (mState != kStateDisabled)
+    {
+        IgnoreError(Get<Radio>().ReceiveAt(mWorChannel, mWorSampleTime.GetValue(), mWorDuration, kWorSlotId));
+    }
+    mWorSampleTime += mWorInterval * kUsPerTenSymbols;
+    mWorTimer.FireAt(mWorSampleTime - kCslReceiveTimeAhead);
+}
+#endif // OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
 
 } // namespace Mac
 } // namespace ot

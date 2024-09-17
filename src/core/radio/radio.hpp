@@ -51,14 +51,24 @@ namespace ot {
 static constexpr uint32_t kUsPerTenSymbols = OT_US_PER_TEN_SYMBOLS; ///< Time for 10 symbols in units of microseconds
 static constexpr uint32_t kRadioHeaderShrDuration = 160;            ///< Duration of SHR in us
 static constexpr uint32_t kRadioHeaderPhrDuration = 32;             ///< Duration of PHR in us
+static constexpr uint32_t kAifsDuration           = 192;            ///< Duration of AIFS in us
+static constexpr uint32_t kOctetDuration          = 32;             ///< Duration of one octed in us
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
 /**
- * Minimum CSL period supported in units of 10 symbols.
+ * Minimum CSL/WoR period supported in units of 10 symbols.
  *
  */
 static constexpr uint64_t kMinCslPeriod  = OPENTHREAD_CONFIG_MAC_CSL_MIN_PERIOD * 1000 / kUsPerTenSymbols;
 static constexpr uint64_t kMaxCslTimeout = OPENTHREAD_CONFIG_MAC_CSL_MAX_TIMEOUT;
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+/**
+ * Minimum WoR duration supported in us.
+ *
+ */
+static constexpr uint32_t kMinWorDuration = 100;
 #endif
 
 /**
@@ -502,6 +512,22 @@ public:
      */
     Error Receive(uint8_t aChannel);
 
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    /**
+     * Schedules a radio reception window at a specific time and duration.
+     *
+     * @param[in]  aChannel   The radio channel on which to receive.
+     * @param[in]  aStart     The receive window start time, in microseconds.
+     * @param[in]  aDuration  The receive window duration, in microseconds.
+     * @param[in]  aSlotId    The receive window slotID.
+     *
+     * @retval kErrorNone    Successfully scheduled receive window.
+     * @retval kErrorFailed  The receive window could not be scheduled.
+     *
+     */
+    Error ReceiveAt(uint8_t aChannel, uint32_t aStart, uint32_t aDuration, uint8_t aSlotId);
+#endif
+
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     /**
      * Updates the CSL sample time in radio.
@@ -510,19 +536,6 @@ public:
      *
      */
     void UpdateCslSampleTime(uint32_t aCslSampleTime);
-
-    /**
-     * Schedules a radio reception window at a specific time and duration.
-     *
-     * @param[in]  aChannel   The radio channel on which to receive.
-     * @param[in]  aStart     The receive window start time, in microseconds.
-     * @param[in]  aDuration  The receive window duration, in microseconds.
-     *
-     * @retval kErrorNone    Successfully scheduled receive window.
-     * @retval kErrorFailed  The receive window could not be scheduled.
-     *
-     */
-    Error ReceiveAt(uint8_t aChannel, uint32_t aStart, uint32_t aDuration);
 
     /**
      * Enables CSL sampling in radio.
@@ -549,6 +562,32 @@ public:
      *
      */
     Error ResetCsl(void);
+#endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    /**
+     * This method updates the CST sample time in radio.
+     *
+     * @param[in]  aCstSampleTime  The CST sample time.
+     *
+     */
+    void UpdateCstSampleTime(uint32_t aCstSampleTime);
+
+    /**
+     * This method enables CST sampling in radio.
+     *
+     * @param[in]  aCstPeriod    CST period, 0 for disabling CST.
+     * @param[in]  aShortAddr    The short source address of peer CSL receiver.
+     * @param[in]  aExtAddr      The extended source address of peer CSL receiver.
+     *
+     * @note Platforms should use peer CSL receiver addresses to include CST IE when generating enhanced acks.
+     *
+     * @retval  kErrorNotImplemented Radio driver doesn't support CST.
+     * @retval  kErrorFailed         Other platform specific errors.
+     * @retval  kErrorNone           Successfully enabled or disabled CST.
+     *
+     */
+    Error EnableCst(uint32_t aCstPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr);
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
@@ -948,15 +987,10 @@ inline Error Radio::Receive(uint8_t aChannel)
     return otPlatRadioReceive(GetInstancePtr(), aChannel);
 }
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-inline void Radio::UpdateCslSampleTime(uint32_t aCslSampleTime)
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+inline Error Radio::ReceiveAt(uint8_t aChannel, uint32_t aStart, uint32_t aDuration, uint8_t aSlotId)
 {
-    otPlatRadioUpdateCslSampleTime(GetInstancePtr(), aCslSampleTime);
-}
-
-inline Error Radio::ReceiveAt(uint8_t aChannel, uint32_t aStart, uint32_t aDuration)
-{
-    Error error = otPlatRadioReceiveAt(GetInstancePtr(), aChannel, aStart, aDuration);
+    Error error = otPlatRadioReceiveAt(GetInstancePtr(), aChannel, aStart, aDuration, aSlotId);
 #if OPENTHREAD_CONFIG_RADIO_STATS_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
     if (error == kErrorNone)
     {
@@ -965,6 +999,13 @@ inline Error Radio::ReceiveAt(uint8_t aChannel, uint32_t aStart, uint32_t aDurat
 #endif
     return error;
 }
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+inline void Radio::UpdateCslSampleTime(uint32_t aCslSampleTime)
+{
+    otPlatRadioUpdateCslSampleTime(GetInstancePtr(), aCslSampleTime);
+}
 
 inline Error Radio::EnableCsl(uint32_t aCslPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr)
 {
@@ -972,6 +1013,18 @@ inline Error Radio::EnableCsl(uint32_t aCslPeriod, otShortAddress aShortAddr, co
 }
 
 inline Error Radio::ResetCsl(void) { return otPlatRadioResetCsl(GetInstancePtr()); }
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+inline void Radio::UpdateCstSampleTime(uint32_t aCstSampleTime)
+{
+    otPlatRadioUpdateCstSampleTime(GetInstancePtr(), aCstSampleTime);
+}
+
+inline Error Radio::EnableCst(uint32_t aCstPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr)
+{
+    return otPlatRadioEnableCst(GetInstancePtr(), aCstPeriod, aShortAddr, aExtAddr);
+}
 #endif
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
@@ -1072,7 +1125,7 @@ inline Error Radio::Receive(uint8_t) { return kErrorNone; }
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 inline void Radio::UpdateCslSampleTime(uint32_t) {}
 
-inline Error Radio::ReceiveAt(uint8_t, uint32_t, uint32_t) { return kErrorNone; }
+inline Error Radio::ReceiveAt(uint8_t, uint32_t, uint32_t, uint8_t) { return kErrorNone; }
 
 inline Error Radio::EnableCsl(uint32_t, otShortAddress aShortAddr, const otExtAddress *)
 {
@@ -1080,6 +1133,15 @@ inline Error Radio::EnableCsl(uint32_t, otShortAddress aShortAddr, const otExtAd
 }
 
 inline Error Radio::ResetCsl(void) { return kErrorNotImplemented; }
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+inline void Radio::UpdateCstSampleTime(uint32_t aCstSampleTime) {}
+
+inline Error Radio::EnableCst(uint32_t aCstPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr)
+{
+    return kErrorNone;
+}
 #endif
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE

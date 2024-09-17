@@ -131,6 +131,7 @@ Done
 - [uptime](#uptime)
 - [vendor](#vendor-name)
 - [version](#version)
+- [wor](#wor)
 
 ## OpenThread Command Details
 
@@ -4098,3 +4099,117 @@ Done
 Factory Diagnostics module is enabled only when building OpenThread with `OPENTHREAD_CONFIG_DIAG_ENABLE=1` option. Go [diagnostics module][diag] for more information.
 
 [diag]: ../../src/core/diags/README.md
+
+### wakeupchannel
+
+Get the wake-up channel.
+
+```bash
+> wakeupchannel
+12
+Done
+```
+
+### wakeupchannel \<channel\>
+
+Set the wake-up channel.
+
+```bash
+> wakeupchannel 12
+Done
+```
+
+### wor
+
+Get the Wake on Radio configuration.
+
+`OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE` is required.
+
+```bash
+> wor
+Channel: 12
+Interval: 6250 (in units of 10 symbols), 1000ms
+Duration: 8000us
+Done
+```
+
+### wor enable
+
+Enable Wake on Radio feature.
+
+`OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE` is required.
+
+```bash
+> wor enable
+Done
+```
+
+### wor disable
+
+Disable Wake on Radio feature.
+
+`OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE` is required.
+
+```bash
+> wor disable
+Done
+```
+
+### wor state
+
+Shows the Wake on Radio link state, among `disabled`, `enabled` (only for WED), `linking` and `linked`.
+
+`OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE` or `OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE` are required.
+
+```bash
+> wor state
+linked
+Done
+```
+
+### wor interval \<interval\>
+
+Set WoR interval in units of 10 symbols. Disable WoR by setting this parameter to `0`.
+
+`OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE` is required.
+
+```bash
+> wor interval 6250
+Done
+```
+
+### wor duration \<duration\>
+
+Set the WoR duration in micro seconds.
+
+`OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE` is required.
+
+```bash
+> wor duration 8000
+Done
+```
+
+### wor attach \<extaddr\> \<wakeupinterval\> \<wakeupduration\>
+
+Attaches a Wake On Radio (CSL peripheral) end device.
+
+- extaddr: Extended Address of attached device
+- wakeupinterval: interval between wake-up frames (in microseconds)
+- wakeupduration: duration of wake-up sequence (in milliseconds)
+
+`OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE` is required.
+
+```bash
+> wor attach 1ece0a6c4653a7c1 8000 1000
+Done
+```
+### wor detach
+
+Detaches a Wake On Radio (CSL peripheral) end device.
+
+`OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE` or `OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE` are required.
+
+```bash
+> wor detach
+Done
+```

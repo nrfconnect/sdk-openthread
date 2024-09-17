@@ -124,6 +124,9 @@ MeshForwarder::MeshForwarder(Instance &aInstance)
     , mIndirectSender(aInstance)
 #endif
     , mDataPollSender(aInstance)
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    , mEnhCslSender(aInstance)
+#endif
 {
     mFragTag = Random::NonCrypto::GetUint16();
 
@@ -724,16 +727,33 @@ void MeshForwarder::SetRxOnWhenIdle(bool aRxOnWhenIdle)
 {
     Get<Mac::Mac>().SetRxOnWhenIdle(aRxOnWhenIdle);
 
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    // Data polls not allowed in enhanced CSL mode
+    if (!Get<Mle::Mle>().IsCslCentralPresent())
+#endif
+    {
+        if (aRxOnWhenIdle)
+        {
+            mDataPollSender.StopPolling();
+        }
+        else
+        {
+            mDataPollSender.StartPolling();
+        }
+    }
+
     if (aRxOnWhenIdle)
     {
-        mDataPollSender.StopPolling();
         Get<SupervisionListener>().Stop();
     }
     else
     {
-        mDataPollSender.StartPolling();
         Get<SupervisionListener>().Start();
     }
+
+    ExitNow();
+exit:
+    return;
 }
 
 void MeshForwarder::GetMacSourceAddress(const Ip6::Address &aIp6Addr, Mac::Address &aMacAddr)
@@ -797,7 +817,11 @@ Mac::TxFrame *MeshForwarder::HandleFrameRequest(Mac::TxFrames &aTxFrames)
             VerifyOrExit(frame != nullptr);
         }
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-        else if (Get<Mac::Mac>().IsCslEnabled() && mSendMessage->IsSubTypeMle())
+        else if (Get<Mac::Mac>().IsCslEnabled() && mSendMessage->IsSubTypeMle()
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+            && !Get<Mac::Mac>().IsCstEnabled()
+#endif
+        )
         {
             mSendMessage->SetLinkSecurityEnabled(true);
         }
@@ -862,7 +886,7 @@ void MeshForwarder::PrepareMacHeaders(Mac::TxFrame             &aFrame,
     bool                iePresent;
     Mac::Frame::Version version;
 
-    iePresent = CalcIePresent(aMessage);
+    iePresent = CalcIePresent(aMessage, aMacAddrs.mDestination);
     version   = CalcFrameVersion(Get<NeighborTable>().FindNeighbor(aMacAddrs.mDestination), iePresent);
 
     aFrame.InitMacHeader(aFrameType, version, aMacAddrs, aPanIds, aSecurityLevel, aKeyIdMode);
@@ -1081,7 +1105,12 @@ start:
 
     if (nextOffset < aMessage.GetLength())
     {
-        aFrame.SetFramePending(true);
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        if (!Get<Mle::Mle>().IsCslCentralPresent())
+#endif
+        {
+            aFrame.SetFramePending(true);
+        }
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
         aMessage.SetTimeSync(false);
 #endif
@@ -1378,7 +1407,16 @@ void MeshForwarder::HandleReceivedFrame(Mac::RxFrame &aFrame)
 
     frameData.Init(aFrame.GetPayload(), aFrame.GetPayloadLength());
 
-    Get<SupervisionListener>().UpdateOnReceive(macAddrs.mSource, linkInfo.IsLinkSecurityEnabled());
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    if (Get<Mle::Mle>().IsCslCentralPresent() && (aFrame.GetHeaderIe(Mac::CstIe::kHeaderIeId) == nullptr))
+    {
+        // Don't update supervision if attached to WC but incoming frame doesn't contain CST IEs
+    }
+    else
+#endif
+    {
+        Get<SupervisionListener>().UpdateOnReceive(macAddrs.mSource, linkInfo.IsLinkSecurityEnabled());
+    }
 
     switch (aFrame.GetType())
     {
@@ -1737,23 +1775,30 @@ exit:
 }
 #endif
 
-bool MeshForwarder::CalcIePresent(const Message *aMessage)
+bool MeshForwarder::CalcIePresent(const Message *aMessage, const Mac::Address &aMacDest)
 {
     bool iePresent = false;
+    bool neighborPresent = false;
 
     OT_UNUSED_VARIABLE(aMessage);
+    OT_UNUSED_VARIABLE(aMacDest);
+    OT_UNUSED_VARIABLE(neighborPresent);
 
 #if OPENTHREAD_CONFIG_MAC_HEADER_IE_SUPPORT
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
     iePresent |= (aMessage != nullptr && aMessage->IsTimeSync());
 #endif
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    // Include CSL IE only when sending a frame to an existing neighbor.
+    neighborPresent = Get<NeighborTable>().FindNeighbor(aMacDest, Neighbor::kInStateAnyExceptInvalid) != nullptr;
+#endif
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-    if (!(aMessage != nullptr && aMessage->GetSubType() == Message::kSubTypeMleDiscoverRequest))
-    {
-        iePresent |= Get<Mac::Mac>().IsCslEnabled();
-    }
+    iePresent |= neighborPresent && Get<Mac::Mac>().IsCslEnabled();
 #endif
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    iePresent |= neighborPresent && Get<Mac::Mac>().IsCstEnabled();
 #endif
+#endif // OPENTHREAD_CONFIG_MAC_HEADER_IE_SUPPORT
 
     return iePresent;
 }
@@ -1765,6 +1810,11 @@ void MeshForwarder::AppendHeaderIe(const Message *aMessage, Mac::TxFrame &aFrame
     bool    iePresent = false;
     bool    payloadPresent =
         (aFrame.GetType() == Mac::Frame::kTypeMacCmd) || (aMessage != nullptr && aMessage->GetLength() != 0);
+    Mac::Address macDest;
+    bool         neighborPresent = false;
+
+    OT_UNUSED_VARIABLE(macDest);
+    OT_UNUSED_VARIABLE(neighborPresent);
 
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
     if (aMessage != nullptr && aMessage->IsTimeSync())
@@ -1773,11 +1823,24 @@ void MeshForwarder::AppendHeaderIe(const Message *aMessage, Mac::TxFrame &aFrame
         iePresent = true;
     }
 #endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    neighborPresent = aFrame.GetDstAddr(macDest) == kErrorNone &&
+                      Get<NeighborTable>().FindNeighbor(macDest, Neighbor::kInStateAnyExceptInvalid) != nullptr;
+#endif
+
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-    if (Get<Mac::Mac>().IsCslEnabled())
+    if (neighborPresent && Get<Mac::Mac>().IsCslEnabled())
     {
         IgnoreError(aFrame.AppendHeaderIeAt<Mac::CslIe>(index));
         aFrame.SetCslIePresent(true);
+        iePresent = true;
+    }
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    if (neighborPresent && Get<Mac::Mac>().IsCstEnabled())
+    {
+        IgnoreError(aFrame.AppendHeaderIeAt<Mac::CstIe>(index));
         iePresent = true;
     }
 #endif

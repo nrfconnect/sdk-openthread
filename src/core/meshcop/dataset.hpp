@@ -177,6 +177,14 @@ public:
          *
          */
         bool IsChannelMaskPresent(void) const { return mIsChannelMaskPresent; }
+
+        /**
+         * This method indicates whether or not the Wake-up Channel is present in the Dataset.
+         *
+         * @returns TRUE if ake-up Channel is present, FALSE otherwise.
+         *
+         */
+        bool IsWakeupChannelPresent(void) const { return mIsWakeupChannelPresent; }
     };
 
     /**
@@ -478,6 +486,37 @@ public:
         {
             mChannel                      = aChannel;
             mComponents.mIsChannelPresent = true;
+        }
+
+        /**
+         * This method indicates whether or not the Wake-up Channel is present in the Dataset.
+         *
+         * @returns TRUE if Wake-up Channel is present, FALSE otherwise.
+         *
+         */
+        bool IsWakeupChannelPresent(void) const { return mComponents.mIsWakeupChannelPresent; }
+
+        /**
+         * This method gets the Wake-up Channel in the Dataset.
+         *
+         * This method MUST be used when Wake-up Channel component is present in the Dataset, otherwise its behavior is
+         * undefined.
+         *
+         * @returns The Wake-up Channel in the Dataset.
+         *
+         */
+        uint16_t GetWakeupChannel(void) const { return mWakeupChannel; }
+
+        /**
+         * This method sets the Wake-up Channel in the Dataset.
+         *
+         * @param[in] aChannel  A Wake-up Channel.
+         *
+         */
+        void SetWakeupChannel(uint16_t aChannel)
+        {
+            mWakeupChannel                      = aChannel;
+            mComponents.mIsWakeupChannelPresent = true;
         }
 
         /**

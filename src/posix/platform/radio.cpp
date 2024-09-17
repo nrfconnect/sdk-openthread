@@ -932,6 +932,57 @@ uint32_t otPlatRadioGetBusSpeed(otInstance *aInstance)
     return GetRadioSpinel().GetBusSpeed();
 }
 
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+otError otPlatRadioReceiveAt(otInstance *aInstance,
+                             uint8_t     aChannel,
+                             uint32_t    aStart,
+                             uint32_t    aDuration,
+                             uint8_t     aSlotId)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    return GetRadioSpinel().ReceiveAt(aChannel, aStart, aDuration, aSlotId);
+}
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+otError otPlatRadioEnableCsl(otInstance         *aInstance,
+                             uint32_t            aCslPeriod,
+                             otShortAddress      aShortAddr,
+                             const otExtAddress *aExtAddr)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    return GetRadioSpinel().EnableCsl(aCslPeriod, aShortAddr, aExtAddr);
+}
+
+void otPlatRadioUpdateCslSampleTime(otInstance *aInstance, uint32_t aCslSampleTime)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    SuccessOrDie(GetRadioSpinel().UpdateCslSampleTime(aCslSampleTime));
+}
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+otError otPlatRadioEnableCst(otInstance         *aInstance,
+                             uint32_t            aCstPeriod,
+                             otShortAddress      aShortAddr,
+                             const otExtAddress *aExtAddr)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    return GetRadioSpinel().EnableCst(aCstPeriod, aShortAddr, aExtAddr);
+}
+
+void otPlatRadioUpdateCstSampleTime(otInstance *aInstance, uint32_t aCstSampleTime)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    SuccessOrDie(GetRadioSpinel().UpdateCstSampleTime(aCstSampleTime));
+}
+#endif
+
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
 uint8_t otPlatRadioGetCslAccuracy(otInstance *aInstance)
 {
@@ -1032,15 +1083,6 @@ otError otPlatRadioConfigureEnhAckProbing(otInstance          *aInstance,
     return GetRadioSpinel().ConfigureEnhAckProbing(aLinkMetrics, aShortAddress, *aExtAddress);
 }
 #endif
-
-otError otPlatRadioReceiveAt(otInstance *aInstance, uint8_t aChannel, uint32_t aStart, uint32_t aDuration)
-{
-    OT_UNUSED_VARIABLE(aInstance);
-    OT_UNUSED_VARIABLE(aChannel);
-    OT_UNUSED_VARIABLE(aStart);
-    OT_UNUSED_VARIABLE(aDuration);
-    return OT_ERROR_NOT_IMPLEMENTED;
-}
 
 #if OPENTHREAD_CONFIG_PLATFORM_BOOTLOADER_MODE_ENABLE
 otError otPlatResetToBootloader(otInstance *aInstance)

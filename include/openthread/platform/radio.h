@@ -162,14 +162,17 @@ typedef uint16_t otShortAddress;
 enum
 {
     OT_IE_HEADER_SIZE               = 2,  ///< Size of IE header in bytes.
+    OT_THREAD_IE_SIZE               = 4,  ///< Size of Thread IE header in bytes.
     OT_CSL_IE_SIZE                  = 4,  ///< Size of CSL IE content in bytes.
+    OT_CST_IE_SIZE                  = 4,  ///< Size of CST IE content in bytes.
     OT_ACK_IE_MAX_SIZE              = 16, ///< Max length for header IE in ACK.
     OT_ENH_PROBING_IE_DATA_MAX_SIZE = 2,  ///< Max length of Link Metrics data in Vendor-Specific IE.
 };
 
 #define CSL_IE_HEADER_BYTES_LO 0x04 ///< Fixed CSL IE header first byte
 #define CSL_IE_HEADER_BYTES_HI 0x0d ///< Fixed CSL IE header second byte
-
+#define THREAD_IE_VENDOR_OUI 0xeab89b ///< Thread company OUI
+#define THREAD_IE_SUBTYPE_CST 0x02    ///< Thread IE subtype that denotes CST IE
 /**
  * @struct otExtAddress
  *
@@ -291,8 +294,9 @@ typedef struct otRadioFrame
              */
             uint32_t mTxDelay;
 
-            uint8_t mMaxCsmaBackoffs; ///< Maximum number of backoffs attempts before declaring CCA failure.
-            uint8_t mMaxFrameRetries; ///< Maximum number of retries allowed after a transmission failure.
+            uint8_t mMaxCsmaBackoffs;  ///< Maximum number of backoffs attempts before declaring CCA failure.
+            uint8_t mMaxFrameRetries;  ///< Maximum number of retries allowed after a transmission failure.
+            uint8_t mExtraCcaAttempts; ///< Extra number of CCA attempts before reporting busy channel.
 
             /**
              * The RX channel after frame TX is done (after all frame retries - ack received, or timeout, or abort).
@@ -833,11 +837,16 @@ otError otPlatRadioReceive(otInstance *aInstance, uint8_t aChannel);
  *                        still actively receiving a frame. In the latter case
  *                        the radio SHALL be kept in reception mode until frame
  *                        reception has either succeeded or failed.
+ * @param[in]  aSlotId    The receive window slot ID.
  *
  * @retval OT_ERROR_NONE    Successfully scheduled receive window.
  * @retval OT_ERROR_FAILED  The receive window could not be scheduled.
  */
-otError otPlatRadioReceiveAt(otInstance *aInstance, uint8_t aChannel, uint32_t aStart, uint32_t aDuration);
+otError otPlatRadioReceiveAt(otInstance *aInstance,
+                             uint8_t     aChannel,
+                             uint32_t    aStart,
+                             uint32_t    aDuration,
+                             uint8_t     aSlotId);
 
 /**
  * The radio driver calls this method to notify OpenThread of a received frame.
@@ -1191,6 +1200,34 @@ void otPlatRadioUpdateCslSampleTime(otInstance *aInstance, uint32_t aCslSampleTi
  *
  */
 uint8_t otPlatRadioGetCslAccuracy(otInstance *aInstance);
+
+/**
+ * Enable or disable Coordinated Sampled Transmitting.
+ *
+ * @param[in]  aInstance     The OpenThread instance structure.
+ * @param[in]  aCstPeriod    CST period, 0 for disabling CST.
+ * @param[in]  aShortAddr    The short source address of peer CSL receiver.
+ * @param[in]  aExtAddr      The extended source address of peer CSL receiver.
+ *
+ * @retval  kErrorNotImplemented Radio driver doesn't support CST.
+ * @retval  kErrorFailed         Other platform specific errors.
+ * @retval  kErrorNone           Successfully enabled or disabled CST.
+ *
+ */
+otError otPlatRadioEnableCst(otInstance         *aInstance,
+                             uint32_t            aCstPeriod,
+                             otShortAddress      aShortAddr,
+                             const otExtAddress *aExtAddr);
+
+/**
+ * Update CST sample time in radio driver.
+ *
+ * Sample time is stored in radio driver as a copy to calculate phase when sending ACK with CST IE.
+ *
+ * @param[in]  aInstance         The OpenThread instance structure.
+ * @param[in]  aCstSampleTime    The latest sample time.
+ */
+void otPlatRadioUpdateCstSampleTime(otInstance *aInstance, uint32_t aCstSampleTime);
 
 /**
  * The fixed uncertainty (i.e. random jitter) of the arrival time of CSL

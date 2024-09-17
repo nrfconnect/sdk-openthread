@@ -494,8 +494,56 @@ bool otThreadIsAnycastLocateInProgress(otInstance *aInstance)
 
 otError otThreadDetachGracefully(otInstance *aInstance, otDetachGracefullyCallback aCallback, void *aContext)
 {
-    return AsCoreType(aInstance).Get<Mle::MleRouter>().DetachGracefully(aCallback, aContext);
+    return AsCoreType(aInstance).Get<Mle::Mle>().DetachGracefully(aCallback, aContext);
 }
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+otError otThreadAttachCslPeripheral(otInstance         *aInstance,
+                                    const otExtAddress *aTarget,
+                                    uint16_t            aWakeupIntervalUs,
+                                    uint16_t            aWakeupDurationMs)
+{
+    return AsCoreType(aInstance).Get<Mle::Mle>().AttachCslPeripheral(AsCoreType(aTarget), aWakeupIntervalUs,
+                                                                     aWakeupDurationMs);
+}
+#endif // OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+bool otThreadIsEnhCslPeerLinking(otInstance *aInstance)
+{
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    return AsCoreType(aInstance).Get<Mle::Mle>().IsCslPeripheralAttaching();
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    return AsCoreType(aInstance).Get<Mle::Mle>().IsCslCentralPresent() &&
+           otThreadGetDeviceRole(aInstance) <= OT_DEVICE_ROLE_DETACHED;
+#endif
+}
+
+bool otThreadIsEnhCslPeerLinked(otInstance *aInstance)
+{
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    return AsCoreType(aInstance).Get<Mle::Mle>().IsCslPeripheralAttached();
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    return AsCoreType(aInstance).Get<Mle::Mle>().IsCslCentralPresent() &&
+           otThreadGetDeviceRole(aInstance) > OT_DEVICE_ROLE_DETACHED;
+#endif
+}
+
+otError otThreadDetachEnhCslPeer(otInstance *aInstance)
+{
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    return AsCoreType(aInstance).Get<Mle::Mle>().DetachCslPeripheral();
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    return AsCoreType(aInstance).Get<Mle::Mle>().DetachFromCslCentral();
+#endif
+}
+#endif // OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
 
 #endif // OPENTHREAD_FTD || OPENTHREAD_MTD
 

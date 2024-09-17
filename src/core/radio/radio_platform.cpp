@@ -312,12 +312,14 @@ OT_TOOL_WEAK otError otPlatRadioGetRegion(otInstance *aInstance, uint16_t *aRegi
     return kErrorNotImplemented;
 }
 
-OT_TOOL_WEAK otError otPlatRadioReceiveAt(otInstance *aInstance, uint8_t aChannel, uint32_t aStart, uint32_t aDuration)
+OT_TOOL_WEAK otError
+otPlatRadioReceiveAt(otInstance *aInstance, uint8_t aChannel, uint32_t aStart, uint32_t aDuration, uint8_t aSlotId)
 {
     OT_UNUSED_VARIABLE(aInstance);
     OT_UNUSED_VARIABLE(aChannel);
     OT_UNUSED_VARIABLE(aStart);
     OT_UNUSED_VARIABLE(aDuration);
+    OT_UNUSED_VARIABLE(aSlotId);
 
     return kErrorNotImplemented;
 }

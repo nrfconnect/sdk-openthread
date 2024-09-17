@@ -56,6 +56,7 @@
 #include "thread/neighbor_table.hpp"
 #include "thread/network_data_types.hpp"
 #include "thread/router.hpp"
+#include "thread/wakeup_tx_scheduler.hpp"
 
 namespace ot {
 
@@ -117,6 +118,10 @@ class Mle : public InstanceLocator, private NonCopyable
     friend class ot::LinkMetrics::Initiator;
 #endif
     friend class ot::UnitTester;
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    friend class ot::EnhCslSender;
+    friend class ot::Mac::Mac;
+#endif
 
 public:
     /**
@@ -750,6 +755,133 @@ public:
 
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    /**
+     * Returns whether the Thread interface is currently communicating to a CSL central.
+     *
+     * @retval TRUE   If the Thread interface is communicating to a CSL central.
+     * @retval FALSE  If the Thread interface is not communicating to a CSL central.
+     */
+    bool IsCslCentralPresent() const { return mCslCentralAttachWindow > 0; }
+
+    /**
+     * Attaches to a CSL central.
+     *
+     * This detaches from the current parent and initiates attachment to the CSL central.
+     *
+     * @param[in] aCentral        The extended address of the CSL central.
+     * @param[in] aAttachTime     The time when Parent Requests start being sent to the CSL central.
+     * @param[in] aAttachWindowMs The connection window for receiving the Parent Response.
+     */
+    void AttachToCslCentral(const Mac::ExtAddress &aCentral, TimeMilli aAttachTime, uint32_t aAttachWindowMs);
+
+    /**
+     * Detaches from a CSL central.
+     *
+     * If attached to a CSL central, this detaches from it and goes back to wake on radio mode.
+     *
+     * @retval kErrorNone          If detached successfully.
+     * @retval kErrorInvalidState  If device is not attached to a CSL central.
+     */
+    Error DetachFromCslCentral(void);
+
+    /**
+     * This method indicates whether or not CSL parent accuracy is set.
+     *
+     * @retval TRUE   If CSL parent accuracy is set.
+     * @retval FALSE  If CSL parent accuracy is not set.
+     *
+     */
+    bool IsParentCslAccuracySet(void) const { return mIsCslParentAccuracySet; }
+
+    /**
+     * This method sets CSL parent accuracy flag.
+     *
+     * @param[in]  aIsSet  TRUE if parent CSL accuracy is set, FALSE otherwise.
+     *
+     */
+    void SetIsParentCslAccuracySet(bool aIsSet) { mIsCslParentAccuracySet = aIsSet; }
+
+#endif // OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    /**
+     * This method saves a pointer to the CSL peripheral peer.
+     *
+     * @param[in] aPeer  The pointer to the CSL peripheral peer.
+     *
+     */
+    void SetCslPeripheral(Neighbor *aPeer) { mCslPeripheral = aPeer; }
+
+    /**
+     * This method returns a pointer to the CSL peripheral peer.
+     *
+     * @returns a pointer to the CSL peripheral peer.
+     */
+    Neighbor *GetCslPeripheral(void) { return mCslPeripheral; }
+
+    /**
+     * This method indicates whether a CSL peripheral is present.
+     *
+     * @retval TRUE   A CSL peripheral is present.
+     * @retval FALSE  A CSL peripheral is not present.
+     *
+     */
+    bool IsCslPeripheralPresent(void) { return mCslPeripheral != nullptr; }
+
+    /**
+     * This method indicates whether a CSL peripheral is attaching.
+     *
+     * @retval TRUE   A CSL peripheral is attaching.
+     * @retval FALSE  A CSL peripheral is not attaching.
+     *
+     */
+    bool IsCslPeripheralAttaching(void)
+    {
+        return mCslPeripheralAttachState == kPeripheralWakeUp ||
+               mCslPeripheralAttachState == kPeripheralAwaitParentRequest;
+    }
+
+    /**
+     * This method indicates whether a CSL peripheral is attached.
+     *
+     * @retval TRUE   A CSL peripheral is attached.
+     * @retval FALSE  A CSL peripheral is not attached.
+     *
+     */
+    bool IsCslPeripheralAttached(void)
+    {
+        return mCslPeripheralAttachState == kPeripheralAttached || mCslPeripheralAttachState == kPeripheralDetaching;
+    }
+
+    /**
+     * This method initiates the CSL peripheral attachment.
+     *
+     * @param[in] aTarget     The extended address of the target device.
+     * @param[in] aIntervalUs An interval between consecutive wake-up frames in microseconds.
+     * @param[in] aDurationMs Duration of the wake-up sequence in milliseconds.
+     *
+     * @retval kErrorNone         Successfully started the wake-up sequence.
+     * @retval kErrorInvalidState This or another device is currently being attached.
+     */
+    Error AttachCslPeripheral(const Mac::ExtAddress &aTarget, uint16_t aIntervalUs, uint16_t aDurationMs);
+
+    /**
+     * This method detaches the currently attached CSL peripheral.
+     *
+     * @retval kErrorNone         Successfully started the wake-up sequence.
+     * @retval kErrorInvalidState This or another device is currently being attached.
+     */
+    Error DetachCslPeripheral(void);
+
+    /**
+     * This method handles the event of a frame sent to a CSL peripheral.
+     *
+     * @param[in] aNeighbor  The CSL peripheral.
+     */
+    void HandleSentFrameToNeighbor(Neighbor &aNeighbor);
+#endif // OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+
 private:
     //------------------------------------------------------------------------------------------------------------------
     // Constants
@@ -906,6 +1038,9 @@ private:
     {
         kToRouters,         // Parent Request to routers only.
         kToRoutersAndReeds, // Parent Request to all routers and REEDs.
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        kToCslCentral, // Parent Request unicast to a known CSL central device.
+#endif
     };
 
     enum ChildUpdateRequestState : uint8_t
@@ -981,6 +1116,9 @@ private:
         kTypeLinkMetricsManagementRequest,
         kTypeLinkMetricsManagementResponse,
         kTypeLinkProbe,
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        kTypeParentRequestToCslCentral,
 #endif
     };
 
@@ -1106,6 +1244,26 @@ private:
         Neighbor               *mNeighbor;     // Neighbor from which message was received (can be `nullptr`).
         Class                   mClass;        // The message class (authoritative, peer, or unknown).
     };
+
+    /*
+     * This method resets the attach counter.
+     *
+     */
+    void ResetAttachCounter(void);
+
+    /**
+     * This method increments the attach counter.
+     *
+     */
+    void IncrementAttachCounter(void);
+
+    /*
+     * Initialize parent candidate.
+     *
+     * @param[in] aAddress  The MAC Address of the parent candidate.
+     *
+     */
+    void InitParentCandidate(Mac::ExtAddress &aAddress);
 
     //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -1275,7 +1433,7 @@ private:
     Error      HandleLeaderData(RxInfo &aRxInfo);
     void       ProcessAnnounce(void);
     bool       HasUnregisteredAddress(void);
-    uint32_t   GetAttachStartDelay(void) const;
+    uint32_t   GetAttachStartDelay(void);
     void       SendParentRequest(ParentRequestType aType);
     Error      SendChildIdRequest(void);
     Error      GetNextAnnounceChannel(uint8_t &aChannel) const;
@@ -1285,7 +1443,7 @@ private:
     void       SendAnnounce(uint8_t aChannel, const Ip6::Address &aDestination, AnnounceMode aMode = kNormalAnnounce);
     uint32_t   Reattach(void);
     bool       HasAcceptableParentCandidate(void) const;
-    Error      DetermineParentRequestType(ParentRequestType &aType) const;
+    Error      DetermineParentRequestType(ParentRequestType &aType, uint32_t *aTimeout = nullptr) const;
     bool       IsBetterParent(uint16_t                aRloc16,
                               LinkQuality             aLinkQuality,
                               uint8_t                 aLinkMargin,
@@ -1364,6 +1522,11 @@ private:
     //------------------------------------------------------------------------------------------------------------------
     // Variables
 
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    void HandleCslPeripheralAttachTimer(void);
+    using CslPeripheralAttachTimer = TimerMicroIn<Mle, &Mle::HandleCslPeripheralAttachTimer>;
+#endif
+
     using DetachGracefullyTimer = TimerMilliIn<Mle, &Mle::HandleDetachGracefullyTimer>;
     using AttachTimer           = TimerMilliIn<Mle, &Mle::HandleAttachTimer>;
     using DelayTimer            = TimerMilliIn<Mle, &Mle::HandleDelayedResponseTimer>;
@@ -1439,6 +1602,33 @@ private:
     Ip6::Netif::UnicastAddress   mMeshLocal16;
     Ip6::Netif::MulticastAddress mLinkLocalAllThreadNodes;
     Ip6::Netif::MulticastAddress mRealmLocalAllThreadNodes;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    enum CslPeripheralAttachState : uint8_t
+    {
+        kPeripheralDetached,
+        kPeripheralWakeUp,
+        kPeripheralAwaitParentRequest,
+        kPeripheralAttached,
+        kPeripheralDetaching,
+    };
+
+    WakeupTxScheduler        mWakeupTxScheduler;        ///< The wake up frames transmission scheduler.
+    CslPeripheralAttachState mCslPeripheralAttachState; ///< The CSL peripheral attach state.
+    Neighbor                *mCslPeripheral;
+    CslPeripheralAttachTimer mCslPeripheralAttachTimer;
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    DeviceRole      mPreviousRole;
+    bool            mIsCslParentAccuracySet : 1;
+    Mac::ExtAddress mCslCentral;
+    TimeMilli       mCslCentralAttachTime;
+    uint32_t        mCslCentralAttachWindow;
+#if OPENTHREAD_CONFIG_MLE_ATTACH_BACKOFF_ENABLE
+    TimeMilli       mAttachFireTime;
+#endif
+#endif
 };
 
 } // namespace Mle

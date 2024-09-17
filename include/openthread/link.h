@@ -350,6 +350,15 @@ typedef struct otMacCounters
      *
      */
     uint32_t mRxErrOther;
+
+    /**
+     * The minimum, average and maximum error of the frame reception time in CSL mode (in microseconds).
+     *
+     */
+    int32_t mRxMinCslError;
+    int32_t mRxMaxCslError;
+    int32_t mRxCsl;
+    int64_t mRxSumCslError;
 } otMacCounters;
 
 /**
@@ -1012,6 +1021,28 @@ bool otLinkIsPromiscuous(otInstance *aInstance);
 otError otLinkSetPromiscuous(otInstance *aInstance, bool aPromiscuous);
 
 /**
+ * This helper function converts a CSL period-like value in units of 10 symbols
+ * to a value in units of microseconds.
+ *
+ * @param[in]  aPeriod        The CSL period in units of 10 symbols.
+ *
+ * @returns The CSL period in us.
+ *
+ */
+uint32_t otLinkCslPeriodToUs(uint16_t aPeriod);
+
+/**
+ * This helper function converts a CSL period-like value in units of 10 symbols
+ * to a value in units of milliseconds.
+ *
+ * @param[in]  aPeriod        The CSL period in units of 10 symbols.
+ *
+ * @returns The CSL period in ms.
+ *
+ */
+uint32_t otLinkCslPeriodToMs(uint16_t aPeriod);
+
+/**
  * Gets the CSL channel.
  *
  * @param[in]  aInstance      A pointer to an OpenThread instance.
@@ -1088,6 +1119,95 @@ uint32_t otLinkGetCslTimeout(otInstance *aInstance);
  *
  */
 otError otLinkSetCslTimeout(otInstance *aInstance, uint32_t aTimeout);
+
+/**
+ * This function enables or disables the wake on radio feature.
+ *
+ * @note The WoR feature.
+ *
+ * @param[in]  aInstance     A pointer to an OpenThread instance.
+ * @param[in]  aEnable       true to enable the WoR feature, or false otherwise.
+ *
+ * @retval OT_ERROR_NONE          Successfully enabled / disabled the WoR feature.
+ * @retval OT_ERROR_INVALID_STATE Could enable the WoR feature due to bad configuration.
+ *
+ */
+otError otLinkWorEnable(otInstance *aInstance, bool aEnable);
+
+/**
+ * This method returns whether Wake on Radio sampling is enabled.
+ *
+ * @retval TRUE   If Wake on Radio sampling is enabled.
+ * @retval FALSE  If Wake on Radio sampling is not enabled.
+ */
+bool otLinkIsWorEnabled(otInstance *aInstance);
+
+/**
+ * This function gets the WoR channel.
+ *
+ * @param[in]  aInstance      A pointer to an OpenThread instance.
+ *
+ * @returns The WoR channel.
+ *
+ */
+uint8_t otLinkWorGetChannel(otInstance *aInstance);
+
+/**
+ * Sets the WoR channel.
+ *
+ * @param[in]  aInstance      A pointer to an OpenThread instance.
+ * @param[in]  aChannel       The WoR sample channel. Channel value should be `0` (Set WoR Channel unspecified) or
+ *                            within the range [1, 10] (if 915-MHz supported) and [11, 26] (if 2.4 GHz supported).
+ *
+ * @retval OT_ERROR_NONE           Successfully set the WoR channel.
+ * @retval OT_ERROR_INVALID_ARGS   Invalid @p aChannel.
+ *
+ */
+otError otLinkWorSetChannel(otInstance *aInstance, uint8_t aChannel);
+
+/**
+ * This function gets the WoR interval.
+ *
+ * @param[in]  aInstance      A pointer to an OpenThread instance.
+ *
+ * @returns The WoR interval in units of 10 symbols.
+ *
+ */
+uint16_t otLinkWorGetInterval(otInstance *aInstance);
+
+/**
+ * Sets the WoR interval in units of 10 symbols.
+ *
+ * @param[in]  aInstance      A pointer to an OpenThread instance.
+ * @param[in]  aInterval      The WoR interval in units of 10 symbols.
+ *
+ * @retval OT_ERROR_NONE           Successfully set the WoR interval.
+ * @retval OT_ERROR_INVALID_ARGS   Invalid WoR interval.
+ *
+ */
+otError otLinkWorSetInterval(otInstance *aInstance, uint16_t aInterval);
+
+/**
+ * This function gets the WoR sample duration.
+ *
+ * @param[in]  aInstance      A pointer to an OpenThread instance.
+ *
+ * @returns The WoR sample duration in us.
+ *
+ */
+uint16_t otLinkWorGetDuration(otInstance *aInstance);
+
+/**
+ * Sets the WoR sample duration in us.
+ *
+ * @param[in]  aInstance      A pointer to an OpenThread instance.
+ * @param[in]  aDuration      The WoR sample duration in us.
+ *
+ * @retval OT_ERROR_NONE           Successfully set the WoR sample duration.
+ * @retval OT_ERROR_INVALID_ARGS   Invalid WoR sample duration.
+ *
+ */
+otError otLinkWorSetDuration(otInstance *aInstance, uint16_t aDuration);
 
 /**
  * Returns the current CCA (Clear Channel Assessment) failure rate.

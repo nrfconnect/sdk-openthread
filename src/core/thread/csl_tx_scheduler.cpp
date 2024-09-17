@@ -102,6 +102,7 @@ void CslTxScheduler::Clear(void)
     {
         child.ResetCslTxAttempts();
         child.SetCslSynchronized(false);
+        child.SetCslPrevSnValid(false);
         child.SetCslChannel(0);
         child.SetCslTimeout(0);
         child.SetCslPeriod(0);
@@ -180,6 +181,7 @@ Mac::TxFrame *CslTxScheduler::HandleFrameRequest(Mac::TxFrames &aTxFrames)
     Mac::TxFrame *frame = nullptr;
     uint32_t      txDelay;
     uint32_t      delay;
+    bool          isCsl = false;
 
     VerifyOrExit(mCslTxChild != nullptr);
     VerifyOrExit(mCslTxChild->IsCslSynchronized());
@@ -203,7 +205,13 @@ Mac::TxFrame *CslTxScheduler::HandleFrameRequest(Mac::TxFrames &aTxFrames)
         frame->SetIsARetransmission(true);
         frame->SetSequence(mCslTxChild->GetIndirectDataSequenceNumber());
 
-        if (frame->GetSecurityEnabled())
+        // If the frame contains CSL IE, it must be refreshed and re-secured with a new frame counter.
+        // See Thread 1.3.0 Specification, 3.2.6.3.7 CSL Retransmissions
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+        isCsl = frame->IsCslIePresent();
+#endif
+
+        if (frame->GetSecurityEnabled() && !isCsl)
         {
             frame->SetFrameCounter(mCslTxChild->GetIndirectFrameCounter());
             frame->SetKeyId(mCslTxChild->GetIndirectKeyId());
@@ -214,8 +222,10 @@ Mac::TxFrame *CslTxScheduler::HandleFrameRequest(Mac::TxFrames &aTxFrames)
         frame->SetIsARetransmission(false);
     }
 
-    frame->SetChannel(mCslTxChild->GetCslChannel() == 0 ? Get<Mac::Mac>().GetPanChannel()
-                                                        : mCslTxChild->GetCslChannel());
+    if (mCslTxChild->GetCslChannel() != 0)
+    {
+        frame->SetChannel(mCslTxChild->GetCslChannel());
+    }
 
     if (frame->GetChannel() != Get<Mac::Mac>().GetPanChannel())
     {
@@ -274,6 +284,15 @@ exit:
 
 void CslTxScheduler::HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, Child &aChild)
 {
+    uint8_t cslAttempts = kMaxCslTriggeredTxAttempts;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    if (Get<Mle::Mle>().IsCslPeripheralPresent())
+    {
+        cslAttempts = kMaxEnhCslTriggeredTxAttempts;
+    }
+#endif
+
     switch (aError)
     {
     case kErrorNone:
@@ -286,13 +305,22 @@ void CslTxScheduler::HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, C
 
         aChild.IncrementCslTxAttempts();
         LogInfo("CSL tx to child %04x failed, attempt %d/%d", aChild.GetRloc16(), aChild.GetCslTxAttempts(),
-                kMaxCslTriggeredTxAttempts);
+                cslAttempts);
 
-        if (aChild.GetCslTxAttempts() >= kMaxCslTriggeredTxAttempts)
+        if (aChild.GetCslTxAttempts() >= cslAttempts)
         {
             // CSL transmission attempts reach max, consider child out of sync
             aChild.SetCslSynchronized(false);
             aChild.ResetCslTxAttempts();
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+            if (Get<Mle::Mle>().IsCslPeripheralPresent())
+            {
+                Get<MeshForwarder>().RemoveMessageIfNoPendingTx(*aChild.GetIndirectMessage());
+                Get<Mle::MleRouter>().RemoveNeighbor(aChild);
+                ExitNow();
+            }
+#endif
         }
 
         OT_FALL_THROUGH;

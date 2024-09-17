@@ -76,6 +76,9 @@ namespace Mle {
 constexpr uint16_t kUdpPort = 19788; ///< MLE UDP Port
 
 constexpr uint16_t kMaxChildren     = OPENTHREAD_CONFIG_MLE_MAX_CHILDREN; ///< Maximum number of children
+constexpr uint32_t kWorParentResponseTimeout  = 500;  ///< Wait time to rx Parent Response for Wake On Radio (in msec)
+constexpr uint32_t kWorChildIdRequestTimeout  = 1000; ///< Wait time to rx Child ID Request for Wake On Radio (in msec)
+constexpr uint32_t kWorChildIdResponseTimeout = 1000; ///< Wait time to rx Child ID Response for Wake On Radio (in msec)
 constexpr uint16_t kMinChildId      = 1;                                  ///< Minimum Child ID
 constexpr uint16_t kMaxChildId      = 511;                                ///< Maximum Child ID
 constexpr uint8_t  kMaxRouters      = OPENTHREAD_CONFIG_MLE_MAX_ROUTERS;  ///< Maximum number of routers
@@ -258,22 +261,27 @@ public:
      * @retval FALSE  If the device is not a Minimal End Device.
      *
      */
-    bool IsMinimalEndDevice(void) const
-    {
-        return (mMode & (kModeFullThreadDevice | kModeRxOnWhenIdle)) != (kModeFullThreadDevice | kModeRxOnWhenIdle);
-    }
+    bool IsMinimalEndDevice(void) const { return !IsFullThreadDevice(); }
 
     /**
      * Indicates whether or not the device mode flags are valid.
      *
-     * An FTD which is not rx-on-when-idle (is sleepy) is considered invalid.
+     * An FTD which is not rx-on-when-idle (is sleepy) is considered invalid
+     * unless CSL central configuration is enabled.
      *
      * @returns TRUE if , FALSE otherwise.
      * @retval TRUE   If the device mode flags are valid.
      * @retval FALSE  If the device mode flags are not valid.
      *
      */
-    bool IsValid(void) const { return !IsFullThreadDevice() || IsRxOnWhenIdle(); }
+    bool IsValid(void) const
+    {
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+        return true;
+#else
+        return !IsFullThreadDevice() || IsRxOnWhenIdle();
+#endif
+    }
 
     /**
      * Converts the device mode into a human-readable string.

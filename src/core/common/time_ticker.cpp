@@ -95,11 +95,6 @@ void TimeTicker::HandleTimer(void)
         Get<NetworkData::Notifier>().HandleTimeTick();
     }
 #endif
-
-    if (mReceivers & Mask(kChildSupervisor))
-    {
-        Get<ChildSupervisor>().HandleTimeTick();
-    }
 #endif // OPENTHREAD_FTD
 
 #if OPENTHREAD_CONFIG_IP6_FRAGMENTATION_ENABLE

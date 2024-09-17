@@ -87,7 +87,7 @@ void MeshForwarder::SendMessage(OwnedPtr<Message> aMessagePtr)
 
                 for (Child &child : Get<ChildTable>().Iterate(Child::kInStateValidOrRestoring))
                 {
-                    if (!child.IsRxOnWhenIdle() && (destinedForAll || child.HasIp6Address(destination)))
+                    if (child.NeedsIndirectTransmission() && (destinedForAll || child.HasIp6Address(destination)))
                     {
                         mIndirectSender.AddMessageForSleepyChild(message, child);
                     }
@@ -98,8 +98,8 @@ void MeshForwarder::SendMessage(OwnedPtr<Message> aMessagePtr)
         {
             Neighbor *neighbor = Get<NeighborTable>().FindNeighbor(destination);
 
-            if ((neighbor != nullptr) && !neighbor->IsRxOnWhenIdle() && !message.IsDirectTransmission() &&
-                Get<ChildTable>().Contains(*neighbor))
+            if (!message.IsDirectTransmission() && (neighbor != nullptr) && Get<ChildTable>().Contains(*neighbor) &&
+                static_cast<const Child *>(neighbor)->NeedsIndirectTransmission())
             {
                 mIndirectSender.AddMessageForSleepyChild(message, *static_cast<Child *>(neighbor));
             }
@@ -115,7 +115,7 @@ void MeshForwarder::SendMessage(OwnedPtr<Message> aMessagePtr)
     case Message::kTypeSupervision:
     {
         Child *child = Get<ChildSupervisor>().GetDestination(message);
-        OT_ASSERT((child != nullptr) && !child->IsRxOnWhenIdle());
+        OT_ASSERT((child != nullptr) && child->NeedsIndirectTransmission());
         mIndirectSender.AddMessageForSleepyChild(message, *child);
         break;
     }

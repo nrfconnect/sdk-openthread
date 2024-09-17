@@ -134,13 +134,25 @@ public:
      */
     void UpdateOnSend(Child &aChild);
 
+    /**
+     * This method sends a supervision message to a child.
+     *
+     * @param[in] aChild     The child to which a message is to be sent.
+     *
+     */
+    void SendMessage(Child &aChild);
+
 private:
     static constexpr uint16_t kDefaultSupervisionInterval = OPENTHREAD_CONFIG_CHILD_SUPERVISION_INTERVAL; // (seconds)
 
-    void SendMessage(Child &aChild);
-    void CheckState(void);
-    void HandleTimeTick(void);
-    void HandleNotifierEvents(Events aEvents);
+    uint32_t GetInterval(void);
+    void     CheckState(void);
+    void     HandleTimer(void);
+    void     HandleNotifierEvents(Events aEvents);
+
+    using SupervisorTimer = TimerMilliIn<ChildSupervisor, &ChildSupervisor::HandleTimer>;
+
+    SupervisorTimer mTimer;
 };
 
 #endif // #if OPENTHREAD_FTD
@@ -235,10 +247,25 @@ public:
      */
     void UpdateOnReceive(const Mac::Address &aSourceAddress, bool aIsSecure);
 
-private:
-    static constexpr uint16_t kDefaultTimeout  = OPENTHREAD_CONFIG_CHILD_SUPERVISION_CHECK_TIMEOUT; // (seconds)
-    static constexpr uint16_t kDefaultInterval = OPENTHREAD_CONFIG_CHILD_SUPERVISION_INTERVAL;      // (seconds)
+    /**
+     * This method returns the supervision interval depending on the current connection type.
+     *
+     * On a Wake On Radio End Device attached to a Wakeup Coordinator, it returns a constant supervision interval in
+     * the units of 100 milliseconds. Otherwise, it returns a runtime configurable value of the supervision interval
+     * in the units of seconds.
+     *
+     * @returns  The current supervision interval (seconds or 100 ms), or zero if supervision is disabled.
+     *
+     */
+    uint16_t GetCurrentInterval(void) const;
 
+private:
+    static constexpr uint16_t kDefaultTimeout  = OPENTHREAD_CONFIG_CHILD_SUPERVISION_CHECK_TIMEOUT;     // (seconds)
+    static constexpr uint16_t kDefaultInterval = OPENTHREAD_CONFIG_CHILD_SUPERVISION_INTERVAL;          // (seconds)
+    static constexpr uint16_t kWorTimeout      = OPENTHREAD_CONFIG_WOR_CHILD_SUPERVISION_CHECK_TIMEOUT; // (100 ms);
+    static constexpr uint16_t kWorInterval     = OPENTHREAD_CONFIG_WOR_CHILD_SUPERVISION_INTERVAL;      // (100 ms);
+
+    uint32_t GetCurrentTimeoutMs(void) const;
     void RestartTimer(void);
     void HandleTimer(void);
 

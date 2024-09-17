@@ -156,4 +156,28 @@
 #define OPENTHREAD_CONFIG_PLATFORM_POWER_CALIBRATION_ENABLE 1
 #endif
 
+/**
+ * @def OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE
+ *
+ * Define to 1 if you want to support microsecond timer in platform.
+ *
+ */
+#define OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE (OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE)
+
+/**
+ * @def OPENTHREAD_CONFIG_CSL_RECEIVE_TIME_AHEAD
+ *
+ * Reception scheduling and ramp up time needed for the CSL receiver to be ready, in units of microseconds.
+ *
+ */
+#define OPENTHREAD_CONFIG_CSL_RECEIVE_TIME_AHEAD 10000
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_CSL_REQUEST_AHEAD_US
+ *
+ * Define how many microseconds ahead should MAC deliver CSL frame to SubMac.
+ *
+ */
+#define OPENTHREAD_CONFIG_MAC_CSL_REQUEST_AHEAD_US 5000
+
 #endif // OPENTHREAD_CORE_POSIX_CONFIG_H_

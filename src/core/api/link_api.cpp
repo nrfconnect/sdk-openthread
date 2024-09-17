@@ -390,6 +390,16 @@ uint16_t otLinkGetCcaFailureRate(otInstance *aInstance)
     return AsCoreType(aInstance).Get<Mac::Mac>().GetCcaFailureRate();
 }
 
+uint32_t otLinkCslPeriodToUs(uint16_t aPeriod)
+{
+    return aPeriod * kUsPerTenSymbols;
+}
+
+uint32_t otLinkCslPeriodToMs(uint16_t aPeriod)
+{
+    return aPeriod * kUsPerTenSymbols / 1000;
+}
+
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 bool otLinkIsCslEnabled(otInstance *aInstance) { return AsCoreType(aInstance).Get<Mac::Mac>().IsCslEnabled(); }
 
@@ -453,6 +463,78 @@ exit:
 }
 
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
+uint8_t otLinkWorGetChannel(otInstance *aInstance)
+{
+    return AsCoreType(aInstance).Get<Mac::Mac>().GetWorChannel();
+}
+
+otError otLinkWorSetChannel(otInstance *aInstance, uint8_t aChannel)
+{
+    Error error = kErrorNone;
+    Instance &instance = AsCoreType(aInstance);
+
+    VerifyOrExit(instance.Get<Mle::MleRouter>().IsDisabled(), error = kErrorInvalidState);
+
+    instance.Get<Mac::Mac>().SetWorChannel(aChannel);
+
+    instance.Get<MeshCoP::ActiveDatasetManager>().Clear();
+    instance.Get<MeshCoP::PendingDatasetManager>().Clear();
+
+exit:
+    return error;
+}
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+otError otLinkWorEnable(otInstance *aInstance, bool aEnable)
+{
+    Error error = kErrorInvalidState;
+
+    VerifyOrExit(otLinkCslPeriodToUs(otLinkWorGetInterval(aInstance)) > otLinkWorGetDuration(aInstance));
+
+    error = AsCoreType(aInstance).Get<Mac::Mac>().WorEnable(aEnable);
+
+exit:
+    return error;
+}
+
+bool otLinkIsWorEnabled(otInstance *aInstance)
+{
+    return AsCoreType(aInstance).Get<Mac::Mac>().IsWorEnabled();
+}
+
+uint16_t otLinkWorGetInterval(otInstance *aInstance)
+{
+    return AsCoreType(aInstance).Get<Mac::Mac>().GetWorInterval();
+}
+
+otError otLinkWorSetInterval(otInstance *aInstance, uint16_t aInterval)
+{
+    Error error = kErrorNone;
+
+    VerifyOrExit((aInterval == 0 || kMinCslPeriod <= aInterval), error = kErrorInvalidArgs);
+    AsCoreType(aInstance).Get<Mac::Mac>().SetWorInterval(aInterval);
+
+exit:
+    return error;
+}
+
+uint16_t otLinkWorGetDuration(otInstance *aInstance)
+{
+    return AsCoreType(aInstance).Get<Mac::Mac>().GetWorDuration();
+}
+
+otError otLinkWorSetDuration(otInstance *aInstance, uint16_t aDuration)
+{
+    Error error = kErrorNone;
+
+    VerifyOrExit(aDuration >= kMinWorDuration, error = kErrorInvalidArgs);
+    AsCoreType(aInstance).Get<Mac::Mac>().SetWorDuration(aDuration);
+
+exit:
+    return error;
+}
+#endif // OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
 
 #if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
 otError otLinkSendEmptyData(otInstance *aInstance)

@@ -48,6 +48,7 @@ RegisterLogModule("ChildSupervsn");
 
 ChildSupervisor::ChildSupervisor(Instance &aInstance)
     : InstanceLocator(aInstance)
+    , mTimer(aInstance)
 {
 }
 
@@ -91,9 +92,26 @@ exit:
     return;
 }
 
-void ChildSupervisor::UpdateOnSend(Child &aChild) { aChild.ResetSecondsSinceLastSupervision(); }
+void ChildSupervisor::UpdateOnSend(Child &aChild) { aChild.ResetUnitsSinceLastSupervision(); }
 
-void ChildSupervisor::HandleTimeTick(void)
+uint32_t ChildSupervisor::GetInterval(void)
+{
+    uint32_t interval = 1000;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    if (Get<Mle::Mle>().IsCslPeripheralPresent())
+    {
+        // This code assumes that if the CSL central has a CSL peripheral child it does
+        // not have any more children, so it considers the units of the supervision
+        // interval to be 100 ms instead of 1 s.
+        interval = 100;
+    }
+#endif
+
+    return interval;
+}
+
+void ChildSupervisor::HandleTimer(void)
 {
     for (Child &child : Get<ChildTable>().Iterate(Child::kInStateValid))
     {
@@ -102,13 +120,15 @@ void ChildSupervisor::HandleTimeTick(void)
             continue;
         }
 
-        child.IncrementSecondsSinceLastSupervision();
+        child.IncrementUnitsSinceLastSupervision();
 
-        if (child.GetSecondsSinceLastSupervision() >= child.GetSupervisionInterval())
+        if (child.GetUnitsSinceLastSupervision() >= child.GetSupervisionInterval())
         {
             SendMessage(child);
         }
     }
+
+    mTimer.Start(GetInterval());
 }
 
 void ChildSupervisor::CheckState(void)
@@ -119,15 +139,15 @@ void ChildSupervisor::CheckState(void)
 
     bool shouldRun = (!Get<Mle::Mle>().IsDisabled() && Get<ChildTable>().HasChildren(Child::kInStateValid));
 
-    if (shouldRun && !Get<TimeTicker>().IsReceiverRegistered(TimeTicker::kChildSupervisor))
+    if (shouldRun && !mTimer.IsRunning())
     {
-        Get<TimeTicker>().RegisterReceiver(TimeTicker::kChildSupervisor);
+        mTimer.Start(GetInterval());
         LogInfo("Starting Child Supervision");
     }
 
-    if (!shouldRun && Get<TimeTicker>().IsReceiverRegistered(TimeTicker::kChildSupervisor))
+    if (!shouldRun && mTimer.IsRunning())
     {
-        Get<TimeTicker>().UnregisterReceiver(TimeTicker::kChildSupervisor);
+        mTimer.Stop();
         LogInfo("Stopping Child Supervision");
     }
 }
@@ -196,11 +216,37 @@ exit:
     return;
 }
 
+uint16_t SupervisionListener::GetCurrentInterval(void) const
+{
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    if (Get<Mle::Mle>().IsCslCentralPresent())
+    {
+        return kWorInterval;
+    }
+#endif
+
+    return mInterval;
+}
+
+uint32_t SupervisionListener::GetCurrentTimeoutMs(void) const
+{
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    if (Get<Mle::Mle>().IsCslCentralPresent())
+    {
+        return kWorTimeout * 100;
+    }
+#endif
+
+    return Time::SecToMsec(mTimeout);
+}
+
 void SupervisionListener::RestartTimer(void)
 {
-    if ((mTimeout != 0) && !Get<Mle::MleRouter>().IsDisabled() && !Get<MeshForwarder>().GetRxOnWhenIdle())
+    const uint32_t timeoutMs = GetCurrentTimeoutMs();
+
+    if ((timeoutMs != 0) && !Get<Mle::MleRouter>().IsDisabled() && !Get<MeshForwarder>().GetRxOnWhenIdle())
     {
-        mTimer.Start(Time::SecToMsec(mTimeout));
+        mTimer.Start(timeoutMs);
     }
     else
     {
@@ -212,8 +258,19 @@ void SupervisionListener::HandleTimer(void)
 {
     VerifyOrExit(Get<Mle::MleRouter>().IsChild() && !Get<MeshForwarder>().GetRxOnWhenIdle());
 
-    LogWarn("Supervision timeout. No frame from parent in %u sec", mTimeout);
+    LogWarn("Supervision timeout. No frame from parent in %u ms", GetCurrentTimeoutMs());
     mCounter++;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    if (Get<Mle::Mle>().IsCslCentralPresent())
+    {
+        // When sync with Wakeup Coordinator is lost, Child Update Request is unlikely to succeed.
+        // Instead, tearing the connection down and starting wake-up frame sniffing again should
+        // assure faster link recovery if needed.
+        Get<Mle::Mle>().BecomeDetached();
+        ExitNow();
+    }
+#endif
 
     IgnoreError(Get<Mle::MleRouter>().SendChildUpdateRequest());
 

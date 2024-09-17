@@ -811,6 +811,81 @@ public:
                                    const otExtAddress   &aExtAddress);
 #endif
 
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    /**
+     * This method schedules a radio reception window at a specific time and duration.
+     *
+     * @param[in]  aChannel   The radio channel on which to receive.
+     * @param[in]  aStart     The receive window start time, in microseconds.
+     * @param[in]  aDuration  The receive window duration, in microseconds.
+     * @param[in]  aSlotId    The receive window slotID.
+     *
+     * @retval  OT_ERROR_NONE               Successfully scheduled receive window.
+     * @retval  OT_ERROR_FAILED             The receive window could not be scheduled.
+     * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
+     * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the radio.
+     *
+     */
+    Error ReceiveAt(uint8_t aChannel, uint32_t aStart, uint32_t aDuration, uint8_t aSlotId);
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+    /**
+     * This method updates the CSL sample time in radio.
+     *
+     * @param[in]  aCslSampleTime  The CSL sample time.
+     *
+     * @retval  OT_ERROR_NONE               Successfully updated CSL sample time.
+     * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
+     * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the radio.
+     */
+    Error UpdateCslSampleTime(uint32_t aCslSampleTime);
+
+    /** This method enables CSL sampling in radio.
+     *
+     * @param[in]  aCslPeriod    CSL period, 0 for disabling CSL.
+     * @param[in]  aShortAddr    The short source address of CSL receiver's peer.
+     * @param[in]  aExtAddr      The extended source address of CSL receiver's peer.
+     *
+     * @note Platforms should use CSL peer addresses to include CSL IE when generating enhanced acks.
+     *
+     * @retval  OT_ERROR_NONE               Successfully enabled or disabled CSL.
+     * @retval  OT_ERROR_FAILED             Platform specific errors.
+     * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
+     * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the radio.
+     *
+     */
+    Error EnableCsl(uint32_t aCslPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr);
+#endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    /**
+     * This method updates the CST sample time in radio.
+     *
+     * @param[in]  aCstSampleTime  The CST sample time.
+     *
+     * @retval  OT_ERROR_NONE               Successfully updated CST sample time.
+     * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
+     * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the radio.
+     */
+    Error UpdateCstSampleTime(uint32_t aCstSampleTime);
+
+    /** This method enables CST in radio.
+     *
+     * @param[in]  aCstPeriod    CST period, 0 for disabling CST.
+     * @param[in]  aShortAddr    The short source address of CSL peer.
+     * @param[in]  aExtAddr      The extended source address of CSL peer.
+     *
+     * @note Platforms should use CSL peer addresses to include CST IE when generating enhanced acks.
+     *
+     * @retval  OT_ERROR_NONE               Successfully enabled or disabled CST.
+     * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
+     * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the radio.
+     *
+     */
+    Error EnableCst(uint32_t aCstPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr);
+#endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     /**
      * Get the current accuracy, in units of ± ppm, of the clock used for scheduling CSL operations.

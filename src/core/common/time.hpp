@@ -242,6 +242,24 @@ public:
     Time GetDistantPast(void) const { return Time(mValue - kDistantInterval); }
 
     /**
+     * Returns a new `Time` instance that represents the time of the soonest occurrence of a periodic event.
+     *
+     * The returned time is the nearest time equal to or after `aNow` that is away from `aPhase` by
+     * a multiple of `aPeriod`. `aPhase` can preceed, follow or be identical to `aNow`.
+     */
+    static Time SoonestPeriodicEvent(Time aNow, Time aPhase, uint32_t aPeriod)
+    {
+        uint32_t delay = (aPhase >= aNow) ? ((aPhase - aNow) % aPeriod) : (aPeriod - (aNow - aPhase) % aPeriod);
+
+        if (delay == aPeriod)
+        {
+            delay = 0;
+        }
+
+        return aNow + delay;
+    }
+
+    /**
      * Converts a given number of seconds to milliseconds.
      *
      * @param[in] aSeconds   The seconds value to convert to milliseconds.

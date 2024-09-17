@@ -436,6 +436,93 @@
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+ *
+ * Define to 1 to enable the CSL peripheral role that periodically listens for wake-up frames
+ * to establish a link with a CSL central role interface.
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+#define OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE 0
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+ *
+ * Define to 1 to enable the CSL central role that is capable of establishing
+ * a link with one or more CSL peripheral devices using wake-up frames.
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+#define OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE 0
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_CSL_WAKEUP_INTERVAL
+ *
+ * Periodicity of wake-up frame transmission by WC (in units of 10 symbols).
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_CSL_WAKEUP_INTERVAL
+#define OPENTHREAD_CONFIG_MAC_CSL_WAKEUP_INTERVAL 47
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_CONNECTION_RETRY_INTERVAL
+ *
+ * The Connection Retry Interval defines how frequently the Wake-On End Device
+ * is supposed to retry sending the Parent Request to the Wakeup Coordinator
+ * after receiving a wake-up frame (in the units of Wake-up Intervals).
+ *
+ * The Wakeup Coordinator includes this value in each wake-up frame.
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_CONNECTION_RETRY_INTERVAL
+#define OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_CONNECTION_RETRY_INTERVAL 1
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_CONNECTION_RETRY_COUNT
+ *
+ * The Connection Retry Count defines how many times the Wake-On End Device is
+ * supposed to retry sending the Parent Request to the Wakeup Coordinator after
+ * receiving a wake-up frame.
+ *
+ * The Wakeup Coordinator includes this value in each wake-up frame.
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_CONNECTION_RETRY_COUNT
+#define OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_CONNECTION_RETRY_COUNT 12
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_MULTIPURPOSE_FRAME
+ *
+ * Define to 1 to enable support for IEE 802.15.4 MAC Multipurpose frame format.
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_MULTIPURPOSE_FRAME
+#define OPENTHREAD_CONFIG_MAC_MULTIPURPOSE_FRAME \
+    (OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE)
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_MAX_WAKEUP_COORDS
+ *
+ * The maximum number of Wake-up Coordinators on the trusted devices table.
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_MAX_WAKEUP_COORDS
+#define OPENTHREAD_CONFIG_MAC_MAX_WAKEUP_COORDS 16
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_WC_EVICT_AGE
+ *
+ * The evict age of a Wake-up Coordinator on the trusted devices table in seconds.
+ * When a proper wake-up frame is received by a Wake-on End-Device while the trusted Wake-up
+ * Coordinators table is full, it will attempt to replace the oldest entry which exceeds the
+ * evict age. If none does, the incoming wake-up frame will be ignored.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_WC_EVICT_AGE
+#define OPENTHREAD_CONFIG_MAC_WC_EVICT_AGE 3600
+#endif
+
+/**
  * @def OPENTHREAD_CONFIG_MAC_CSL_AUTO_SYNC_ENABLE
  *
  * This setting configures CSL auto synchronization based on data poll mechanism in Thread 1.2.
@@ -555,6 +642,36 @@
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_MAC_ENH_CSL_TX_ATTEMPTS
+ *
+ * Maximum number of TX attempts for the enhanced CSL communication before considering the peer de-synchronized.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_ENH_CSL_TX_ATTEMPTS
+#define OPENTHREAD_CONFIG_MAC_ENH_CSL_TX_ATTEMPTS 8
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_WOR_PERIOD
+ *
+ * The default WoR interval in units of 10 symbols.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_WOR_INTERVAL
+#define OPENTHREAD_CONFIG_WOR_INTERVAL 6250
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_WOR_SAMPLE_DURATION
+ *
+ * The default WoR sample duration in us.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_WOR_SAMPLE_DURATION
+#define OPENTHREAD_CONFIG_WOR_SAMPLE_DURATION 8000
+#endif
+
+/**
  * @def OPENTHREAD_CONFIG_MAC_SCAN_DURATION
  *
  * This setting configures the default scan duration in milliseconds.
@@ -601,5 +718,28 @@
  * @}
  *
  */
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ENABLE
+ *
+ * Define to 1 to enable extra CCA attempts logic.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ENABLE
+#define OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ENABLE \
+    (OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE)
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ATTEMPTS
+ *
+ * Maximum number of CCA attempts to be performed after the first one if the channel is busy.
+ *
+ * Used for Enhanced-CSL links only.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ATTEMPTS
+#define OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ATTEMPTS 3
+#endif
 
 #endif // CONFIG_MAC_H_

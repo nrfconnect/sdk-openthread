@@ -2172,6 +2172,12 @@ template <> otError Interpreter::Process<Cmd("counters")>(Arg aArgs[])
             {
                 OutputLine(kIndentSize, "%s: %lu", counter.mName, ToUlong(macCounters->*counter.mValuePtr));
             }
+
+            OutputLine(kIndentSize, "RxMinCslError: %ld", static_cast<long>(macCounters->mRxMinCslError));
+            OutputLine(kIndentSize, "RxAvgCslError: %ld",
+                       macCounters->mRxCsl != 0 ? static_cast<long>(macCounters->mRxSumCslError / macCounters->mRxCsl)
+                                                : 0L);
+            OutputLine(kIndentSize, "RxMaxCslError: %ld", static_cast<long>(macCounters->mRxMaxCslError));
         }
         /**
          * @cli counters mac reset
@@ -2425,6 +2431,213 @@ template <> otError Interpreter::Process<Cmd("csl")>(Arg aArgs[])
     return error;
 }
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+template <> otError Interpreter::Process<Cmd("wor")>(Arg aArgs[])
+{
+    otError error = OT_ERROR_NONE;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    bool    enable;
+
+    /**
+     * @cli wor
+     * @code
+     * wor
+     * Channel: 12
+     * Period: 1000ms
+     * Duration: 8000us
+     * Done
+     * @endcode
+     * @par
+     * Gets the Wake on Radio configuration.
+     * @sa otLinkWorGetChannel
+     * @sa otLinkWorGetInterval
+     * @sa otLinkCslPeriodToMs
+     * @sa otLinkWorGetDuration
+     */
+    if (aArgs[0].IsEmpty())
+    {
+        OutputLine("Channel: %u", otLinkWorGetChannel(GetInstancePtr()));
+        OutputLine("Interval: %u(in units of 10 symbols), %lums", otLinkWorGetInterval(GetInstancePtr()),
+                   ToUlong(otLinkCslPeriodToMs(otLinkWorGetInterval(GetInstancePtr()))));
+        OutputLine("Duration: %uus", otLinkWorGetDuration(GetInstancePtr()));
+    }
+    /**
+     * @cli wor (enable,disable)
+     * @code
+     * wor enable
+     * Done
+     * @endcode
+     * @code
+     * wor disable
+     * Done
+     * @endcode
+     * @par api_copy
+     * #otLinkWorEnable
+     */
+    else if (ParseEnableOrDisable(aArgs[0], enable) == OT_ERROR_NONE)
+    {
+        error = otLinkWorEnable(GetInstancePtr(), enable);
+    }
+    /**
+     * @cli wor interval
+     * @code
+     * wor interval 6250
+     * Done
+     * @endcode
+     * @cparam wor interval @ca{interval}
+     * @par api_copy
+     * #otLinkWorSetInterval
+     */
+    else if (aArgs[0] == "interval")
+    {
+        error = ProcessSet(aArgs + 1, otLinkWorSetInterval);
+    }
+    /**
+     * @cli wor duration
+     * @code
+     * wor duration 8000
+     * Done
+     * @endcode
+     * @cparam wor duration @ca{duration}
+     * @par api_copy
+     * #otLinkWorSetDuration
+     */
+    else if (aArgs[0] == "duration")
+    {
+        error = ProcessSet(aArgs + 1, otLinkWorSetDuration);
+    }
+#endif // OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+    /**
+     * @cli wor attach
+     * @code
+     * wor attach 1ece0a6c4653a7c1 8000 1000
+     * Done
+     * @endcode
+     * @cparam destination extended address @ca{extaddr}
+     * @cparam wake-up interval (us) @ca{wakeupinterval}
+     * @cparam wake-up duration (ms) @ca{wakeupduration}
+     * @par
+     * Attaches a Wake On Radio (CSL peripheral) end device.
+     */
+    if (aArgs[0] == "attach")
+    {
+        otExtAddress extAddress;
+        uint16_t     wakeupIntervalUs;
+        uint16_t     wakeupDurationMs;
+
+        VerifyOrExit(!aArgs[3].IsEmpty(), error = OT_ERROR_INVALID_ARGS);
+        SuccessOrExit(error = aArgs[1].ParseAsHexString(extAddress.m8));
+        SuccessOrExit(error = aArgs[2].ParseAsUint16(wakeupIntervalUs));
+        SuccessOrExit(error = aArgs[3].ParseAsUint16(wakeupDurationMs));
+
+        error = otThreadAttachCslPeripheral(GetInstancePtr(), &extAddress, wakeupIntervalUs, wakeupDurationMs);
+    }
+#endif // OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    /**
+     * @cli wor detach
+     * @code
+     * wor detach
+     * Done
+     * @endcode
+     * @par
+     * Detaches an enhaced CSL peer.
+     */
+    else if (aArgs[0] == "detach")
+    {
+        error = otThreadDetachEnhCslPeer(GetInstancePtr());
+    }
+    /**
+     * @cli wor state
+     * @code
+     * wor state
+     * disabled
+     * Done
+     * @endcode
+     * @code
+     * wor state
+     * enabled
+     * Done
+     * @endcode
+     * @code
+     * wor state
+     * linking
+     * Done
+     * @endcode
+     * @code
+     * wor state
+     * linked
+     * Done
+     * @endcode
+     * @par
+     * Prints current WoR link state.
+     */
+    else if (aArgs[0] == "state")
+    {
+        if (otThreadIsEnhCslPeerLinked(GetInstancePtr()))
+        {
+            OutputLine("linked");
+        }
+        else if (otThreadIsEnhCslPeerLinking(GetInstancePtr()))
+        {
+            OutputLine("linking");
+        }
+#if OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        else if (otLinkIsWorEnabled(GetInstancePtr()))
+        {
+            OutputLine("enabled");
+        }
+#endif
+        else
+        {
+            OutputLine("disabled");
+        }
+    }
+#endif // OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+    else
+    {
+        ExitNow(error = OT_ERROR_INVALID_ARGS);
+    }
+
+exit:
+    return error;
+}
+#endif // OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+
+/**
+ * @cli wakeupchannel (get,set)
+ * @code
+ * wakeupchannel
+ * 12
+ * Done
+ * @endcode
+ * @code
+ * wakeupchannel 12
+ * Done
+ * @endcode
+ * @cparam wakeupchannel [@ca{channel}]
+ * Use `channel` to set the wake-up channel.
+ * @par
+ * Gets or sets the wake-up channel value.
+ */
+template <> otError Interpreter::Process<Cmd("wakeupchannel")>(Arg aArgs[])
+{
+    otError error = OT_ERROR_NONE;
+
+    if (aArgs[0].IsEmpty())
+    {
+        OutputLine("%u", otLinkWorGetChannel(GetInstancePtr()));
+    }
+    else
+    {
+        error = ProcessSet(aArgs, otLinkWorSetChannel);
+    }
+
+    return error;
+}
 
 #if OPENTHREAD_FTD
 template <> otError Interpreter::Process<Cmd("delaytimermin")>(Arg aArgs[])
@@ -8572,6 +8785,10 @@ otError Interpreter::ProcessCommand(Arg aArgs[])
         CmdEntry("vendor"),
 #endif // OPENTHREAD_FTD || OPENTHREAD_MTD
         CmdEntry("version"),
+        CmdEntry("wakeupchannel"),
+#if OPENTHREAD_CONFIG_MAC_CSL_CENTRAL_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_PERIPHERAL_ENABLE
+        CmdEntry("wor"),
+#endif
     };
 
 #undef CmdEntry

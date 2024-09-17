@@ -206,6 +206,7 @@ set(COMMON_SOURCES
     thread/csl_tx_scheduler.cpp
     thread/discover_scanner.cpp
     thread/dua_manager.cpp
+    thread/enh_csl_sender.cpp
     thread/energy_scan_server.cpp
     thread/indirect_sender.cpp
     thread/key_manager.cpp
@@ -243,6 +244,8 @@ set(COMMON_SOURCES
     thread/time_sync_service.cpp
     thread/tmf.cpp
     thread/uri_paths.cpp
+    thread/wakeup_coord_table.cpp
+    thread/wakeup_tx_scheduler.cpp
     utils/channel_manager.cpp
     utils/channel_monitor.cpp
     utils/flash.cpp
