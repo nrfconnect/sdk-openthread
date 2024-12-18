@@ -38,7 +38,7 @@ Start diagnostics mode.
 ```bash
 > diag start
 start diagnostics mode
-status 0x00
+Done
 ```
 
 ### diag channel
@@ -48,6 +48,7 @@ Get the IEEE 802.15.4 Channel value for diagnostics module.
 ```bash
 > diag channel
 channel: 11
+Done
 ```
 
 ### diag channel \<channel\>
@@ -57,7 +58,7 @@ Set the IEEE 802.15.4 Channel value for diagnostics module.
 ```bash
 > diag channel 11
 set channel to 11
-status 0x00
+Done
 ```
 
 ### diag cw start
@@ -122,6 +123,7 @@ Get the tx power value(dBm) for diagnostics module.
 ```bash
 > diag power
 tx power: -10 dBm
+Done
 ```
 
 ### diag power \<power\>
@@ -131,7 +133,7 @@ Set the tx power value(dBm) for diagnostics module.
 ```bash
 > diag power -10
 set tx power to -10 dBm
-status 0x00
+Done
 ```
 
 ### diag powersettings
@@ -172,7 +174,7 @@ Send the frame set by `diag frame` if length is omitted. Otherwise overwrite the
 ```bash
 > diag send 20 100
 sending 0x14 packet(s), length 0x64
-status 0x00
+Done
 ```
 
 ### diag repeat \<delay\> [length]
@@ -184,7 +186,7 @@ Send the frame set by `diag frame` if length is omitted. Otherwise overwrite the
 ```bash
 > diag repeat 100 100
 sending packets of length 0x64 at the delay of 0x64 ms
-status 0x00
+Done
 ```
 
 ### diag repeat stop
@@ -194,7 +196,7 @@ Stop repeated packet transmission.
 ```bash
 > diag repeat stop
 repeated packet transmission is stopped
-status 0x00
+Done
 ```
 
 ### diag radio sleep
@@ -204,7 +206,7 @@ Enter radio sleep mode.
 ```bash
 > diag radio sleep
 set radio from receive to sleep
-status 0x00
+Done
 ```
 
 ### diag radio receive
@@ -214,7 +216,7 @@ Set radio from sleep mode to receive mode.
 ```bash
 > diag radio receive
 set radio from sleep to receive on channel 11
-status 0x00
+Done
 ```
 
 ### diag radio receive \[async\] \<number\> \[lpr\]
@@ -244,6 +246,7 @@ Return the state of the radio.
 ```bash
 > diag radio state
 sleep
+Done
 ```
 
 ### diag radio enable
@@ -311,6 +314,7 @@ received packets: 10
 sent packets: 10
 first received packet: rssi=-65, lqi=101
 last received packet: rssi=-64, lqi=98
+Done
 ```
 
 ### diag stats clear
@@ -320,6 +324,7 @@ Clear statistics during diagnostics mode.
 ```bash
 > diag stats clear
 stats cleared
+Done
 ```
 
 ### diag gpio get \<gpio\>
@@ -383,7 +388,7 @@ first received packet: rssi=-65, lqi=101
 last received packet: rssi=-61, lqi=98
 
 stop diagnostics mode
-status 0x00
+Done
 ```
 
 ### diag rcp
