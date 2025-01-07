@@ -245,7 +245,6 @@ private:
 
     void TransmitPacket(void);
     void Output(const char *aFormat, ...);
-    void AppendErrorResult(Error aError);
     void ResetTxPacket(void);
     void OutputStats(void);
 
