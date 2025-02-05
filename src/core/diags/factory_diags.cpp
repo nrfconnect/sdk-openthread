@@ -204,9 +204,9 @@ Diags::Diags(Instance &aInstance)
     , mChannel(20)
     , mTxPower(0)
     , mTxLen(0)
+    , mCurTxCmd(kTxCmdNone)
     , mIsTxPacketSet(false)
     , mIsAsyncSend(false)
-    , mRepeatActive(false)
     , mDiagSendOn(false)
     , mOutputCallback(nullptr)
     , mOutputContext(nullptr)
@@ -389,7 +389,7 @@ Error Diags::ProcessRepeat(uint8_t aArgsLength, char *aArgs[])
     if (StringMatch(aArgs[0], "stop"))
     {
         otPlatAlarmMilliStop(&GetInstance());
-        mRepeatActive = false;
+        mCurTxCmd = kTxCmdNone;
     }
     else
     {
@@ -397,6 +397,7 @@ Error Diags::ProcessRepeat(uint8_t aArgsLength, char *aArgs[])
         uint8_t  txLength;
 
         VerifyOrExit(aArgsLength >= 1, error = kErrorInvalidArgs);
+        VerifyOrExit(mCurTxCmd == kTxCmdNone, error = kErrorInvalidState);
 
         SuccessOrExit(error = Utils::CmdLineParser::ParseAsUint32(aArgs[0], txPeriod));
         mTxPeriod = txPeriod;
@@ -417,11 +418,10 @@ Error Diags::ProcessRepeat(uint8_t aArgsLength, char *aArgs[])
 
         VerifyOrExit((txLength >= OT_RADIO_FRAME_MIN_SIZE) && (txLength <= OT_RADIO_FRAME_MAX_SIZE),
                      error = kErrorInvalidArgs);
-        mTxLen = txLength;
 
-        mRepeatActive = true;
-        uint32_t now  = otPlatAlarmMilliGetNow();
-        otPlatAlarmMilliStartAt(&GetInstance(), now, mTxPeriod);
+        mTxLen    = txLength;
+        mCurTxCmd = kTxCmdRepeat;
+        otPlatAlarmMilliStartAt(&GetInstance(), otPlatAlarmMilliGetNow(), mTxPeriod);
     }
 
 exit:
@@ -435,6 +435,7 @@ Error Diags::ProcessSend(uint8_t aArgsLength, char *aArgs[])
     uint8_t  txLength;
 
     VerifyOrExit(aArgsLength >= 1, error = kErrorInvalidArgs);
+    VerifyOrExit(mCurTxCmd == kTxCmdNone, error = kErrorInvalidState);
 
     if (StringMatch(aArgs[0], "async"))
     {
@@ -470,6 +471,7 @@ Error Diags::ProcessSend(uint8_t aArgsLength, char *aArgs[])
     mTxLen = txLength;
 
     SuccessOrExit(error = TransmitPacket());
+    mCurTxCmd = kTxCmdSend;
 
     if (!mIsAsyncSend)
     {
@@ -574,12 +576,14 @@ Error Diags::TransmitPacket(void)
         }
     }
 
-    mDiagSendOn = true;
-    error       = Get<Radio>().Transmit(*static_cast<Mac::TxFrame *>(mTxPacket));
-
-    if (error == kErrorInvalidState)
+    error = Get<Radio>().Transmit(*static_cast<Mac::TxFrame *>(mTxPacket));
+    if (error == kErrorNone)
     {
-        mStats.mSentErrorInvalidStatePackets++;
+        mDiagSendOn = true;
+    }
+    else
+    {
+        UpdateTxStats(error);
     }
 
     return error;
@@ -775,7 +779,7 @@ extern "C" void otPlatDiagAlarmFired(otInstance *aInstance) { AsCoreType(aInstan
 
 void Diags::AlarmFired(void)
 {
-    if (mRepeatActive)
+    if (mCurTxCmd == kTxCmdRepeat)
     {
         uint32_t now = otPlatAlarmMilliGetNow();
 
@@ -865,26 +869,13 @@ void Diags::TransmitDone(Error aError)
     VerifyOrExit(mDiagSendOn);
     mDiagSendOn = false;
 
-    switch (aError)
+    if (mIsSleepOn)
     {
-    case kErrorNone:
-        mStats.mSentSuccessPackets++;
-        break;
-
-    case kErrorChannelAccessFailure:
-        mStats.mSentErrorCcaPackets++;
-        break;
-
-    case kErrorAbort:
-        mStats.mSentErrorAbortPackets++;
-        break;
-
-    default:
-        mStats.mSentErrorOthersPackets++;
-        break;
+        IgnoreError(Get<Radio>().Sleep());
     }
 
-    VerifyOrExit(!mRepeatActive && (mTxPackets > 0));
+    UpdateTxStats(aError);
+    VerifyOrExit((mCurTxCmd == kTxCmdSend) && (mTxPackets > 0));
 
     if (mTxPackets > 1)
     {
@@ -894,6 +885,7 @@ void Diags::TransmitDone(Error aError)
     else
     {
         mTxPackets = 0;
+        mCurTxCmd  = kTxCmdNone;
 
         if (!mIsAsyncSend)
         {
@@ -917,6 +909,32 @@ bool Diags::ShouldHandleReceivedFrame(const otRadioFrame &aFrame) const
 
 exit:
     return ret;
+}
+
+void Diags::UpdateTxStats(Error aError)
+{
+    switch (aError)
+    {
+    case kErrorNone:
+        mStats.mSentSuccessPackets++;
+        break;
+
+    case kErrorChannelAccessFailure:
+        mStats.mSentErrorCcaPackets++;
+        break;
+
+    case kErrorAbort:
+        mStats.mSentErrorAbortPackets++;
+        break;
+
+    case kErrorInvalidState:
+        mStats.mSentErrorInvalidStatePackets++;
+        break;
+
+    default:
+        mStats.mSentErrorOthersPackets++;
+        break;
+    }
 }
 
 #endif // OPENTHREAD_RADIO
