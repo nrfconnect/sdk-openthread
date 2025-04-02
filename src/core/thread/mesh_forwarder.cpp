@@ -547,14 +547,30 @@ void MeshForwarder::TxQueueStats::UpdateFor(const Message &aMessage)
 
 void MeshForwarder::ScheduleTransmissionTask(void)
 {
-    VerifyOrExit(!mSendBusy && !mTxPaused);
+    if (mSendBusy || mTxPaused)
+    {
+        LogInfo("Postpone tx, mSendBusy=%d, mTxPaused=%d", mSendBusy, mTxPaused);
+        ExitNow();
+    }
 
 #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_COLLISION_AVOIDANCE_DELAY_ENABLE
-    VerifyOrExit(!mDelayNextTx);
+    if (mDelayNextTx)
+    {
+        LogInfo("Delay next tx");
+        ExitNow();
+    }
 #endif
 
     mSendMessage = PrepareNextDirectTransmission();
-    VerifyOrExit(mSendMessage != nullptr);
+    if (mSendMessage == nullptr)
+    {
+        const bool queueIsEmpty = mSendQueue.GetHead() == nullptr;
+        if (!queueIsEmpty)
+        {
+            LogCrit("No message to send, but queue not empty");
+        }
+        ExitNow();
+    }
 
     if (mSendMessage->GetOffset() == 0)
     {
