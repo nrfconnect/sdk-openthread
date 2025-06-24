@@ -1343,6 +1343,8 @@ void MeshForwarder::FinalizeMessageDirectTx(Message &aMessage, Error aError)
         break;
     }
 
+    aMessage.InvokeTxCallback(aError);
+
 exit:
     return;
 }

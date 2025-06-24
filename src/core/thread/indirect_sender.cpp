@@ -536,6 +536,8 @@ void IndirectSender::HandleSentFrameToChild(const Mac::TxFrame &aFrame,
             mSourceMatchController.DecrementMessageCount(aChild);
         }
 
+        message->InvokeTxCallback(txError);
+
         Get<MeshForwarder>().RemoveMessageIfNoPendingTx(*message);
     }
 
