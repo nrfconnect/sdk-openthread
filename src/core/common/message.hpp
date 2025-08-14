@@ -205,6 +205,7 @@ protected:
 #if OPENTHREAD_CONFIG_MULTI_RADIO
         bool mIsRadioTypeSet : 1; // Whether the radio type is set.
 #endif
+        bool    mTxTimestamp : 1;   // Whether TX timestamp is enabled.
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
         bool mTimeSync : 1; // Whether the message is also used for time sync purpose.
 #endif
@@ -342,6 +343,16 @@ public:
     };
 
     /**
+     * Represents the TX timestamping mode (used by `Settings` constructor).
+     *
+     */
+    enum TxTimestampMode : bool
+    {
+        kNoTxTimestamp   = false, ///< TX Timestamp disabled.
+        kWithTxTimestamp = true,  ///< TX Timestamp enabled.
+    };
+
+    /**
      * Represents the message ownership model when a `Message` instance is passed to a method/function.
      *
      */
@@ -384,20 +395,33 @@ public:
         /**
          * Initializes the `Settings` object.
          *
-         * @param[in]  aSecurityMode  A link security mode.
-         * @param[in]  aPriority      A message priority.
+         * @param[in]  aSecurityMode     A link security mode.
+         * @param[in]  aPriority         A message priority.
+         * @param[in]  aTxTimestampMode  A TX timetamp mode.
          *
          */
-        Settings(LinkSecurityMode aSecurityMode, Priority aPriority);
+        Settings(LinkSecurityMode aSecurityMode, Priority aPriority, TxTimestampMode aTxTimestampMode);
 
         /**
-         * Initializes the `Settings` with a given message priority and link security enabled.
+         * Initializes the `Settings` with a given message priority, link security enabled and TX timestamp disabled.
          *
          * @param[in]  aPriority      A message priority.
          *
          */
         explicit Settings(Priority aPriority)
-            : Settings(kWithLinkSecurity, aPriority)
+            : Settings(kWithLinkSecurity, aPriority, kNoTxTimestamp)
+        {
+        }
+
+        /**
+         * Initializes the `Settings` with a given message priority, given link security and TX timestamp disabled.
+         *
+         * @param[in]  aSecurityMode  A link security mode.
+         * @param[in]  aPriority      A message priority.
+         *
+         */
+        explicit Settings(LinkSecurityMode aSecurityMode, Priority aPriority)
+            : Settings(aSecurityMode, aPriority, kNoTxTimestamp)
         {
         }
 
@@ -416,6 +440,14 @@ public:
          *
          */
         bool IsLinkSecurityEnabled(void) const { return mLinkSecurityEnabled; }
+
+        /**
+         * Indicates whether the TX timestamp should be enabled.
+         *
+         * @returns TRUE if TX timestamp should be enabled, FALSE otherwise.
+         *
+         */
+        bool IsTxTimestampEnabled(void) const { return mTxTimestampEnabled; }
 
         /**
          * Converts a pointer to an `otMessageSettings` to a `Settings`.
@@ -1516,6 +1548,23 @@ public:
      */
     uint8_t GetTimeSyncSeq(void) const { return GetMetadata().mTimeSyncSeq; }
 #endif // OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
+
+    /**
+     * Indicates whether or not link security is enabled for the message.
+     *
+     * @retval TRUE   If link security is enabled.
+     * @retval FALSE  If link security is not enabled.
+     *
+     */
+    bool IsTxTimestampEnabled(void) const { return GetMetadata().mTxTimestamp; }
+
+    /**
+     * Sets whether or not link security is enabled for the message.
+     *
+     * @param[in]  aEnabled  TRUE if link security is enabled, FALSE otherwise.
+     *
+     */
+    void SetTxTimestampEnabled(bool aEnabled) { GetMetadata().mTxTimestamp = aEnabled; }
 
 #if OPENTHREAD_CONFIG_MULTI_RADIO
     /**

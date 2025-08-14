@@ -1392,6 +1392,23 @@ public:
      */
     void SetTxDelayBaseTime(uint32_t aTxDelayBaseTime) { mInfo.mTxInfo.mTxDelayBaseTime = aTxDelayBaseTime; }
 #endif
+
+    /**
+     * Indicates whether or not TX Timestamp is enabled.
+     *
+     * @retval TRUE   TX Timestamp is enabled.
+     * @retval FALSE  TX Timestamp is not enabled is not enabled.
+     *
+     */
+    bool IsTxTimestampEnabled(void) const { return mInfo.mTxInfo.mTxTimestampEnabled; }
+
+    /**
+     * Sets the TX Timestamp enabled attribute.
+     *
+     * @param[in]  aTxTimestampEnabled  TRUE if TX Timestamp must be enabled for this packet, FALSE otherwise.
+     *
+     */
+    void SetTxTimestampEnabled(bool aTxTimestampEnabled) { mInfo.mTxInfo.mTxTimestampEnabled = aTxTimestampEnabled; }
 };
 
 OT_TOOL_PACKED_BEGIN

@@ -83,6 +83,7 @@ Message *MessagePool::Allocate(Message::Type aType, uint16_t aReserveHeader, con
     message->SetType(aType);
     message->SetReserved(aReserveHeader);
     message->SetLinkSecurityEnabled(aSettings.IsLinkSecurityEnabled());
+    message->SetTxTimestampEnabled(aSettings.IsTxTimestampEnabled());
     message->SetLoopbackToHostAllowed(OPENTHREAD_CONFIG_IP6_ALLOW_LOOP_BACK_HOST_DATAGRAMS);
     message->SetOrigin(Message::kOriginHostTrusted);
 
@@ -203,12 +204,13 @@ uint16_t MessagePool::GetTotalBufferCount(void) const
 //---------------------------------------------------------------------------------------------------------------------
 // Message::Settings
 
-const otMessageSettings Message::Settings::kDefault = {kWithLinkSecurity, kPriorityNormal};
+const otMessageSettings Message::Settings::kDefault = {kWithLinkSecurity, kPriorityNormal, kNoTxTimestamp};
 
-Message::Settings::Settings(LinkSecurityMode aSecurityMode, Priority aPriority)
+Message::Settings::Settings(LinkSecurityMode aSecurityMode, Priority aPriority, TxTimestampMode aTxTimestampMode)
 {
     mLinkSecurityEnabled = aSecurityMode;
     mPriority            = aPriority;
+    mTxTimestampEnabled  = aTxTimestampMode;
 }
 
 const Message::Settings &Message::Settings::From(const otMessageSettings *aSettings)
@@ -812,7 +814,7 @@ Message *Message::Clone(uint16_t aLength) const
 {
     Error    error = kErrorNone;
     Message *messageCopy;
-    Settings settings(IsLinkSecurityEnabled() ? kWithLinkSecurity : kNoLinkSecurity, GetPriority());
+    Settings settings(IsLinkSecurityEnabled() ? kWithLinkSecurity : kNoLinkSecurity, GetPriority(), IsTxTimestampEnabled() ? kWithTxTimestamp : kNoTxTimestamp);
     uint16_t offset;
 
     aLength     = Min(GetLength(), aLength);
