@@ -205,6 +205,7 @@ protected:
 #if OPENTHREAD_CONFIG_MULTI_RADIO
         bool mIsRadioTypeSet : 1; // Whether the radio type is set.
 #endif
+        bool    mTxTimestamp : 1;   // Whether TX timestamp is enabled.
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
         bool mTimeSync : 1; // Whether the message is also used for time sync purpose.
 #endif
@@ -1516,6 +1517,23 @@ public:
      */
     uint8_t GetTimeSyncSeq(void) const { return GetMetadata().mTimeSyncSeq; }
 #endif // OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
+
+    /**
+     * Indicates whether or not TX timestamp is enabled for the message.
+     *
+     * @retval TRUE   If TX timestamp is enabled.
+     * @retval FALSE  If TX timestamp is not enabled.
+     *
+     */
+    bool IsTxTimestampEnabled(void) const { return GetMetadata().mTxTimestamp; }
+
+    /**
+     * Sets whether or not TX timestamp is enabled for the message.
+     *
+     * @param[in]  aEnabled  TRUE if TX timestamp is enabled, FALSE otherwise.
+     *
+     */
+    void SetTxTimestampEnabled(bool aEnabled) { GetMetadata().mTxTimestamp = aEnabled; }
 
 #if OPENTHREAD_CONFIG_MULTI_RADIO
     /**

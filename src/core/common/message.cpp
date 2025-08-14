@@ -837,6 +837,7 @@ Message *Message::Clone(uint16_t aLength) const
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
     messageCopy->SetTimeSync(IsTimeSync());
 #endif
+    messageCopy->SetTxTimestampEnabled(IsTxTimestampEnabled());
 
 exit:
     FreeAndNullMessageOnError(messageCopy, error);

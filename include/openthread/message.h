@@ -417,6 +417,14 @@ uint16_t otMessageRead(const otMessage *aMessage, uint16_t aOffset, void *aBuf, 
 int otMessageWrite(otMessage *aMessage, uint16_t aOffset, const void *aBuf, uint16_t aLength);
 
 /**
+ * Enables TX timestamp injection.
+ *
+ * @param[in]  aMessage  A pointer to a message buffer.
+ *
+ */
+void otMessageEnableTxTimestamp(otMessage *aMessage);
+
+/**
  * Represents an OpenThread message queue.
  */
 typedef struct

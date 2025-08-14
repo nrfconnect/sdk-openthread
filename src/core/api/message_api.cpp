@@ -125,6 +125,8 @@ int otMessageWrite(otMessage *aMessage, uint16_t aOffset, const void *aBuf, uint
     return aLength;
 }
 
+void otMessageEnableTxTimestamp(otMessage *aMessage) { AsCoreType(aMessage).SetTxTimestampEnabled(true); }
+
 void otMessageQueueInit(otMessageQueue *aQueue)
 {
     AssertPointerIsNotNull(aQueue);
