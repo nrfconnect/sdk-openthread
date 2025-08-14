@@ -124,6 +124,8 @@ int otMessageWrite(otMessage *aMessage, uint16_t aOffset, const void *aBuf, uint
 
 otMessage *otMessageClone(const otMessage *aMessage) { return AsCoreType(aMessage).Clone<kNoReservedHeader>(); }
 
+void otMessageEnableTxTimestamp(otMessage *aMessage) { AsCoreType(aMessage).SetTxTimestampEnabled(true); }
+
 void otMessageQueueInit(otMessageQueue *aQueue) { AsCoreType(aQueue).Clear(); }
 
 void otMessageQueueEnqueue(otMessageQueue *aQueue, otMessage *aMessage)
