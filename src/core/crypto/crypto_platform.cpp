@@ -34,15 +34,6 @@
 
 #include <string.h>
 
-#include <mbedtls/aes.h>
-#include <mbedtls/cmac.h>
-#include <mbedtls/ctr_drbg.h>
-#include <mbedtls/ecdsa.h>
-#include <mbedtls/entropy.h>
-#include <mbedtls/md.h>
-#include <mbedtls/pk.h>
-#include <mbedtls/sha256.h>
-#include <mbedtls/version.h>
 
 #include <openthread/instance.h>
 #include <openthread/platform/crypto.h>
@@ -62,6 +53,16 @@ using namespace ot;
 using namespace Crypto;
 
 #if OPENTHREAD_CONFIG_CRYPTO_LIB == OPENTHREAD_CONFIG_CRYPTO_LIB_MBEDTLS
+
+#include <mbedtls/aes.h>
+#include <mbedtls/cmac.h>
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/ecdsa.h>
+#include <mbedtls/entropy.h>
+#include <mbedtls/md.h>
+#include <mbedtls/pk.h>
+#include <mbedtls/sha256.h>
+#include <mbedtls/version.h>
 
 //---------------------------------------------------------------------------------------------------------------------
 // Default/weak implementation of crypto platform APIs
