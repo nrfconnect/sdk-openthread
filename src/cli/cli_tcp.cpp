@@ -161,7 +161,7 @@ template <> otError TcpExample::Process<Cmd("init")>(Arg aArgs[])
 #if (MBEDTLS_VERSION_NUMBER >= 0x03000000)
 #include "crypto/mbedtls.hpp"
             int rv = mbedtls_pk_parse_key(&mPKey, reinterpret_cast<const unsigned char *>(sSrvKey), sSrvKeyLength,
-                                          nullptr, 0, Crypto::MbedTls::CryptoSecurePrng, nullptr);
+                                          nullptr, 0);
 #else
             int rv = mbedtls_pk_parse_key(&mPKey, reinterpret_cast<const unsigned char *>(sSrvKey), sSrvKeyLength,
                                           nullptr, 0);
