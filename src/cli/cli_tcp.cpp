@@ -48,7 +48,6 @@
 
 #if OPENTHREAD_CONFIG_TLS_ENABLE
 #include <mbedtls/debug.h>
-#include <mbedtls/ecjpake.h>
 #include "crypto/mbedtls.hpp"
 #endif
 

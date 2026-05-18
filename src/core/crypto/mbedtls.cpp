@@ -33,9 +33,7 @@
 
 #include "mbedtls.hpp"
 
-#include <mbedtls/ctr_drbg.h>
 #include <mbedtls/debug.h>
-#include <mbedtls/entropy.h>
 #include <mbedtls/platform.h>
 #include <mbedtls/threading.h>
 
@@ -102,8 +100,6 @@ Error MbedTls::MapError(int aMbedTlsError)
     case MBEDTLS_ERR_X509_UNKNOWN_VERSION:
 #endif // MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
     case MBEDTLS_ERR_SSL_BAD_INPUT_DATA:
-    case MBEDTLS_ERR_CTR_DRBG_REQUEST_TOO_BIG:
-    case MBEDTLS_ERR_CTR_DRBG_INPUT_TOO_BIG:
         error = kErrorInvalidArgs;
         break;
 
@@ -120,7 +116,6 @@ Error MbedTls::MapError(int aMbedTlsError)
 #endif
     case MBEDTLS_ERR_SSL_ALLOC_FAILED:
     case MBEDTLS_ERR_SSL_WANT_WRITE:
-    case MBEDTLS_ERR_ENTROPY_MAX_SOURCES:
         error = kErrorNoBufs;
         break;
 
@@ -130,10 +125,6 @@ Error MbedTls::MapError(int aMbedTlsError)
     case MBEDTLS_ERR_X509_FEATURE_UNAVAILABLE:
     case MBEDTLS_ERR_X509_CERT_VERIFY_FAILED:
 #endif // MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
-    case MBEDTLS_ERR_CTR_DRBG_ENTROPY_SOURCE_FAILED:
-    case MBEDTLS_ERR_ENTROPY_SOURCE_FAILED:
-    case MBEDTLS_ERR_ENTROPY_NO_SOURCES_DEFINED:
-    case MBEDTLS_ERR_ENTROPY_NO_STRONG_SOURCE:
 #if (MBEDTLS_VERSION_NUMBER < 0x03000000)
     case MBEDTLS_ERR_SSL_PEER_VERIFY_FAILED:
 #endif

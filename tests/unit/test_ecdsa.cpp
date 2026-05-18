@@ -35,8 +35,6 @@
 #include "common/random.hpp"
 #include "crypto/ecdsa.hpp"
 
-#include <mbedtls/ctr_drbg.h>
-#include <mbedtls/ecdsa.h>
 #include <mbedtls/pk.h>
 
 #if OPENTHREAD_CONFIG_ECDSA_ENABLE
