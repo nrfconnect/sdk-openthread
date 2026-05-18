@@ -147,7 +147,6 @@ template <> otError TcpExample::Process<Cmd("init")>(Arg aArgs[])
 
             mbedtls_ssl_init(&mSslContext);
             mbedtls_ssl_config_init(&mSslConfig);
-            mbedtls_ssl_conf_rng(&mSslConfig, Crypto::MbedTls::CryptoSecurePrng, nullptr);
             mbedtls_ssl_conf_authmode(&mSslConfig, MBEDTLS_SSL_VERIFY_NONE);
             mbedtls_ssl_conf_ciphersuites(&mSslConfig, sCipherSuites);
 
