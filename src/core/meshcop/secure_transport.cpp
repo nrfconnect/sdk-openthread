@@ -317,7 +317,6 @@ Error SecureTransport::Setup(bool aClient)
     OT_UNUSED_VARIABLE(mVerifyPeerCertificate);
 #endif
 
-    mbedtls_ssl_conf_rng(&mConf, Crypto::MbedTls::CryptoSecurePrng, nullptr);
 #if (MBEDTLS_VERSION_NUMBER >= 0x03020000)
     mbedtls_ssl_conf_min_tls_version(&mConf, MBEDTLS_SSL_VERSION_TLS1_2);
     mbedtls_ssl_conf_max_tls_version(&mConf, MBEDTLS_SSL_VERSION_TLS1_2);
