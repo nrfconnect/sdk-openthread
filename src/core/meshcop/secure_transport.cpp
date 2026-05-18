@@ -447,8 +447,7 @@ int SecureTransport::SetApplicationSecureKeys(void)
 
 #if (MBEDTLS_VERSION_NUMBER >= 0x03000000)
             rval = mbedtls_pk_parse_key(&mPrivateKey, static_cast<const unsigned char *>(mPrivateKeySrc),
-                                        static_cast<size_t>(mPrivateKeyLength), nullptr, 0,
-                                        Crypto::MbedTls::CryptoSecurePrng, nullptr);
+                                        static_cast<size_t>(mPrivateKeyLength), nullptr, 0);
 #else
             rval = mbedtls_pk_parse_key(&mPrivateKey, static_cast<const unsigned char *>(mPrivateKeySrc),
                                         static_cast<size_t>(mPrivateKeyLength), nullptr, 0);
