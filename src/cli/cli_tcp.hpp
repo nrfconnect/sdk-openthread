@@ -41,8 +41,6 @@
 
 #if OPENTHREAD_CONFIG_TLS_ENABLE
 
-#include <mbedtls/ctr_drbg.h>
-#include <mbedtls/entropy.h>
 #include <mbedtls/ssl.h>
 #include <mbedtls/x509_crt.h>
 
@@ -162,7 +160,6 @@ private:
     mbedtls_ssl_config      mSslConfig;
     mbedtls_x509_crt        mSrvCert;
     mbedtls_pk_context      mPKey;
-    mbedtls_entropy_context mEntropy;
 #endif // OPENTHREAD_CONFIG_TLS_ENABLE
 
     static constexpr const char *sBenchmarkData =
