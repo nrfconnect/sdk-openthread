@@ -54,8 +54,15 @@ using namespace Crypto;
 
 #if OPENTHREAD_CONFIG_CRYPTO_LIB == OPENTHREAD_CONFIG_CRYPTO_LIB_MBEDTLS
 
+#include <mbedtls/aes.h>
+#include <mbedtls/cmac.h>
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/ecdsa.h>
+#include <mbedtls/entropy.h>
 #include <mbedtls/md.h>
 #include <mbedtls/pk.h>
+#include <mbedtls/sha256.h>
+#include <mbedtls/version.h>
 
 //---------------------------------------------------------------------------------------------------------------------
 // Default/weak implementation of crypto platform APIs
@@ -526,8 +533,9 @@ OT_TOOL_WEAK otError otPlatCryptoEcdsaGetPublicKey(const otPlatCryptoEcdsaKeyPai
 
     VerifyOrExit(mbedtls_pk_setup(&pk, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY)) == 0, error = kErrorFailed);
 
-#if (MBEDTLS_VERSION_NUMBER >= 0x03000000)
-    VerifyOrExit(mbedtls_pk_parse_key(&pk, aKeyPair->mDerBytes, aKeyPair->mDerLength, nullptr, 0) == 0,
+#if (MBEDTLS_VERSION_NUMBER >= 0x03000000) && (MBEDTLS_VERSION_NUMBER <= 0x03060500)
+    VerifyOrExit(mbedtls_pk_parse_key(&pk, aKeyPair->mDerBytes, aKeyPair->mDerLength, nullptr, 0,
+                                      MbedTls::CryptoSecurePrng, nullptr) == 0,
                  error = kErrorParse);
 #else
     VerifyOrExit(mbedtls_pk_parse_key(&pk, aKeyPair->mDerBytes, aKeyPair->mDerLength, nullptr, 0) == 0,
@@ -568,8 +576,8 @@ OT_TOOL_WEAK otError otPlatCryptoEcdsaSign(const otPlatCryptoEcdsaKeyPair *aKeyP
 
     VerifyOrExit(mbedtls_pk_setup(&pk, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY)) == 0, error = kErrorFailed);
 
-#if (MBEDTLS_VERSION_NUMBER >= 0x03000000)
-    VerifyOrExit(mbedtls_pk_parse_key(&pk, aKeyPair->mDerBytes, aKeyPair->mDerLength, nullptr, 0) == 0,
+#if (MBEDTLS_VERSION_NUMBER >= 0x03000000) && (MBEDTLS_VERSION_NUMBER <= 0x03060500)
+    VerifyOrExit(mbedtls_pk_parse_key(&pk, aKeyPair->mDerBytes, aKeyPair->mDerLength, nullptr, 0, Crypto::MbedTls::CryptoSecurePrng, nullptr) == 0,
                  error = kErrorParse);
 #else
     VerifyOrExit(mbedtls_pk_parse_key(&pk, aKeyPair->mDerBytes, aKeyPair->mDerLength, nullptr, 0) == 0,

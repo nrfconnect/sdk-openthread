@@ -147,6 +147,9 @@ template <> otError TcpExample::Process<Cmd("init")>(Arg aArgs[])
 
             mbedtls_ssl_init(&mSslContext);
             mbedtls_ssl_config_init(&mSslConfig);
+#if (MBEDTLS_VERSION_NUMBER <= 0x03060500)
+            mbedtls_ssl_conf_rng(&mSslConfig, Crypto::MbedTls::CryptoSecurePrng, nullptr);
+#endif
             mbedtls_ssl_conf_authmode(&mSslConfig, MBEDTLS_SSL_VERIFY_NONE);
             mbedtls_ssl_conf_ciphersuites(&mSslConfig, sCipherSuites);
 
@@ -158,10 +161,10 @@ template <> otError TcpExample::Process<Cmd("init")>(Arg aArgs[])
             mbedtls_ssl_conf_max_version(&mSslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 #endif
 
-#if (MBEDTLS_VERSION_NUMBER >= 0x03000000)
+#if (MBEDTLS_VERSION_NUMBER >= 0x03000000) && (MBEDTLS_VERSION_NUMBER <= 0x03060500)
 #include "crypto/mbedtls.hpp"
             int rv = mbedtls_pk_parse_key(&mPKey, reinterpret_cast<const unsigned char *>(sSrvKey), sSrvKeyLength,
-                                          nullptr, 0);
+                                          nullptr, 0, Crypto::MbedTls::CryptoSecurePrng, nullptr);
 #else
             int rv = mbedtls_pk_parse_key(&mPKey, reinterpret_cast<const unsigned char *>(sSrvKey), sSrvKeyLength,
                                           nullptr, 0);
