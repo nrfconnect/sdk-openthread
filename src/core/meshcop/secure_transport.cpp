@@ -391,6 +391,13 @@ Error SecureTransport::Setup(bool aClient)
 #endif
     VerifyOrExit(rval == 0);
 
+#if defined(MBEDTLS_X509_CRT_PARSE_C)
+    if (aClient)
+    {
+        mbedtls_ssl_set_hostname(&mSsl, nullptr);
+    }
+#endif
+
     mReceiveMessage = nullptr;
     mMessageSubType = Message::kSubTypeNone;
 
