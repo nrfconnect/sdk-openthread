@@ -612,6 +612,8 @@ private:
     bool ShouldHandleTransitionToSleep(void) const;
 
     void ProcessTransmitSecurity(void);
+    void ReprocessSecurityForRetx(TxFrame &aFrame);
+    const KeyMaterial &SelectMacKey(uint8_t aKeyId) const;
     void SignalFrameCounterUsed(uint32_t aFrameCounter, uint8_t aKeyId);
     void StartCsmaBackoff(void);
     void StartTimerForBackoff(uint8_t aBackoffExponent);
