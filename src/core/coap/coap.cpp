@@ -617,19 +617,27 @@ Error CoapBase::PrepareNextBlockRequest(Message::BlockType aType,
     Error            error       = kErrorNone;
     bool             isOptionSet = false;
     uint16_t         blockOption = 0;
+    uint16_t         optionsEnd  = 0;
     Option::Iterator iterator;
 
     blockOption = (aType == Message::kBlockType1) ? kOptionBlock1 : kOptionBlock2;
+
+    // `aRequestOld` is a queued copy of a request, so its CoAP message is followed by a
+    // `Metadata` footer. Option parsing has to stop there: a request without payload
+    // carries no Payload Marker, so nothing else would end the option list before the
+    // footer bytes get parsed as a malformed option.
+    optionsEnd = aRequestOld.GetLength();
+    VerifyOrExit(optionsEnd > sizeof(Metadata), error = kErrorParse);
+    optionsEnd -= sizeof(Metadata);
 
     aRequest.Init(kTypeConfirmable, static_cast<ot::Coap::Code>(aRequestOld.GetCode()));
     SuccessOrExit(error = iterator.Init(aRequestOld));
 
     // Copy options from last response to next message
-    for (; !iterator.IsDone() && iterator.GetOption()->GetLength() != 0; error = iterator.Advance())
+    while (!iterator.IsDone() && iterator.GetOption()->GetLength() != 0)
     {
         uint16_t optionNumber = iterator.GetOption()->GetNumber();
-
-        SuccessOrExit(error);
+        bool     copyOption   = true;
 
         // Check if option to copy next is higher than or equal to Block1 option
         if (optionNumber >= blockOption && !isOptionSet)
@@ -644,16 +652,23 @@ Error CoapBase::PrepareNextBlockRequest(Message::BlockType aType,
             isOptionSet = true;
 
             // If option to copy next is Block1 or Block2 option, option is not copied
-            if (optionNumber == kOptionBlock1 || optionNumber == kOptionBlock2)
-            {
-                continue;
-            }
+            copyOption = (optionNumber != kOptionBlock1) && (optionNumber != kOptionBlock2);
         }
 
-        // Copy option
-        SuccessOrExit(error = aRequest.AppendOptionFromMessage(optionNumber, iterator.GetOption()->GetLength(),
-                                                               iterator.GetMessage(),
-                                                               iterator.GetOptionValueMessageOffset()));
+        if (copyOption)
+        {
+            // Copy option
+            SuccessOrExit(error = aRequest.AppendOptionFromMessage(optionNumber, iterator.GetOption()->GetLength(),
+                                                                   iterator.GetMessage(),
+                                                                   iterator.GetOptionValueMessageOffset()));
+        }
+
+        if (iterator.GetOptionValueMessageOffset() + iterator.GetOption()->GetLength() >= optionsEnd)
+        {
+            break;
+        }
+
+        SuccessOrExit(error = iterator.Advance());
     }
 
     if (!isOptionSet)
