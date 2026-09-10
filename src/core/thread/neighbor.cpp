@@ -115,8 +115,36 @@ void Neighbor::Init(Instance &aInstance)
 {
     InstanceLocatorInit::Init(aInstance);
     mLinkInfo.Init(aInstance);
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    mAlternatePhyLinkStates.Clear();
+#endif
     SetState(kStateInvalid);
 }
+
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+LinkQualityInfo *Neighbor::GetOrAddAlternatePhyLinkInfo(AlternatePhy::PhyId aPhyId)
+{
+    AlternatePhy::LinkState *state = nullptr;
+
+    VerifyOrExit(AlternatePhy::IsValidPhyId(aPhyId));
+    state = mAlternatePhyLinkStates.Find(aPhyId);
+
+    if (state == nullptr)
+    {
+        state = mAlternatePhyLinkStates.PushBack();
+        VerifyOrExit(state != nullptr);
+
+        state->mPhyId        = aPhyId;
+        state->mInUse        = false;
+        state->mNextProbeTime = TimerMilli::GetNow();
+        state->mLinkInfo.Init(GetInstance());
+        state->mLinkInfo.Clear();
+    }
+
+exit:
+    return (state == nullptr) ? nullptr : &state->mLinkInfo;
+}
+#endif
 
 bool Neighbor::IsStateValidOrAttaching(void) const
 {

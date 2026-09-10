@@ -42,6 +42,9 @@
 #include "common/tlvs.hpp"
 #include "meshcop/timestamp.hpp"
 #include "net/ip6_address.hpp"
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+#include "radio/alternate_phy.hpp"
+#endif
 #include "thread/link_metrics_tlvs.hpp"
 #include "thread/mle_types.hpp"
 
@@ -108,6 +111,9 @@ public:
         kLinkMetricsManagement = 88, ///< Link Metrics Management TLV
         kLinkMetricsReport     = 89, ///< Link Metrics Report TLV
         kLinkProbe             = 90, ///< Link Probe TLV
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+        kAlternatePhyCapability = 91, ///< Alternate PHY Capability TLV
+#endif
 
         /**
          * Applicable/Required only when time synchronization service
@@ -950,9 +956,63 @@ public:
      */
     void SetSedDatagramCount(uint8_t aSedDatagramCount) { mSedDatagramCount = aSedDatagramCount; }
 
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    /**
+     * Indicates whether the sender advertises support for a given Alternate PHY.
+     *
+     * @param[in] aPhyId  Alternate PHY identifier.
+     *
+     * @retval TRUE   The TLV advertises support for @p aPhyId.
+     * @retval FALSE  Otherwise.
+     *
+     */
+    bool IsAlternatePhySupported(AlternatePhy::PhyId aPhyId) const
+    {
+        uint8_t flag = GetAlternatePhySupportFlag(aPhyId);
+
+        return (mFlags & flag) != 0;
+    }
+
+    /**
+     * Sets or clears the support flag for a given Alternate PHY.
+     *
+     * The other flag bits are preserved.
+     *
+     * @param[in] aPhyId     Alternate PHY identifier.
+     * @param[in] aSupported  TRUE to set the flag, FALSE to clear it.
+     *
+     */
+    void SetAlternatePhySupported(AlternatePhy::PhyId aPhyId, bool aSupported)
+    {
+        uint8_t flag = GetAlternatePhySupportFlag(aPhyId);
+
+        mFlags = aSupported ? (mFlags | flag) : (mFlags & static_cast<uint8_t>(~flag));
+    }
+#endif
+
 private:
     static constexpr uint8_t kFlagsParentPriorityOffset = 6;
     static constexpr uint8_t kFlagsParentPriorityMask   = (3 << kFlagsParentPriorityOffset);
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    static constexpr uint8_t kFlagsAlternatePhySupport0 = (1 << 0); // APS0 flag (bit 0).
+
+    static uint8_t GetAlternatePhySupportFlag(AlternatePhy::PhyId aPhyId)
+    {
+        uint8_t flag = 0;
+
+        switch (aPhyId)
+        {
+        case AlternatePhy::Tl3Gfsk::kPhyId:
+            flag = kFlagsAlternatePhySupport0;
+            break;
+
+        default:
+            break;
+        }
+
+        return flag;
+    }
+#endif
 
     uint8_t  mFlags;
     uint8_t  mLinkQuality3;
@@ -1278,6 +1338,61 @@ private:
 } OT_TOOL_PACKED_END;
 
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+/**
+ * Implements an Alternate PHY Sub-TLV.
+ *
+ * Each Alternate PHY Sub-TLV describes a single Alternate PHY. The Sub-TLV `Type` field encodes the PHY Identifier
+ * (PHY ID), followed by a flags octet and PHY-specific parameter octets.
+ *
+ */
+OT_TOOL_PACKED_BEGIN
+class AlternatePhySubTlv : public ot::Tlv
+{
+public:
+    /**
+     * Initializes the Sub-TLV from an Alternate PHY capability.
+     *
+     * @param[in] aCapability  The capability to encode.
+     *
+     */
+    void Init(const AlternatePhy::Capability &aCapability)
+    {
+        SetType(aCapability.mPhyId);
+        SetLength(sizeof(*this) - sizeof(ot::Tlv));
+
+        mFlags = aCapability.mFlags;
+
+        for (uint8_t index = 0; index < AlternatePhy::kParameterCount; index++)
+        {
+            mParameters[index] = aCapability.mParameters[index];
+        }
+    }
+
+    /**
+     * Decodes the Sub-TLV into an Alternate PHY capability.
+     *
+     * @param[out] aCapability  The decoded capability.
+     */
+    void GetCapability(AlternatePhy::Capability &aCapability) const
+    {
+        aCapability.mPhyId = GetType();
+        aCapability.mFlags = mFlags;
+
+        for (uint8_t index = 0; index < AlternatePhy::kParameterCount; index++)
+        {
+            aCapability.mParameters[index] = mParameters[index];
+        }
+    }
+
+private:
+    uint8_t mFlags;
+    uint8_t mParameters[AlternatePhy::kParameterCount];
+} OT_TOOL_PACKED_END;
+
+#endif // OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+
 /**
  * @}
  *

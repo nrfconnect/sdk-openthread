@@ -50,6 +50,9 @@
 #include "common/uptime.hpp"
 #include "mac/mac_types.hpp"
 #include "net/ip6.hpp"
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+#include "radio/alternate_phy.hpp"
+#endif
 #include "radio/radio.hpp"
 #include "radio/trel_link.hpp"
 #include "thread/csl_tx_scheduler.hpp"
@@ -781,6 +784,45 @@ public:
      */
     static const char *StateToString(State aState);
 
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    /**
+     * Replaces the Alternate PHY capabilities advertised by this neighbor.
+     *
+     * @param[in] aInfo  The complete set of advertised capabilities.
+     *
+     */
+    void SetAlternatePhyInfo(const AlternatePhy::Capabilities &aInfo) { mAlternatePhyInfo = aInfo; }
+
+    /**
+     * Returns the Alternate PHY capabilities advertised by this neighbor.
+     *
+     * @returns A const reference to the complete set of advertised capabilities.
+     *
+     */
+    const AlternatePhy::Capabilities &GetAlternatePhyInfo(void) const { return mAlternatePhyInfo; }
+
+    const AlternatePhy::LinkStates &GetAlternatePhyLinkStates(void) const { return mAlternatePhyLinkStates; }
+
+    void ClearAlternatePhyLinkStates(void) { mAlternatePhyLinkStates.Clear(); }
+
+    /**
+     * Returns (creating if needed) the link quality state for a given Alternate PHY.
+     *
+     * @param[in] aPhyId  Alternate PHY identifier.
+     *
+     * @returns A pointer to the @ref LinkQualityInfo for @p aPhyId, or `nullptr` if no state can be allocated.
+     *
+     */
+    LinkQualityInfo *GetOrAddAlternatePhyLinkInfo(AlternatePhy::PhyId aPhyId);
+
+    bool IsAlternatePhyInUse(AlternatePhy::PhyId aPhyId) const { return mAlternatePhyLinkStates.IsInUse(aPhyId); }
+
+    void SetAlternatePhyInUse(AlternatePhy::PhyId aPhyId, bool aInUse)
+    {
+        mAlternatePhyLinkStates.SetInUse(aPhyId, aInUse);
+    }
+#endif // OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+
 protected:
     /**
      * Initializes the `Neighbor` object.
@@ -844,6 +886,10 @@ private:
 #endif
 #if OPENTHREAD_CONFIG_UPTIME_ENABLE
     uint32_t mConnectionStart;
+#endif
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    AlternatePhy::Capabilities mAlternatePhyInfo;       ///< Alternate PHY capabilities advertised by this neighbor.
+    AlternatePhy::LinkStates   mAlternatePhyLinkStates; ///< Per-PHY Alternate PHY link quality and usage state.
 #endif
 };
 

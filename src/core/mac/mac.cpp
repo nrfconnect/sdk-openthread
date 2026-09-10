@@ -1180,7 +1180,22 @@ void Mac::RecordFrameTransmitStatus(const TxFrame &aFrame, Error aError, uint8_t
             OT_FALL_THROUGH;
 
         case kErrorNone:
-            neighbor->GetLinkInfo().AddFrameTxStatus(frameTxSuccess);
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+            if (aFrame.mInfo.mTxInfo.mIsAlternatePhy)
+            {
+                AlternatePhy::PhyId phyId   = aFrame.mInfo.mTxInfo.mAlternatePhy.mPhyId;
+                LinkQualityInfo    *linkInfo = neighbor->GetOrAddAlternatePhyLinkInfo(phyId);
+
+                if (linkInfo != nullptr)
+                {
+                    linkInfo->AddFrameTxStatus(frameTxSuccess);
+                }
+            }
+            else
+#endif
+            {
+                neighbor->GetLinkInfo().AddFrameTxStatus(frameTxSuccess);
+            }
             break;
 
         default:
@@ -2044,6 +2059,26 @@ exit:
 
 void Mac::UpdateNeighborLinkInfo(Neighbor &aNeighbor, const RxFrame &aRxFrame)
 {
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    if (aRxFrame.mInfo.mRxInfo.mIsAlternatePhy)
+    {
+        AlternatePhy::PhyId phyId = aRxFrame.mInfo.mRxInfo.mAlternatePhyId;
+
+        if (AlternatePhy::IsValidPhyId(phyId))
+        {
+            LinkQualityInfo *linkInfo = aNeighbor.GetOrAddAlternatePhyLinkInfo(phyId);
+
+            if (linkInfo != nullptr)
+            {
+                linkInfo->AddRss(aRxFrame.GetRssi());
+            }
+            return;
+        }
+
+        // Invalid PHY id from platform, fall through to Primary Link RSS tracking
+    }
+#endif
+
     LinkQuality oldLinkQuality = aNeighbor.GetLinkInfo().GetLinkQuality();
 
     aNeighbor.GetLinkInfo().AddRss(aRxFrame.GetRssi());

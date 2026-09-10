@@ -166,6 +166,7 @@ message(STATUS "- - - - - - - - - - - - - - - - ")
 message(STATUS "OpenThread ON/OFF/Unspecified Configs")
 
 ot_option(OT_15_4 OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE "802.15.4 radio link")
+ot_option(OT_ALTERNATE_PHY OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE "alternate phy (HDR) capability advertisement")
 ot_option(OT_ANDROID_NDK OPENTHREAD_CONFIG_ANDROID_NDK_ENABLE "enable android NDK")
 ot_option(OT_ANYCAST_LOCATOR OPENTHREAD_CONFIG_TMF_ANYCAST_LOCATOR_ENABLE "anycast locator")
 ot_option(OT_ASSERT OPENTHREAD_CONFIG_ASSERT_ENABLE "assert function OT_ASSERT()")

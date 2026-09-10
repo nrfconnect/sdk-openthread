@@ -34,6 +34,10 @@
 
 #if OPENTHREAD_FTD
 
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+#include "radio/alternate_phy.hpp"
+#endif
+
 #include "common/as_core_type.hpp"
 #include "common/code_utils.hpp"
 #include "common/debug.hpp"
@@ -638,6 +642,10 @@ Error MleRouter::SendLinkRequest(Neighbor *aNeighbor)
     SuccessOrExit(error = message->AppendTimeRequestTlv());
 #endif
 
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    SuccessOrExit(error = message->AppendAlternatePhyCapabilityTlv());
+#endif
+
     if (aNeighbor == nullptr)
     {
         mChallenge.GenerateRandom();
@@ -764,6 +772,13 @@ void MleRouter::HandleLinkRequest(RxInfo &aRxInfo)
     }
 #endif
 
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    if (neighbor != nullptr)
+    {
+        SuccessOrExit(error = ProcessAlternatePhyCapabilityTlv(aRxInfo.mMessage, *neighbor));
+    }
+#endif
+
     aRxInfo.mClass = RxInfo::kPeerMessage;
     ProcessKeySequence(aRxInfo);
 
@@ -837,6 +852,10 @@ Error MleRouter::SendLinkAccept(const RxInfo      &aRxInfo,
     {
         message->SetTimeSync(true);
     }
+#endif
+
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    SuccessOrExit(error = message->AppendAlternatePhyCapabilityTlv());
 #endif
 
     if (aRxInfo.mMessageInfo.GetSockAddr().IsMulticast())
@@ -1043,6 +1062,9 @@ Error MleRouter::HandleLinkAccept(RxInfo &aRxInfo, bool aRequest)
     router->SetLinkQualityOut(LinkQualityForLinkMargin(linkMargin));
     router->SetState(Neighbor::kStateValid);
     router->SetKeySequence(aRxInfo.mKeySequence);
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    SuccessOrExit(error = ProcessAlternatePhyCapabilityTlv(aRxInfo.mMessage, *router));
+#endif
 
     mNeighborTable.Signal(NeighborTable::kRouterAdded, *router);
 
@@ -2110,6 +2132,9 @@ void MleRouter::HandleChildIdRequest(RxInfo &aRxInfo)
     child->GetLinkInfo().AddRss(aRxInfo.mMessage.GetAverageRss());
     child->SetTimeout(timeout);
     child->SetSupervisionInterval(supervisionInterval);
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    SuccessOrExit(error = ProcessAlternatePhyCapabilityTlv(aRxInfo.mMessage, *child));
+#endif
 #if OPENTHREAD_CONFIG_MULTI_RADIO
     child->ClearLastRxFragmentTag();
 #endif
@@ -2859,6 +2884,10 @@ Error MleRouter::SendChildIdResponse(Child &aChild)
     {
         SuccessOrExit(error = message->AppendAddressRegistrationTlv(aChild));
     }
+
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    SuccessOrExit(error = message->AppendAlternatePhyCapabilityTlv());
+#endif
 
     SetChildStateToValid(aChild);
 
@@ -3663,6 +3692,14 @@ void MleRouter::FillConnectivityTlv(ConnectivityTlv &aTlv)
     aTlv.SetIdSequence(mRouterTable.GetRouterIdSequence());
     aTlv.SetSedBufferSize(OPENTHREAD_CONFIG_DEFAULT_SED_BUFFER_SIZE);
     aTlv.SetSedDatagramCount(OPENTHREAD_CONFIG_DEFAULT_SED_DATAGRAM_COUNT);
+
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    // Set the APS flags after `SetParentPriority()` since it writes the whole flags octet.
+    for (const AlternatePhy::Capability &capability : AlternatePhy::GetCapabilities(&GetInstance()))
+    {
+        aTlv.SetAlternatePhySupported(capability.mPhyId, true);
+    }
+#endif
 }
 
 bool MleRouter::ShouldDowngrade(uint8_t aNeighborId, const RouteTlv &aRouteTlv) const

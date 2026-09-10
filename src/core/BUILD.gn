@@ -605,6 +605,7 @@ openthread_core_files = [
   "net/tcp6_ext.hpp",
   "net/udp6.cpp",
   "net/udp6.hpp",
+  "radio/alternate_phy.hpp",
   "radio/ble_secure.cpp",
   "radio/ble_secure.hpp",
   "radio/max_power_table.hpp",

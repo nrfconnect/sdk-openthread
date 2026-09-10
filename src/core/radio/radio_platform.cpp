@@ -33,6 +33,10 @@
 #include <openthread/instance.h>
 #include <openthread/platform/time.h>
 
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+#include <openthread/platform/alternate_phy.h>
+#endif
+
 #include "common/as_core_type.hpp"
 #include "common/code_utils.hpp"
 #include "instance/instance.hpp"
@@ -176,6 +180,26 @@ extern "C" void otPlatDiagRadioTransmitDone(otInstance *, otRadioFrame *, otErro
 
 //---------------------------------------------------------------------------------------------------------------------
 // Default/weak implementation of radio platform APIs
+
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+OT_TOOL_WEAK uint8_t otPlatAlternatePhyGetCapabilities(otInstance               *aInstance,
+                                                        otAlternatePhyCapability *aCaps,
+                                                        uint8_t                   aMaxCount)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aCaps);
+    OT_UNUSED_VARIABLE(aMaxCount);
+
+    return 0;
+}
+
+OT_TOOL_WEAK uint8_t otPlatAlternatePhyGetPriority(otInstance *aInstance, uint8_t aPhyId)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    return (aPhyId == OT_ALTERNATE_PHY_ID_PRIMARY_LINK) ? 0 : 1;
+}
+#endif
 
 OT_TOOL_WEAK uint32_t otPlatRadioGetSupportedChannelMask(otInstance *aInstance)
 {

@@ -35,6 +35,7 @@
 
 #include <stdio.h>
 
+#include "common/clearable.hpp"
 #include "common/code_utils.hpp"
 #include "common/debug.hpp"
 #include "common/frame_builder.hpp"
@@ -57,6 +58,11 @@ void Frame::InitMacHeader(Type             aType,
 {
     uint16_t     fcf;
     FrameBuilder builder;
+
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    mInfo.mTxInfo.mIsAlternatePhy = false;
+    ClearAllBytes(mInfo.mTxInfo.mAlternatePhy);
+#endif
 
     fcf = static_cast<uint16_t>(aType) | static_cast<uint16_t>(aVersion);
 
@@ -1295,7 +1301,12 @@ uint16_t Frame::GetMtu(void) const
     {
 #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
     case kRadioTypeIeee802154:
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+        mtu = mInfo.mTxInfo.mIsAlternatePhy ? mInfo.mTxInfo.mAlternatePhy.mMaxPsdu
+                                            : static_cast<uint16_t>(OT_RADIO_FRAME_MAX_SIZE);
+#else
         mtu = OT_RADIO_FRAME_MAX_SIZE;
+#endif
         break;
 #endif
 

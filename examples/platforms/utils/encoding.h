@@ -28,13 +28,37 @@
 
 /**
  * @file
- *   This file includes macros for validating runtime conditions.
+ *   This file includes helpers for reading and writing little-endian values.
  */
 
 #ifndef PLATFORM_UTILS_ENCODING_H
 #define PLATFORM_UTILS_ENCODING_H
 
 #include <stdint.h>
+
+/**
+ * Converts a 16-bit unsigned integer stored as a little-endian byte array to `uint16_t`.
+ *
+ * @param[in]  aSource  The byte array.
+ *
+ * @returns The 16-bit value as a `uint16_t`.
+ */
+static inline uint16_t otEncodingReadUint16Le(const uint8_t *aSource)
+{
+    return (uint16_t)(aSource[0] | ((uint16_t)aSource[1] << 8));
+}
+
+/**
+ * Writes a 16-bit unsigned integer to a byte array using little-endian encoding.
+ *
+ * @param[out] aBuffer  The byte array.
+ * @param[in]  aValue   The value to write.
+ */
+static inline void otEncodingWriteUint16Le(uint8_t *aBuffer, uint16_t aValue)
+{
+    aBuffer[0] = (uint8_t)(aValue & 0xffU);
+    aBuffer[1] = (uint8_t)((aValue >> 8) & 0xffU);
+}
 
 /**
  * Converts a 64-bit unsigned integer stored as a little-endian byte

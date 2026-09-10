@@ -359,6 +359,58 @@
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+ *
+ * Enable advertisement and discovery of Alternate PHY (HDR) capabilities via MLE.
+ *
+ * When enabled, the device advertises its supported Alternate PHYs.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+#define OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE 0
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_ALTERNATE_PHY_MIN_LINK_QUALITY_START
+ *
+ * Minimum measured link quality required to start using an Alternate PHY.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_ALTERNATE_PHY_MIN_LINK_QUALITY_START
+#define OPENTHREAD_CONFIG_ALTERNATE_PHY_MIN_LINK_QUALITY_START 2
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_ALTERNATE_PHY_MIN_LINK_QUALITY_CONTINUE
+ *
+ * Minimum measured link quality required to continue using an Alternate PHY.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_ALTERNATE_PHY_MIN_LINK_QUALITY_CONTINUE
+#define OPENTHREAD_CONFIG_ALTERNATE_PHY_MIN_LINK_QUALITY_CONTINUE 1
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_ALTERNATE_PHY_MAX_MESSAGE_FAILURE_RATE
+ *
+ * Maximum Alternate PHY message failure rate, where 0xffff represents 100 percent.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_ALTERNATE_PHY_MAX_MESSAGE_FAILURE_RATE
+#define OPENTHREAD_CONFIG_ALTERNATE_PHY_MAX_MESSAGE_FAILURE_RATE 0x2000
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_ALTERNATE_PHY_RETRY_INTERVAL
+ *
+ * Delay in milliseconds before probing an Alternate PHY that exceeded the message failure-rate threshold.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_ALTERNATE_PHY_RETRY_INTERVAL
+#define OPENTHREAD_CONFIG_ALTERNATE_PHY_RETRY_INTERVAL 60000
+#endif
+
+/**
  * @}
  *
  */

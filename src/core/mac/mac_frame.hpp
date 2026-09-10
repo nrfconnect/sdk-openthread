@@ -884,6 +884,12 @@ public:
     uint16_t GetMtu(void) const
 #if !OPENTHREAD_CONFIG_MULTI_RADIO && OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
     {
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+        if (mInfo.mTxInfo.mIsAlternatePhy)
+        {
+            return mInfo.mTxInfo.mAlternatePhy.mMaxPsdu;
+        }
+#endif
         return OT_RADIO_FRAME_MAX_SIZE;
     }
 #else

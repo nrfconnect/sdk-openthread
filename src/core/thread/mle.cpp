@@ -36,7 +36,10 @@
 #include <openthread/platform/radio.h>
 #include <openthread/platform/time.h>
 
-#include "common/array.hpp"
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+#include "radio/alternate_phy.hpp"
+#endif
+
 #include "common/as_core_type.hpp"
 #include "common/code_utils.hpp"
 #include "common/debug.hpp"
@@ -64,6 +67,21 @@ namespace ot {
 namespace Mle {
 
 RegisterLogModule("Mle");
+
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+static bool HasMatchingAlternatePhy(const AlternatePhy::Capabilities &aLocal, const ConnectivityTlv &aConnectivity)
+{
+    for (const AlternatePhy::Capability &capability : aLocal)
+    {
+        if (aConnectivity.IsAlternatePhySupported(capability.mPhyId))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+#endif
 
 const otMeshLocalPrefix Mle::kMeshLocalPrefixInit = {
     {0xfd, 0xde, 0xad, 0x00, 0xbe, 0xef, 0x00, 0x00},
@@ -1075,6 +1093,9 @@ void Mle::InitNeighbor(Neighbor &aNeighbor, const RxInfo &aRxInfo)
 {
     aRxInfo.mMessageInfo.GetPeerAddr().GetIid().ConvertToExtAddress(aNeighbor.GetExtAddress());
     aNeighbor.GetLinkInfo().Clear();
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    aNeighbor.ClearAlternatePhyLinkStates();
+#endif
     aNeighbor.GetLinkInfo().AddRss(aRxInfo.mMessage.GetAverageRss());
     aNeighbor.ResetLinkFailures();
     aNeighbor.SetLastHeard(TimerMilli::GetNow());
@@ -1789,6 +1810,10 @@ Error Mle::SendChildIdRequest(void)
 
     SuccessOrExit(error = message->AppendTlvRequestTlv(kTlvs, tlvsLen));
     SuccessOrExit(error = message->AppendActiveAndPendingTimestampTlvs());
+
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    SuccessOrExit(error = message->AppendAlternatePhyCapabilityTlv());
+#endif
 
     mParentCandidate.SetState(Neighbor::kStateValid);
 
@@ -3040,6 +3065,9 @@ bool Mle::IsBetterParent(uint16_t                aRloc16,
                          const Mac::CslAccuracy &aCslAccuracy)
 {
     int rval;
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    AlternatePhy::Capabilities localCapabilities = AlternatePhy::GetCapabilities(&GetInstance());
+#endif
 
     // Mesh Impacting Criteria
     rval = ThreeWayCompare(LinkQualityForLinkMargin(aTwoWayLinkMargin), mParentCandidate.GetTwoWayLinkQuality());
@@ -3086,6 +3114,15 @@ bool Mle::IsBetterParent(uint16_t                aRloc16,
     }
 #else
     OT_UNUSED_VARIABLE(aCslAccuracy);
+#endif
+
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    if (!localCapabilities.IsEmpty())
+    {
+        rval = ThreeWayCompare(HasMatchingAlternatePhy(localCapabilities, aConnectivityTlv),
+                               mParentCandidate.mHasMatchingAlternatePhy);
+        VerifyOrExit(rval == 0);
+    }
 #endif
 
     rval = ThreeWayCompare(aTwoWayLinkMargin, mParentCandidate.mLinkMargin);
@@ -3279,6 +3316,10 @@ void Mle::HandleParentResponse(RxInfo &aRxInfo)
     mParentCandidate.mLeaderData       = leaderData;
     mParentCandidate.mIsSingleton      = connectivityTlv.IsSingleton();
     mParentCandidate.mLinkMargin       = twoWayLinkMargin;
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    mParentCandidate.mHasMatchingAlternatePhy =
+        HasMatchingAlternatePhy(AlternatePhy::GetCapabilities(&GetInstance()), connectivityTlv);
+#endif
 
 exit:
     LogProcessError(kTypeParentResponse, error);
@@ -3367,6 +3408,10 @@ void Mle::HandleChildIdResponse(RxInfo &aRxInfo)
 #endif
 
     mParent.SetRloc16(sourceAddress);
+
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    SuccessOrExit(error = ProcessAlternatePhyCapabilityTlv(aRxInfo.mMessage, mParent));
+#endif
 
     IgnoreError(aRxInfo.mMessage.ReadAndSetNetworkDataTlv(leaderData));
 
@@ -4725,6 +4770,88 @@ Error Mle::TxMessage::AppendSupervisionIntervalTlv(uint16_t aInterval)
 {
     return Tlv::Append<SupervisionIntervalTlv>(*this, aInterval);
 }
+
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+Error Mle::TxMessage::AppendAlternatePhyCapabilityTlv(void)
+{
+    Error                      error        = kErrorNone;
+    AlternatePhy::Capabilities capabilities = AlternatePhy::GetCapabilities(&GetInstance());
+    uint8_t                    length;
+    uint16_t                   startOffset;
+    Tlv                        tlv;
+
+    VerifyOrExit(!capabilities.IsEmpty());
+
+    tlv.SetType(Tlv::kAlternatePhyCapability);
+    tlv.SetLength(0);
+    startOffset = GetLength();
+    SuccessOrExit(error = Append(tlv));
+
+    for (const AlternatePhy::Capability &capability : capabilities)
+    {
+        AlternatePhySubTlv subTlv;
+
+        VerifyOrExit(AlternatePhy::IsValid(capability), error = kErrorFailed);
+        subTlv.Init(capability);
+        SuccessOrExit(error = subTlv.AppendTo(*this));
+    }
+
+    length = static_cast<uint8_t>(GetLength() - startOffset - sizeof(Tlv));
+    VerifyOrExit(length > 0, error = SetLength(startOffset));
+    tlv.SetLength(length);
+    Write(startOffset, tlv);
+
+exit:
+    return error;
+}
+
+Error Mle::ProcessAlternatePhyCapabilityTlv(const Message &aMessage, Neighbor &aNeighbor)
+{
+    AlternatePhy::Capabilities newInfo;
+    Error                      error;
+    OffsetRange                offsetRange;
+
+    switch (error = Tlv::FindTlvValueOffsetRange(aMessage, Tlv::kAlternatePhyCapability, offsetRange))
+    {
+    case kErrorNone:
+        break;
+
+    case kErrorNotFound:
+        aNeighbor.SetAlternatePhyInfo(newInfo);
+        error = kErrorNone;
+        ExitNow();
+
+    default:
+        ExitNow();
+    }
+
+    while (!offsetRange.IsEmpty())
+    {
+        AlternatePhy::Capability capability;
+        AlternatePhySubTlv       subTlv;
+        ot::Tlv                  header;
+        uint16_t                 entrySize;
+
+        VerifyOrExit(offsetRange.Contains(sizeof(header)), error = kErrorParse);
+        SuccessOrExit(error = aMessage.Read(offsetRange.GetOffset(), header));
+        entrySize = static_cast<uint16_t>(sizeof(header) + header.GetLength());
+
+        VerifyOrExit(offsetRange.Contains(entrySize), error = kErrorParse);
+        VerifyOrExit(header.GetLength() == sizeof(subTlv) - sizeof(ot::Tlv), error = kErrorParse);
+        SuccessOrExit(error = aMessage.Read(offsetRange.GetOffset(), subTlv));
+        subTlv.GetCapability(capability);
+        VerifyOrExit(AlternatePhy::IsValid(capability), error = kErrorParse);
+        SuccessOrExit(error = newInfo.Upsert(capability));
+
+        offsetRange.AdvanceOffset(entrySize);
+    }
+
+    aNeighbor.SetAlternatePhyInfo(newInfo);
+
+exit:
+    return error;
+}
+#endif // OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
 
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
 Error Mle::TxMessage::AppendTimeRequestTlv(void)

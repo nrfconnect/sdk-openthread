@@ -559,6 +559,15 @@ void SubMac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aErro
 
     shouldRetx = ((aError != kErrorNone) && ShouldHandleRetries() && (mTransmitRetries < aFrame.GetMaxFrameRetries()));
 
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    // An aborted Alternate PHY frame was not sent. Let `MeshForwarder` rebuild it for the Primary Link
+    // instead of retrying the same unusable Alternate PHY frame.
+    if ((aError == kErrorAbort) && aFrame.mInfo.mTxInfo.mIsAlternatePhy)
+    {
+        shouldRetx = false;
+    }
+#endif
+
     mCallbacks.RecordFrameTransmitStatus(aFrame, aError, mTransmitRetries, shouldRetx);
 
     if (shouldRetx)

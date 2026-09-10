@@ -566,6 +566,7 @@ Mac::TxFrame *DataPollSender::PrepareDataRequest(Mac::TxFrames &aTxFrames)
     frame = &aTxFrames.GetTxFrame();
 #endif
 
+
     if (addresses.mDestination.IsExtended())
     {
         addresses.mSource.SetExtended(Get<Mac::Mac>().GetExtAddress());

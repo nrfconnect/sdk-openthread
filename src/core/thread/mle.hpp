@@ -36,6 +36,7 @@
 
 #include "openthread-core-config.h"
 
+#include "common/array.hpp"
 #include "common/callback.hpp"
 #include "common/encoding.hpp"
 #include "common/locator.hpp"
@@ -49,6 +50,9 @@
 #include "meshcop/joiner_router.hpp"
 #include "meshcop/meshcop.hpp"
 #include "net/udp6.hpp"
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+#include "radio/alternate_phy.hpp"
+#endif
 #include "thread/child.hpp"
 #include "thread/link_metrics.hpp"
 #include "thread/link_metrics_tlvs.hpp"
@@ -1064,6 +1068,9 @@ private:
         Error AppendActiveTimestampTlv(void);
         Error AppendPendingTimestampTlv(void);
         Error AppendActiveAndPendingTimestampTlvs(void);
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+        Error AppendAlternatePhyCapabilityTlv(void);
+#endif
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
         Error AppendTimeRequestTlv(void);
         Error AppendTimeParameterTlv(void);
@@ -1217,6 +1224,9 @@ private:
         uint8_t     mLinkMargin;
         LeaderData  mLeaderData;
         bool        mIsSingleton;
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+        bool mHasMatchingAlternatePhy;
+#endif
     };
 
     //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -1325,6 +1335,9 @@ private:
     uint32_t   GetAttachStartDelay(void) const;
     void       SendParentRequest(ParentRequestType aType);
     Error      SendChildIdRequest(void);
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    Error ProcessAlternatePhyCapabilityTlv(const Message &aMessage, Neighbor &aNeighbor);
+#endif
     Error      GetNextAnnounceChannel(uint8_t &aChannel) const;
     bool       HasMoreChannelsToAnnounce(void) const;
     bool       PrepareAnnounceState(void);

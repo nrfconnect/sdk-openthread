@@ -53,6 +53,9 @@ void MeshForwarder::SendMessage(OwnedPtr<Message> aMessagePtr)
     message.SetOffset(0);
     message.SetDatagramTag(0);
     message.SetTimestampToNow();
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    TagAlternatePhyEligibility(message);
+#endif
     mSendQueue.Enqueue(message);
 
     switch (message.GetType())
@@ -337,8 +340,8 @@ void MeshForwarder::SendMesh(Message &aMessage, Mac::TxFrame &aFrame)
 
     panIds.SetBothSourceDestination(Get<Mac::Mac>().GetPanId());
 
-    PrepareMacHeaders(aFrame, Mac::Frame::kTypeData, mMacAddrs, panIds, Mac::Frame::kSecurityEncMic32,
-                      Mac::Frame::kKeyIdMode1, &aMessage);
+    PrepareDataFrameHeader(aFrame, mMacAddrs, panIds, Mac::Frame::kSecurityEncMic32, Mac::Frame::kKeyIdMode1,
+                           aMessage);
 
     // write payload
     OT_ASSERT(aMessage.GetLength() <= aFrame.GetMaxPayloadLength());

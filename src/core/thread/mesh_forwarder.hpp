@@ -542,6 +542,12 @@ private:
                                Mac::Frame::SecurityLevel aSecurityLevel,
                                Mac::Frame::KeyIdMode     aKeyIdMode,
                                const Message            *aMessage);
+    void     PrepareDataFrameHeader(Mac::TxFrame             &aFrame,
+                                    const Mac::Addresses     &aMacAddrs,
+                                    const Mac::PanIds        &aPanIds,
+                                    Mac::Frame::SecurityLevel aSecurityLevel,
+                                    Mac::Frame::KeyIdMode     aKeyIdMode,
+                                    const Message            &aMessage);
     uint16_t PrepareDataFrame(Mac::TxFrame         &aFrame,
                               Message              &aMessage,
                               const Mac::Addresses &aMacAddrs,
@@ -551,6 +557,12 @@ private:
                               bool                  aAddFragHeader);
     uint16_t PrepareDataFrameWithNoMeshHeader(Mac::TxFrame &aFrame, Message &aMessage, const Mac::Addresses &aMacAddrs);
     void     PrepareEmptyFrame(Mac::TxFrame &aFrame, const Mac::Address &aMacDest, bool aAckRequest);
+
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    static void                     TagAlternatePhyEligibility(Message &aMessage);
+    const AlternatePhy::Capability *SelectPhyForDestination(const Mac::Address &aMacDest) const;
+    void ApplyAlternatePhyForFrame(Mac::TxFrame &aFrame, const Message &aMessage, const Mac::Address &aMacDest) const;
+#endif
 
 #if OPENTHREAD_CONFIG_DELAY_AWARE_QUEUE_MANAGEMENT_ENABLE
     Error UpdateEcnOrDrop(Message &aMessage, bool aPreparingToSend);
@@ -583,7 +595,11 @@ private:
                                             bool                aIsDataPoll);
     void UpdateNeighborLinkFailures(Neighbor &aNeighbor, Error aError, bool aAllowNeighborRemove, uint8_t aFailLimit);
     void HandleSentFrame(Mac::TxFrame &aFrame, Error aError);
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+    void UpdateSendMessage(Error aFrameTxError, Mac::Address &aMacDest, Neighbor *aNeighbor, AlternatePhy::PhyId aPhyId);
+#else
     void UpdateSendMessage(Error aFrameTxError, Mac::Address &aMacDest, Neighbor *aNeighbor);
+#endif
     void FinalizeMessageDirectTx(Message &aMessage, Error aError);
     bool RemoveMessageIfNoPendingTx(Message &aMessage);
 

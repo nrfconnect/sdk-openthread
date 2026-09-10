@@ -40,6 +40,7 @@
 
 #include <openthread/error.h>
 #include <openthread/instance.h>
+#include <openthread/platform/alternate_phy.h>
 #include <openthread/platform/crypto.h>
 
 #ifdef __cplusplus
@@ -362,6 +363,10 @@ typedef struct otRadioFrame
             bool mCslPresent : 1;          ///< Set to true if CSL header IE is present.
             bool mIsSecurityProcessed : 1; ///< True if SubMac should skip the AES processing of this frame.
             bool mTxTimestampEnabled : 1;  ///< Set to true to enable TX Timestamp Encoding for this packet, false otherwise.
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+            bool mIsAlternatePhy : 1;            ///< Transmit this frame using the Alternate PHY described by `mAlternatePhy`.
+            otAlternatePhyTxInfo mAlternatePhy;  ///< Additional information about the Alternate PHY, PHY ID, settling delay etc.
+#endif
         } mTxInfo;
 
         /**
@@ -383,6 +388,10 @@ typedef struct otRadioFrame
             // Flags
             bool mAckedWithFramePending : 1; ///< This indicates if this frame was acknowledged with frame pending set.
             bool mAckedWithSecEnhAck : 1; ///< This indicates if this frame was acknowledged with secured enhance ACK.
+#if OPENTHREAD_CONFIG_ALTERNATE_PHY_ENABLE
+            bool mIsAlternatePhy : 1; ///< The frame was received using an Alternate PHY.
+            uint8_t mAlternatePhyId;  ///< PHY Identifier when `mIsAlternatePhy` is true (`OT_ALTERNATE_PHY_ID_*`).
+#endif
         } mRxInfo;
     } mInfo;
 } otRadioFrame;

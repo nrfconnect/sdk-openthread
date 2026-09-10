@@ -57,3 +57,19 @@ target_include_directories(openthread-platform-utils PRIVATE
 
 # Provide a static library implementation of platform-utils for non-cmake platforms
 add_library(openthread-platform-utils-static $<TARGET_OBJECTS:openthread-platform-utils>)
+
+if(OT_ALTERNATE_PHY)
+    add_library(openthread-daps OBJECT daps_frame.c)
+
+    target_compile_definitions(openthread-daps PRIVATE
+        $<TARGET_PROPERTY:ot-config,INTERFACE_COMPILE_DEFINITIONS>
+    )
+
+    target_include_directories(openthread-daps PRIVATE
+        ${OT_PUBLIC_INCLUDES}
+        $<TARGET_PROPERTY:ot-config,INTERFACE_INCLUDE_DIRECTORIES>
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    add_library(openthread-daps-static $<TARGET_OBJECTS:openthread-daps>)
+endif()
