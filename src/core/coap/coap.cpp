@@ -888,6 +888,8 @@ Error CoapBase::ProcessBlock2Request(Message                 &aMessage,
         ExitNow();
     }
 
+    VerifyOrExit(mLastResponse != nullptr, error = kErrorNoFrameReceived);
+
     // Set up next response
     VerifyOrExit((response = NewMessage()) != nullptr, error = kErrorNoBufs);
     response->Init(kTypeAck, kCodeContent);
@@ -1414,10 +1416,18 @@ void CoapBase::ProcessReceivedRequest(Message &aMessage, const Ip6::MessageInfo 
             case 2:
                 if (resource.mTransmitHook != nullptr)
                 {
-                    if ((error = ProcessBlock2Request(aMessage, aMessageInfo, resource)) != kErrorNone)
+                    switch (ProcessBlock2Request(aMessage, aMessageInfo, resource))
                     {
+                    case kErrorNone:
+                        break;
+                    case kErrorNoFrameReceived:
+                        IgnoreReturnValue(SendHeaderResponse(kCodeRequestIncomplete, aMessage, aMessageInfo));
+                        error = kErrorDrop;
+                        break;
+                    default:
                         IgnoreReturnValue(SendHeaderResponse(kCodeInternalError, aMessage, aMessageInfo));
                         error = kErrorDrop;
+                        break;
                     }
                 }
                 break;
