@@ -489,20 +489,6 @@ exit:
     return error;
 }
 
-void Diags::OutputStats(void)
-{
-    Output("received packets: %lu\r\n"
-           "sent success packets: %lu\r\n"
-           "sent error cca packets: %lu\r\n"
-           "sent error abort packets: %lu\r\n"
-           "sent error others packets: %lu\r\n"
-           "first received packet: rssi=%d, lqi=%u\r\n"
-           "last received packet: rssi=%d, lqi=%u\r\n",
-           ToUlong(mStats.mReceivedPackets), ToUlong(mStats.mSentSuccessPackets), ToUlong(mStats.mSentErrorCcaPackets),
-           ToUlong(mStats.mSentErrorAbortPackets), ToUlong(mStats.mSentErrorOthersPackets), mStats.mFirstRssi,
-           mStats.mFirstLqi, mStats.mLastRssi, mStats.mLastLqi);
-}
-
 Error Diags::ProcessStats(uint8_t aArgsLength, char *aArgs[])
 {
     Error error = kErrorNone;
@@ -515,7 +501,12 @@ Error Diags::ProcessStats(uint8_t aArgsLength, char *aArgs[])
     else
     {
         VerifyOrExit(aArgsLength == 0, error = kErrorInvalidArgs);
-        OutputStats();
+        Output("received packets: %d\r\nsent packets: %d\r\n"
+               "first received packet: rssi=%d, lqi=%d\r\n"
+               "last received packet: rssi=%d, lqi=%d\r\n",
+               static_cast<int>(mStats.mReceivedPackets), static_cast<int>(mStats.mSentPackets),
+               static_cast<int>(mStats.mFirstRssi), static_cast<int>(mStats.mFirstLqi),
+               static_cast<int>(mStats.mLastRssi), static_cast<int>(mStats.mLastLqi));
     }
 
 exit:
@@ -531,8 +522,13 @@ Error Diags::ProcessStop(uint8_t aArgsLength, char *aArgs[])
     otPlatDiagModeSet(false);
     Get<Radio>().SetPromiscuous(false);
 
-    OutputStats();
-    Output("\nstop diagnostics mode\r\n");
+    Output("received packets: %d\r\nsent packets: %d\r\n"
+           "first received packet: rssi=%d, lqi=%d\r\n"
+           "last received packet: rssi=%d, lqi=%d\r\n"
+           "\nstop diagnostics mode\r\n",
+           static_cast<int>(mStats.mReceivedPackets), static_cast<int>(mStats.mSentPackets),
+           static_cast<int>(mStats.mFirstRssi), static_cast<int>(mStats.mFirstLqi), static_cast<int>(mStats.mLastRssi),
+           static_cast<int>(mStats.mLastLqi));
 
     return kErrorNone;
 }
@@ -838,29 +834,21 @@ void Diags::TransmitDone(Error aError)
     VerifyOrExit(mDiagSendOn);
     mDiagSendOn = false;
 
-    switch (aError)
+    if (aError == kErrorNone)
     {
-    case kErrorNone:
-        mStats.mSentSuccessPackets++;
-        break;
+        mStats.mSentPackets++;
 
-    case kErrorChannelAccessFailure:
-        mStats.mSentErrorCcaPackets++;
-        break;
-
-    case kErrorAbort:
-        mStats.mSentErrorAbortPackets++;
-        break;
-
-    default:
-        mStats.mSentErrorOthersPackets++;
-        break;
+        if (mTxPackets > 1)
+        {
+            mTxPackets--;
+        }
+        else
+        {
+            ExitNow();
+        }
     }
 
     VerifyOrExit(!mRepeatActive);
-    VerifyOrExit(mTxPackets > 1);
-    mTxPackets--;
-
     TransmitPacket();
 
 exit:
