@@ -233,7 +233,6 @@ private:
     Error ProcessStats(uint8_t aArgsLength, char *aArgs[]);
     Error ProcessStop(uint8_t aArgsLength, char *aArgs[]);
     Error ProcessStream(uint8_t aArgsLength, char *aArgs[]);
-    Error ProcessSweep(uint8_t aArgsLength, char *aArgs[]);
 #if OPENTHREAD_RADIO && !OPENTHREAD_RADIO_CLI
     Error ProcessEcho(uint8_t aArgsLength, char *aArgs[]);
 #endif
@@ -261,7 +260,6 @@ private:
         kTxCmdNone,
         kTxCmdRepeat,
         kTxCmdSend,
-        kTxCmdSweep,
     };
 
     Stats mStats;
@@ -277,8 +275,6 @@ private:
     bool          mIsTxPacketSet : 1;
     bool          mIsAsyncSend : 1;
     bool          mDiagSendOn : 1;
-    bool          mIsSleepOn : 1;
-    bool          mIsAsyncSweep : 1;
 #endif
 
     ReceiveConfig        mReceiveConfig;
