@@ -88,15 +88,15 @@ Diags::Diags(Instance &aInstance)
 
 Error Diags::ProcessChannel(uint8_t aArgsLength, char *aArgs[])
 {
-    Error   error = kErrorNone;
-    uint8_t channel;
+    Error error = kErrorNone;
+    long  value;
 
     VerifyOrExit(aArgsLength == 1, error = kErrorInvalidArgs);
 
-    SuccessOrExit(error = Utils::CmdLineParser::ParseAsUint8(aArgs[0], channel));
-    VerifyOrExit(channel >= Radio::kChannelMin && channel <= Radio::kChannelMax, error = kErrorInvalidArgs);
+    SuccessOrExit(error = ParseLong(aArgs[0], value));
+    VerifyOrExit(value >= Radio::kChannelMin && value <= Radio::kChannelMax, error = kErrorInvalidArgs);
 
-    otPlatDiagChannelSet(channel);
+    otPlatDiagChannelSet(static_cast<uint8_t>(value));
 
 exit:
     AppendErrorResult(error);
@@ -105,14 +105,14 @@ exit:
 
 Error Diags::ProcessPower(uint8_t aArgsLength, char *aArgs[])
 {
-    Error  error = kErrorNone;
-    int8_t power;
+    Error error = kErrorNone;
+    long  value;
 
     VerifyOrExit(aArgsLength == 1, error = kErrorInvalidArgs);
 
-    SuccessOrExit(error = Utils::CmdLineParser::ParseAsInt8(aArgs[0], power));
+    SuccessOrExit(error = ParseLong(aArgs[0], value));
 
-    otPlatDiagTxPowerSet(power);
+    otPlatDiagTxPowerSet(static_cast<int8_t>(value));
 
 exit:
     AppendErrorResult(error);
@@ -133,11 +133,12 @@ Error Diags::ProcessEcho(uint8_t aArgsLength, char *aArgs[])
         static constexpr uint16_t kOutputLen    = OPENTHREAD_CONFIG_DIAG_OUTPUT_BUFFER_SIZE;
         static constexpr uint16_t kOutputMaxLen = kOutputLen - kReservedLen;
         char                      output[kOutputLen];
+        long                      value;
         uint32_t                  i;
         uint32_t                  number;
 
-        SuccessOrExit(error = Utils::CmdLineParser::ParseAsUint32(aArgs[1], number));
-        number = Min(number, static_cast<uint32_t>(kOutputMaxLen));
+        SuccessOrExit(error = ParseLong(aArgs[1], value));
+        number = Min(static_cast<uint32_t>(value), static_cast<uint32_t>(kOutputMaxLen));
 
         for (i = 0; i < number; i++)
         {
@@ -247,11 +248,14 @@ Error Diags::ProcessFrame(uint8_t aArgsLength, char *aArgs[])
         }
         else if (StringMatch(aArgs[0], "-p"))
         {
+            long value;
+
             aArgs++;
             aArgsLength--;
 
             VerifyOrExit(aArgsLength > 1, error = kErrorInvalidArgs);
-            SuccessOrExit(error = Utils::CmdLineParser::ParseAsInt8(aArgs[0], txPower));
+            SuccessOrExit(error = ParseLong(aArgs[0], value));
+            txPower = static_cast<int8_t>(value);
         }
         else if (StringMatch(aArgs[0], "-c"))
         {
@@ -296,12 +300,12 @@ Error Diags::ProcessChannel(uint8_t aArgsLength, char *aArgs[])
     }
     else
     {
-        uint8_t channel;
+        long value;
 
-        SuccessOrExit(error = Utils::CmdLineParser::ParseAsUint8(aArgs[0], channel));
-        VerifyOrExit(channel >= Radio::kChannelMin && channel <= Radio::kChannelMax, error = kErrorInvalidArgs);
+        SuccessOrExit(error = ParseLong(aArgs[0], value));
+        VerifyOrExit(value >= Radio::kChannelMin && value <= Radio::kChannelMax, error = kErrorInvalidArgs);
 
-        mChannel = channel;
+        mChannel = static_cast<uint8_t>(value);
         IgnoreError(Get<Radio>().Receive(mChannel));
         otPlatDiagChannelSet(mChannel);
 
@@ -325,11 +329,11 @@ Error Diags::ProcessPower(uint8_t aArgsLength, char *aArgs[])
     }
     else
     {
-        int8_t txPower;
+        long value;
 
-        SuccessOrExit(error = Utils::CmdLineParser::ParseAsInt8(aArgs[0], txPower));
+        SuccessOrExit(error = ParseLong(aArgs[0], value));
 
-        mTxPower = txPower;
+        mTxPower = static_cast<int8_t>(value);
         SuccessOrExit(error = Get<Radio>().SetTransmitPower(mTxPower));
         otPlatDiagTxPowerSet(mTxPower);
 
@@ -356,31 +360,30 @@ Error Diags::ProcessRepeat(uint8_t aArgsLength, char *aArgs[])
     }
     else
     {
-        uint32_t txPeriod;
-        uint8_t  txLength;
+        long value;
 
         VerifyOrExit(aArgsLength >= 1, error = kErrorInvalidArgs);
 
-        SuccessOrExit(error = Utils::CmdLineParser::ParseAsUint32(aArgs[0], txPeriod));
-        mTxPeriod = txPeriod;
+        SuccessOrExit(error = ParseLong(aArgs[0], value));
+        mTxPeriod = static_cast<uint32_t>(value);
 
         if (aArgsLength >= 2)
         {
-            SuccessOrExit(error = Utils::CmdLineParser::ParseAsUint8(aArgs[1], txLength));
+            SuccessOrExit(error = ParseLong(aArgs[1], value));
             mIsTxPacketSet = false;
         }
         else if (mIsTxPacketSet)
         {
-            txLength = mTxPacket->mLength;
+            value = mTxPacket->mLength;
         }
         else
         {
             ExitNow(error = kErrorInvalidArgs);
         }
 
-        VerifyOrExit((txLength >= OT_RADIO_FRAME_MIN_SIZE) && (txLength <= OT_RADIO_FRAME_MAX_SIZE),
-                     error = kErrorInvalidArgs);
-        mTxLen = txLength;
+        VerifyOrExit(value <= OT_RADIO_FRAME_MAX_SIZE, error = kErrorInvalidArgs);
+        VerifyOrExit(value >= OT_RADIO_FRAME_MIN_SIZE, error = kErrorInvalidArgs);
+        mTxLen = static_cast<uint8_t>(value);
 
         mRepeatActive = true;
         uint32_t now  = otPlatAlarmMilliGetNow();
@@ -396,33 +399,32 @@ exit:
 
 Error Diags::ProcessSend(uint8_t aArgsLength, char *aArgs[])
 {
-    Error    error = kErrorNone;
-    uint32_t txPackets;
-    uint8_t  txLength;
+    Error error = kErrorNone;
+    long  value;
 
     VerifyOrExit(otPlatDiagModeGet(), error = kErrorInvalidState);
     VerifyOrExit(aArgsLength >= 1, error = kErrorInvalidArgs);
 
-    SuccessOrExit(error = Utils::CmdLineParser::ParseAsUint32(aArgs[0], txPackets));
-    mTxPackets = txPackets;
+    SuccessOrExit(error = ParseLong(aArgs[0], value));
+    mTxPackets = static_cast<uint32_t>(value);
 
     if (aArgsLength >= 2)
     {
-        SuccessOrExit(error = Utils::CmdLineParser::ParseAsUint8(aArgs[1], txLength));
+        SuccessOrExit(ParseLong(aArgs[1], value));
         mIsTxPacketSet = false;
     }
     else if (mIsTxPacketSet)
     {
-        txLength = mTxPacket->mLength;
+        value = mTxPacket->mLength;
     }
     else
     {
         ExitNow(error = kErrorInvalidArgs);
     }
 
-    VerifyOrExit(txLength <= OT_RADIO_FRAME_MAX_SIZE, error = kErrorInvalidArgs);
-    VerifyOrExit(txLength >= OT_RADIO_FRAME_MIN_SIZE, error = kErrorInvalidArgs);
-    mTxLen = txLength;
+    VerifyOrExit(value <= OT_RADIO_FRAME_MAX_SIZE, error = kErrorInvalidArgs);
+    VerifyOrExit(value >= OT_RADIO_FRAME_MIN_SIZE, error = kErrorInvalidArgs);
+    mTxLen = static_cast<uint8_t>(value);
 
     Output("sending %#x packet(s), length %#x\r\nstatus 0x%02x\r\n", static_cast<int>(mTxPackets),
            static_cast<int>(mTxLen), error);
@@ -799,25 +801,29 @@ exit:
 Error Diags::ProcessGpio(uint8_t aArgsLength, char *aArgs[])
 {
     Error      error = kErrorInvalidArgs;
+    long       value;
     uint32_t   gpio;
     bool       level;
     otGpioMode mode;
 
     if ((aArgsLength == 2) && StringMatch(aArgs[0], "get"))
     {
-        SuccessOrExit(error = Utils::CmdLineParser::ParseAsUint32(aArgs[1], gpio));
+        SuccessOrExit(error = ParseLong(aArgs[1], value));
+        gpio = static_cast<uint32_t>(value);
         SuccessOrExit(error = otPlatDiagGpioGet(gpio, &level));
         Output("%d\r\n", level);
     }
     else if ((aArgsLength == 3) && StringMatch(aArgs[0], "set"))
     {
-        SuccessOrExit(error = Utils::CmdLineParser::ParseAsUint32(aArgs[1], gpio));
-        SuccessOrExit(error = Utils::CmdLineParser::ParseAsBool(aArgs[2], level));
+        SuccessOrExit(error = ParseLong(aArgs[1], value));
+        gpio = static_cast<uint32_t>(value);
+        SuccessOrExit(error = ParseBool(aArgs[2], level));
         SuccessOrExit(error = otPlatDiagGpioSet(gpio, level));
     }
     else if ((aArgsLength >= 2) && StringMatch(aArgs[0], "mode"))
     {
-        SuccessOrExit(error = Utils::CmdLineParser::ParseAsUint32(aArgs[1], gpio));
+        SuccessOrExit(error = ParseLong(aArgs[1], value));
+        gpio = static_cast<uint32_t>(value);
 
         if (aArgsLength == 2)
         {
@@ -852,6 +858,26 @@ void Diags::AppendErrorResult(Error aError)
     {
         Output("failed\r\nstatus %#x\r\n", aError);
     }
+}
+
+Error Diags::ParseLong(char *aString, long &aLong)
+{
+    char *endptr;
+    aLong = strtol(aString, &endptr, 0);
+    return (*endptr == '\0') ? kErrorNone : kErrorParse;
+}
+
+Error Diags::ParseBool(char *aString, bool &aBool)
+{
+    Error error;
+    long  value;
+
+    SuccessOrExit(error = ParseLong(aString, value));
+    VerifyOrExit((value == 0) || (value == 1), error = kErrorParse);
+    aBool = static_cast<bool>(value);
+
+exit:
+    return error;
 }
 
 Error Diags::ParseCmd(char *aString, uint8_t &aArgsLength, char *aArgs[])
