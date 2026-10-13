@@ -604,7 +604,7 @@ Udp &Udp::Get(void)
 
 void Udp::Process(const otSysMainloopContext &aContext)
 {
-    otMessageSettings msgSettings = {false, OT_MESSAGE_PRIORITY_NORMAL, false};
+    otMessageSettings msgSettings = {false, OT_MESSAGE_PRIORITY_NORMAL};
 
     for (otUdpSocket *socket = otUdpGetSockets(gInstance); socket != nullptr; socket = socket->mNext)
     {
