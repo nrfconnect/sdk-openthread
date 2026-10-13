@@ -1560,8 +1560,10 @@ void RadioSpinel::HandleTransmitDone(uint32_t          aCommand,
         error = SpinelStatusToOtError(status);
     }
 
-    if ((sRadioCaps & OT_RADIO_CAPS_TRANSMIT_SEC) && (!mTransmitFrame->mInfo.mTxInfo.mIsHeaderUpdated) &&
-        headerUpdated && static_cast<Mac::TxFrame *>(mTransmitFrame)->GetSecurityEnabled())
+    static_cast<Mac::TxFrame *>(mTransmitFrame)->SetIsHeaderUpdated(headerUpdated);
+
+    if ((sRadioCaps & OT_RADIO_CAPS_TRANSMIT_SEC) && headerUpdated &&
+        static_cast<Mac::TxFrame *>(mTransmitFrame)->GetSecurityEnabled())
     {
         uint8_t  keyId;
         uint32_t frameCounter;
@@ -1577,8 +1579,6 @@ void RadioSpinel::HandleTransmitDone(uint32_t          aCommand,
         mMacFrameCounterSet = true;
 #endif
     }
-
-    static_cast<Mac::TxFrame *>(mTransmitFrame)->SetIsHeaderUpdated(headerUpdated);
 
 exit:
     // A parse error indicates an RCP misbehavior, so recover the RCP immediately.
