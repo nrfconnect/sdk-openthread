@@ -34,7 +34,7 @@ Border Router and service information may be stable or temporary. Stable Thread 
 2. Commit new dataset to the Active Operational Dataset in non-volatile storage.
 
    ```bash
-   dataset commit active
+   > dataset commit active
    Done
    ```
 
@@ -186,7 +186,7 @@ The "net data full" callback is invoked whenever:
 - The device is acting as a BR and new entries cannot be added to its local Network Data.
 - The device is acting as a BR and tries to register its local Network Data entries with the leader, but determines that its local entries will not fit.
 
-```
+```bash
 > netdata full
 no
 Done
@@ -200,7 +200,7 @@ Reset the flag tracking whether "net data full" callback was invoked.
 
 This command requires `OPENTHREAD_CONFIG_BORDER_ROUTER_SIGNAL_NETWORK_DATA_FULL`.
 
-```
+```bash
 > netdata full reset
 Done
 ```
@@ -252,22 +252,22 @@ Publish DNS/SRP service entry.
 
 This command requires `OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE`.
 
-The following formats are available: :
+The following formats are available:
 
-- `netdata publish dnssrp anycast <seq-num>` to publish "DNS/SRP Service Anycast Address" with a given sequence number.
-- `netdata publish dnssrp unicast <address> <port>` to publish "DNS/SRP Service Unicast Address" with given address and port number info. The address/port info is included in Service TLV data.
-- `netdata publish dnssrp unicast <port>` to publish "DNS/SRP Service Unicast Address" with given port number and the device's mesh-local EID for the address. The address and port info is included in Server TLV data.
+- `netdata publish dnssrp anycast <seq-num> [<version>]` to publish "DNS/SRP Service Anycast Address" with a given sequence number and version.
+- `netdata publish dnssrp unicast <address> <port> [<version>]` to publish "DNS/SRP Service Unicast Address" with given address, port number and version info. The address/port/version info is included in Service TLV data.
+- `netdata publish dnssrp unicast <port> [<version>]` to publish "DNS/SRP Service Unicast Address" with given port number, version, and the device's mesh-local EID for the address. The address/port/version info is included in Server TLV data.
 
 A new call to `netdata publish dnssrp [anycast|unicast] [...]` command will remove and replace any previous "DNS/SRP Service" entry that was being published (from earlier `netdata publish dnssrp [...]` commands).
 
 ```bash
-> netdata publish dnssrp anycast 1
+> netdata publish dnssrp anycast 1 2
 Done
 
-> netdata publish dnssrp unicast fd00::1234 51525
+> netdata publish dnssrp unicast fd00::1234 51525 1
 Done
 
-> netdata publish dnssrp unicast 50152
+> netdata publish dnssrp unicast 50152 2
 Done
 ```
 
@@ -283,7 +283,6 @@ Publish an on-mesh prefix entry.
 - o: On Mesh flag
 - s: Stable flag
 - n: Nd Dns flag
-- D: Domain Prefix flag (only available for Thread 1.2).
 - prf: Preference, which may be 'high', 'med', or 'low'.
 
 ```bash
@@ -352,7 +351,6 @@ On-mesh prefixes are listed under `Prefixes` header:
   - o: On Mesh flag
   - s: Stable flag
   - n: Nd Dns flag
-  - D: Domain Prefix flag (only available for Thread 1.2).
 - Preference `high`, `med`, or `low`
 - RLOC16 of device which added the on-mesh prefix
 
@@ -380,7 +378,11 @@ Service entries are listed under `Services` header:
 
 - The prefix
 - Context ID
-- Compress flag (`c` if marked or `-` otherwise).
+- Flags:
+  - s: Stable flag
+  - c: Compress flag
+
+When there are no other flags, `-` will be used.
 
 Commissioning Dataset information is printed under `Commissioning` header:
 
@@ -403,7 +405,7 @@ fd00:4567:0:0::/64 s med 8000
 Services:
 44970 5d fddead00beef00007bad0069ce45948504d2 s a000 0
 Contexts:
-fd00:dead:beef:cafe::/64 1 c
+fd00:dead:beef:cafe::/64 1 sc
 Commissioning:
 1248 dc00 9988 00000000000120000000000000000000 e
 Done

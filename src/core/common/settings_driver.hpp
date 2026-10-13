@@ -31,13 +31,14 @@
  *   This file includes definitions for settings driver.
  */
 
-#ifndef SETTINGS_DRIVER_HPP_
-#define SETTINGS_DRIVER_HPP_
+#ifndef OT_CORE_COMMON_SETTINGS_DRIVER_HPP_
+#define OT_CORE_COMMON_SETTINGS_DRIVER_HPP_
 
 #include "openthread-core-config.h"
 
 #include <openthread/platform/settings.h>
 
+#include "common/debug.hpp"
 #include "common/encoding.hpp"
 #include "common/error.hpp"
 #include "common/locator.hpp"
@@ -53,7 +54,6 @@ public:
      * Initializes the `SettingsDriver`.
      *
      * @param[in]  aInstance     A reference to the OpenThread instance.
-     *
      */
     explicit SettingsDriver(Instance &aInstance)
         : InstanceLocator(aInstance)
@@ -68,7 +68,6 @@ public:
      *
      * @param[in]  aSensitiveKeys        A pointer to an array containing the list of sensitive keys.
      * @param[in]  aSensitiveKeysLength  The number of entries in the @p aSensitiveKeys array.
-     *
      */
     void Init(const uint16_t *aSensitiveKeys, uint16_t aSensitiveKeysLength)
     {
@@ -84,7 +83,6 @@ public:
 
     /**
      * Deinitializes the settings driver.
-     *
      */
     void Deinit(void)
     {
@@ -103,7 +101,6 @@ public:
      *
      * @retval kErrorNone     The value was added.
      * @retval kErrorNoBufs   Not enough space to store the value.
-     *
      */
     Error Add(uint16_t aKey, const void *aValue, uint16_t aValueLength)
     {
@@ -115,6 +112,8 @@ public:
 #else
         error = otPlatSettingsAdd(GetInstancePtr(), aKey, value, aValueLength);
 #endif
+        OT_ASSERT(error != kErrorNotImplemented);
+
         return error;
     }
 
@@ -127,7 +126,6 @@ public:
      *
      * @retval kErrorNone       The given key and index was found and removed successfully.
      * @retval kErrorNotFound   The given key or index was not found.
-     *
      */
     Error Delete(uint16_t aKey, int aIndex = -1)
     {
@@ -138,6 +136,8 @@ public:
 #else
         error = otPlatSettingsDelete(GetInstancePtr(), aKey, aIndex);
 #endif
+        OT_ASSERT(error != kErrorNotImplemented);
+
         return error;
     }
 
@@ -156,7 +156,6 @@ public:
      *
      * @retval kErrorNone        The value was fetched successfully.
      * @retval kErrorNotFound    The key was not found.
-     *
      */
     Error Get(uint16_t aKey, int aIndex, void *aValue, uint16_t *aValueLength) const
     {
@@ -168,6 +167,8 @@ public:
 #else
         error = otPlatSettingsGet(GetInstancePtr(), aKey, aIndex, value, aValueLength);
 #endif
+        OT_ASSERT(error != kErrorNotImplemented);
+
         return error;
     }
 
@@ -185,7 +186,6 @@ public:
      *
      * @retval kErrorNone        The value was fetched successfully.
      * @retval kErrorNotFound    The key was not found.
-     *
      */
     Error Get(uint16_t aKey, void *aValue, uint16_t *aValueLength) const { return Get(aKey, 0, aValue, aValueLength); }
 
@@ -202,7 +202,6 @@ public:
      *
      * @retval kErrorNone     The value was changed.
      * @retval kErrorNoBufs   Not enough space to store the value.
-     *
      */
     Error Set(uint16_t aKey, const void *aValue, uint16_t aValueLength)
     {
@@ -214,12 +213,13 @@ public:
 #else
         error = otPlatSettingsSet(GetInstancePtr(), aKey, value, aValueLength);
 #endif
+        OT_ASSERT(error != kErrorNotImplemented);
+
         return error;
     }
 
     /**
      * Removes all values.
-     *
      */
     void Wipe(void)
     {
@@ -240,4 +240,4 @@ private:
 
 } // namespace ot
 
-#endif // SETTINGS_DRIVER_HPP_
+#endif // OT_CORE_COMMON_SETTINGS_DRIVER_HPP_

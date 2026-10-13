@@ -30,14 +30,6 @@
 
 #if OPENTHREAD_CONFIG_DNS_DSO_ENABLE
 
-#include "common/array.hpp"
-#include "common/as_core_type.hpp"
-#include "common/code_utils.hpp"
-#include "common/debug.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/num_utils.hpp"
-#include "common/random.hpp"
 #include "instance/instance.hpp"
 
 /**
@@ -639,7 +631,7 @@ Error Dso::Connection::AppendPadding(Message &aMessage)
     // that its padded length is a multiple of the chosen block
     // length.
 
-    blockLength = kBlockLengths[Random::NonCrypto::GetUint8InRange(0, GetArrayLength(kBlockLengths))];
+    blockLength = kBlockLengths[Random::NonCrypto::GenerateUpToExcluding(GetArrayLength(kBlockLengths))];
 
     paddingTlv.Init((blockLength - ((aMessage.GetLength() + sizeof(Tlv)) % blockLength)) % blockLength);
 
@@ -774,7 +766,7 @@ Error Dso::Connection::ReadPrimaryTlv(const Message &aMessage, Tlv::Type &aPrima
     aPrimaryTlvType = Tlv::kReservedType;
 
     SuccessOrExit(aMessage.Read(aMessage.GetOffset(), tlv));
-    VerifyOrExit(aMessage.GetOffset() + tlv.GetSize() <= aMessage.GetLength(), error = kErrorParse);
+    VerifyOrExit(tlv.GetSize() <= aMessage.DetermineLengthAfterOffset(), error = kErrorParse);
     aPrimaryTlvType = tlv.GetType();
     error           = kErrorNone;
 
@@ -894,10 +886,12 @@ exit:
 
 Error Dso::Connection::ProcessKeepAliveMessage(const Dns::Header &aHeader, const Message &aMessage)
 {
-    Error        error  = kErrorAbort;
-    uint16_t     offset = aMessage.GetOffset();
+    Error        error = kErrorAbort;
+    OffsetRange  offsetRange;
     Tlv          tlv;
     KeepAliveTlv keepAliveTlv;
+
+    offsetRange.InitFromMessageOffsetToEnd(aMessage);
 
     if (aHeader.GetType() == Dns::Header::kTypeResponse)
     {
@@ -926,22 +920,23 @@ Error Dso::Connection::ProcessKeepAliveMessage(const Dns::Header &aHeader, const
 
     // Parse and validate the Keep Alive Message
 
-    SuccessOrExit(aMessage.Read(offset, keepAliveTlv));
-    offset += keepAliveTlv.GetSize();
+    SuccessOrExit(aMessage.Read(offsetRange, keepAliveTlv));
+    VerifyOrExit(offsetRange.Contains(keepAliveTlv.GetSize()));
+    offsetRange.AdvanceOffset(keepAliveTlv.GetSize());
 
     VerifyOrExit((keepAliveTlv.GetType() == KeepAliveTlv::kType) && keepAliveTlv.IsValid());
 
     // Keep Alive message MUST contain only one Keep Alive TLV.
 
-    while (offset < aMessage.GetLength())
+    while (!offsetRange.IsEmpty())
     {
-        SuccessOrExit(aMessage.Read(offset, tlv));
-        offset += tlv.GetSize();
+        SuccessOrExit(aMessage.Read(offsetRange, tlv));
+
+        VerifyOrExit(offsetRange.Contains(tlv.GetSize()));
+        offsetRange.AdvanceOffset(tlv.GetSize());
 
         VerifyOrExit((tlv.GetType() != KeepAliveTlv::kType) && (tlv.GetType() != RetryDelayTlv::kType));
     }
-
-    VerifyOrExit(offset == aMessage.GetLength());
 
     if (aHeader.GetType() == Dns::Header::kTypeQuery)
     {
@@ -1303,65 +1298,47 @@ exit:
 
 const char *Dso::Connection::StateToString(State aState)
 {
-    static const char *const kStateStrings[] = {
-        "Disconnected",            // (0) kStateDisconnected,
-        "Connecting",              // (1) kStateConnecting,
-        "ConnectedButSessionless", // (2) kStateConnectedButSessionless,
-        "EstablishingSession",     // (3) kStateEstablishingSession,
-        "SessionEstablished",      // (4) kStateSessionEstablished,
-    };
+#define StateMapList(_)                                         \
+    _(kStateDisconnected, "Disconnected")                       \
+    _(kStateConnecting, "Connecting")                           \
+    _(kStateConnectedButSessionless, "ConnectedButSessionless") \
+    _(kStateEstablishingSession, "EstablishingSession")         \
+    _(kStateSessionEstablished, "SessionEstablished")
 
-    static_assert(0 == kStateDisconnected, "kStateDisconnected value is incorrect");
-    static_assert(1 == kStateConnecting, "kStateConnecting value is incorrect");
-    static_assert(2 == kStateConnectedButSessionless, "kStateConnectedButSessionless value is incorrect");
-    static_assert(3 == kStateEstablishingSession, "kStateEstablishingSession value is incorrect");
-    static_assert(4 == kStateSessionEstablished, "kStateSessionEstablished value is incorrect");
+    DefineEnumStringArray(StateMapList);
 
-    return kStateStrings[aState];
+    return kStrings[aState];
 }
 
 const char *Dso::Connection::MessageTypeToString(MessageType aMessageType)
 {
-    static const char *const kMessageTypeStrings[] = {
-        "Request",        // (0) kRequestMessage
-        "Response",       // (1) kResponseMessage
-        "Unidirectional", // (2) kUnidirectionalMessage
-    };
+#define MessageTypeMapList(_)       \
+    _(kRequestMessage, "Request")   \
+    _(kResponseMessage, "Response") \
+    _(kUnidirectionalMessage, "Unidirectional")
 
-    static_assert(0 == kRequestMessage, "kRequestMessage value is incorrect");
-    static_assert(1 == kResponseMessage, "kResponseMessage value is incorrect");
-    static_assert(2 == kUnidirectionalMessage, "kUnidirectionalMessage value is incorrect");
+    DefineEnumStringArray(MessageTypeMapList);
 
-    return kMessageTypeStrings[aMessageType];
+    return kStrings[aMessageType];
 }
 
 const char *Dso::Connection::DisconnectReasonToString(DisconnectReason aReason)
 {
-    static const char *const kDisconnectReasonStrings[] = {
-        "FailedToConnect",         // (0) kReasonFailedToConnect
-        "ResponseTimeout",         // (1) kReasonResponseTimeout
-        "PeerDoesNotSupportDso",   // (2) kReasonPeerDoesNotSupportDso
-        "PeerClosed",              // (3) kReasonPeerClosed
-        "PeerAborted",             // (4) kReasonPeerAborted
-        "InactivityTimeout",       // (5) kReasonInactivityTimeout
-        "KeepAliveTimeout",        // (6) kReasonKeepAliveTimeout
-        "ServerRetryDelayRequest", // (7) kReasonServerRetryDelayRequest
-        "PeerMisbehavior",         // (8) kReasonPeerMisbehavior
-        "Unknown",                 // (9) kReasonUnknown
-    };
+#define DisconnectReasonMapList(_)                               \
+    _(kReasonFailedToConnect, "FailedToConnect")                 \
+    _(kReasonResponseTimeout, "ResponseTimeout")                 \
+    _(kReasonPeerDoesNotSupportDso, "PeerDoesNotSupportDso")     \
+    _(kReasonPeerClosed, "PeerClosed")                           \
+    _(kReasonPeerAborted, "PeerAborted")                         \
+    _(kReasonInactivityTimeout, "InactivityTimeout")             \
+    _(kReasonKeepAliveTimeout, "KeepAliveTimeout")               \
+    _(kReasonServerRetryDelayRequest, "ServerRetryDelayRequest") \
+    _(kReasonPeerMisbehavior, "PeerMisbehavior")                 \
+    _(kReasonUnknown, "Unknown")
 
-    static_assert(0 == kReasonFailedToConnect, "kReasonFailedToConnect value is incorrect");
-    static_assert(1 == kReasonResponseTimeout, "kReasonResponseTimeout value is incorrect");
-    static_assert(2 == kReasonPeerDoesNotSupportDso, "kReasonPeerDoesNotSupportDso value is incorrect");
-    static_assert(3 == kReasonPeerClosed, "kReasonPeerClosed value is incorrect");
-    static_assert(4 == kReasonPeerAborted, "kReasonPeerAborted value is incorrect");
-    static_assert(5 == kReasonInactivityTimeout, "kReasonInactivityTimeout value is incorrect");
-    static_assert(6 == kReasonKeepAliveTimeout, "kReasonKeepAliveTimeout value is incorrect");
-    static_assert(7 == kReasonServerRetryDelayRequest, "kReasonServerRetryDelayRequest value is incorrect");
-    static_assert(8 == kReasonPeerMisbehavior, "kReasonPeerMisbehavior value is incorrect");
-    static_assert(9 == kReasonUnknown, "kReasonUnknown value is incorrect");
+    DefineEnumStringArray(DisconnectReasonMapList);
 
-    return kDisconnectReasonStrings[aReason];
+    return kStrings[aReason];
 }
 
 //---------------------------------------------------------------------------------------------------------------------

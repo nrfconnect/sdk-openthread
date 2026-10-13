@@ -29,11 +29,10 @@
 /**
  * @file
  *   This file includes compile-time configurations for the CLI service.
- *
  */
 
-#ifndef CONFIG_CLI_H_
-#define CONFIG_CLI_H_
+#ifndef OT_CLI_CLI_CONFIG_H_
+#define OT_CLI_CLI_CONFIG_H_
 
 #include "openthread-core-config.h"
 
@@ -49,30 +48,87 @@
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_CLI_STATIC_INTERPRETER_ENABLE
+ *
+ * Define as 1 to enable the static CLI interpreter.
+ *
+ * This configuration option enables the static CLI interpreter, allowing the CLI module to statically allocate and
+ * provide a single interpreter instance.
+ *
+ * This is intended to provide backward compatibility with the original `otCli*` APIs. It can be disabled to save RAM
+ * if the static CLI interpreter is not needed.
+ */
+#ifndef OPENTHREAD_CONFIG_CLI_STATIC_INTERPRETER_ENABLE
+#define OPENTHREAD_CONFIG_CLI_STATIC_INTERPRETER_ENABLE 1
+#endif
+
+/**
  * @def OPENTHREAD_CONFIG_CLI_MAX_LINE_LENGTH
  *
  * The maximum size of the CLI line in bytes including the null terminator.
- *
  */
 #ifndef OPENTHREAD_CONFIG_CLI_MAX_LINE_LENGTH
+#if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
+#define OPENTHREAD_CONFIG_CLI_MAX_LINE_LENGTH 640
+#else
 #define OPENTHREAD_CONFIG_CLI_MAX_LINE_LENGTH 384
+#endif
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_CLI_LINK_METRICS_ENH_ACK_VERBOSE_ENABLE
+ *
+ * Define to 1 to enable unsolicited CLI output of Link Metrics data
+ * received in Enhanced-ACK frames. When disabled (default), no Enhanced-ACK
+ * IE callback is registered with otLinkMetricsConfigEnhAckProbing(), so the
+ * callback and its CLI output are compiled out entirely.
+ *
+ * Enabling this option adds OutputFormat() calls inside the time-critical
+ * Mac::HandleTransmitDone() path. On platforms with synchronous/blocking
+ * CLI transport, this may break SED fast-poll timing.
+ */
+#ifndef OPENTHREAD_CONFIG_CLI_LINK_METRICS_ENH_ACK_VERBOSE_ENABLE
+#define OPENTHREAD_CONFIG_CLI_LINK_METRICS_ENH_ACK_VERBOSE_ENABLE 0
 #endif
 
 /**
  * @def OPENTHREAD_CONFIG_CLI_BLE_SECURE_ENABLE
  *
  * Indicates whether TCAT should be enabled in the CLI tool.
- *
  */
 #ifndef OPENTHREAD_CONFIG_CLI_BLE_SECURE_ENABLE
 #define OPENTHREAD_CONFIG_CLI_BLE_SECURE_ENABLE 1
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_CLI_IFCONFIG_INIT_ENABLE
+ *
+ * Indicates whether or not the CLI `ifconfig init` command to be supported.
+ *
+ * This is applicable when `OPENTHREAD_CONFIG_IP6_INIT_EXT_ADDR_POOL_ENABLE` is used.
+ *
+ * The `ifconfig init` is intended for testing purposes only.
+ */
+#ifndef OPENTHREAD_CONFIG_CLI_IFCONFIG_INIT_ENABLE
+#define OPENTHREAD_CONFIG_CLI_IFCONFIG_INIT_ENABLE 0
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_CLI_PLAT_TCP_ENABLE
+ *
+ * Indicates whether the plat-tcp CLI commands are enabled.
+ *
+ * These CLI commands are intended primarily for testing and evaluation of the `otPlatTcp` API implementations.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_CLI_PLAT_TCP_ENABLE
+#define OPENTHREAD_CONFIG_CLI_PLAT_TCP_ENABLE 1
+#endif
+
+/**
  * @def OPENTHREAD_CONFIG_CLI_TCP_ENABLE
  *
  * Indicates whether TCP should be enabled in the CLI tool.
- *
  */
 #ifndef OPENTHREAD_CONFIG_CLI_TCP_ENABLE
 #define OPENTHREAD_CONFIG_CLI_TCP_ENABLE 1
@@ -82,7 +138,6 @@
  * @def OPENTHREAD_CONFIG_CLI_TCP_DEFAULT_BENCHMARK_SIZE
  *
  * The number of bytes to transfer for the TCP benchmark in the CLI.
- *
  */
 #ifndef OPENTHREAD_CONFIG_CLI_TCP_DEFAULT_BENCHMARK_SIZE
 #define OPENTHREAD_CONFIG_CLI_TCP_DEFAULT_BENCHMARK_SIZE (72 << 10)
@@ -101,7 +156,6 @@
  * @def OPENTHREAD_CONFIG_CLI_MAX_USER_CMD_ENTRIES
  *
  * The maximum number of user CLI command lists that can be registered by the interpreter.
- *
  */
 #ifndef OPENTHREAD_CONFIG_CLI_MAX_USER_CMD_ENTRIES
 #define OPENTHREAD_CONFIG_CLI_MAX_USER_CMD_ENTRIES 1
@@ -113,7 +167,6 @@
  * Indicates whether or not an externally provided list of cli commands is defined.
  *
  * This is to be used only when `OPENTHREAD_CONFIG_CLI_MAX_USER_CMD_ENTRIES` is greater than 1.
- *
  */
 #ifndef OPENTHREAD_CONFIG_CLI_VENDOR_COMMANDS_ENABLE
 #define OPENTHREAD_CONFIG_CLI_VENDOR_COMMANDS_ENABLE 0
@@ -126,7 +179,6 @@
  *
  * By default this is enabled on any POSIX based platform (`OPENTHREAD_POSIX`) and only when CLI itself is not being
  * used for logging.
- *
  */
 #ifndef OPENTHREAD_CONFIG_CLI_LOG_INPUT_OUTPUT_ENABLE
 #define OPENTHREAD_CONFIG_CLI_LOG_INPUT_OUTPUT_ENABLE \
@@ -139,7 +191,6 @@
  * Defines the log level to use when CLI emits its command input/output to the logs.
  *
  * This is used only when `OPENTHREAD_CONFIG_CLI_LOG_INPUT_OUTPUT_ENABLE` is enabled.
- *
  */
 #ifndef OPENTHREAD_CONFIG_CLI_LOG_INPUT_OUTPUT_LEVEL
 #define OPENTHREAD_CONFIG_CLI_LOG_INPUT_OUTPUT_LEVEL OT_LOG_LEVEL_DEBG
@@ -151,7 +202,6 @@
  * The log string buffer size (in bytes).
  *
  * This is only used when `OPENTHREAD_CONFIG_CLI_LOG_INPUT_OUTPUT_ENABLE` is enabled.
- *
  */
 #ifndef OPENTHREAD_CONFIG_CLI_LOG_INPUT_OUTPUT_LOG_STRING_SIZE
 #define OPENTHREAD_CONFIG_CLI_LOG_INPUT_OUTPUT_LOG_STRING_SIZE OPENTHREAD_CONFIG_CLI_MAX_LINE_LENGTH
@@ -164,7 +214,6 @@
  *
  * When enabled, the CLI will print prompt on the output after processing a command.
  * Otherwise, no prompt is added to the output.
- *
  */
 #ifndef OPENTHREAD_CONFIG_CLI_PROMPT_ENABLE
 #define OPENTHREAD_CONFIG_CLI_PROMPT_ENABLE 1
@@ -177,7 +226,6 @@
  *
  * If the service TXT record data length is greater than the specified value, it will be read partially (up to the given
  * size) and output as a sequence of raw hex bytes `[{hex-bytes}...]`
- *
  */
 #ifndef OPENTHREAD_CONFIG_CLI_TXT_RECORD_MAX_SIZE
 #define OPENTHREAD_CONFIG_CLI_TXT_RECORD_MAX_SIZE 512
@@ -190,20 +238,9 @@
  *
  * This is intended for testing only. Receive callback should be registered for the `otIp6GetBorderRoutingCounters()`
  * to count the messages being passed to the callback.
- *
  */
 #ifndef OPENTHREAD_CONFIG_CLI_REGISTER_IP6_RECV_CALLBACK
 #define OPENTHREAD_CONFIG_CLI_REGISTER_IP6_RECV_CALLBACK 0
 #endif
 
-/**
- * @def OPENTHREAD_CONFIG_CLI_BLE_SECURE_ENABLE
- *
- * Define to 1 to enable BLE secure support.
- *
- */
-#ifndef OPENTHREAD_CONFIG_CLI_BLE_SECURE_ENABLE
-#define OPENTHREAD_CONFIG_CLI_BLE_SECURE_ENABLE 0
-#endif
-
-#endif // CONFIG_CLI_H_
+#endif // OT_CLI_CLI_CONFIG_H_

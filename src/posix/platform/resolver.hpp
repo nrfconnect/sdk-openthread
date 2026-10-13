@@ -36,6 +36,7 @@
 #include <sys/select.h>
 
 #include "logger.hpp"
+#include "mainloop.hpp"
 
 #if OPENTHREAD_CONFIG_DNS_UPSTREAM_QUERY_ENABLE
 
@@ -47,22 +48,36 @@ class Resolver : public Logger<Resolver>
 public:
     static const char kLogModuleName[]; ///< Module name used for logging.
 
-    constexpr static ssize_t kMaxDnsMessageSize           = 512;
-    constexpr static ssize_t kMaxUpstreamTransactionCount = 16;
-    constexpr static ssize_t kMaxUpstreamServerCount      = 3;
+    static constexpr ssize_t kMaxDnsMessageSize           = 512;
+    static constexpr ssize_t kMaxUpstreamTransactionCount = 16;
+    static constexpr ssize_t kMaxUpstreamServerCount      = 3;
+    static constexpr ssize_t kMaxRecursiveServerCount     = 3;
 
     /**
      * Initialize the upstream DNS resolver.
-     *
      */
     void Init(void);
+
+    /**
+     * Sets up the upstream DNS resolver.
+     *
+     * @note This method is called after OpenThread instance is created.
+     */
+    void Setup(void);
+
+    /**
+     * Indicates whether an upstream DNS server is available for queries.
+     *
+     * @retval TRUE   An upstream DNS server is available.
+     * @retval FALSE  An upstream DNS server is not available.
+     */
+    bool IsUpstreamQueryAvailable(void);
 
     /**
      * Sends the query to the upstream.
      *
      * @param[in] aTxn   A pointer to the OpenThread upstream DNS query transaction.
      * @param[in] aQuery A pointer to a message for the payload of the DNS query.
-     *
      */
     void Query(otPlatDnsUpstreamQuery *aTxn, const otMessage *aQuery);
 
@@ -70,7 +85,6 @@ public:
      * Cancels a upstream DNS query transaction.
      *
      * @param[in] aTxn   A pointer to the OpenThread upstream DNS query transaction.
-     *
      */
     void Cancel(otPlatDnsUpstreamQuery *aTxn);
 
@@ -78,23 +92,20 @@ public:
      * Updates the file descriptor sets with file descriptors used by the radio driver.
      *
      * @param[in,out]  aContext  The mainloop context.
-     *
      */
-    void UpdateFdSet(otSysMainloopContext &aContext);
+    void UpdateFdSet(Mainloop::Context &aContext);
 
     /**
      * Handles the result of select.
      *
      * @param[in]  aContext  The mainloop context.
-     *
      */
-    void Process(const otSysMainloopContext &aContext);
+    void Process(const Mainloop::Context &aContext);
 
     /**
      * Sets whether to retrieve upstream DNS servers from "resolv.conf".
      *
      * @param[in] aEnabled  TRUE if enable retrieving upstream DNS servers from "resolv.conf", FALSE otherwise.
-     *
      */
     void SetResolvConfEnabled(bool aEnabled) { mIsResolvConfEnabled = aEnabled; }
 
@@ -104,9 +115,16 @@ public:
      * @param[in] aUpstreamDnsServers  A pointer to the list of upstream DNS server addresses. Each address could be an
      *                                 IPv6 address or an IPv4-mapped IPv6 address.
      * @param[in] aNumServers          The number of upstream DNS servers.
-     *
      */
-    void SetUpstreamDnsServers(const otIp6Address *aUpstreamDnsServers, int aNumServers);
+    void SetUpstreamDnsServers(const otIp6Address *aUpstreamDnsServers, uint32_t aNumServers);
+
+    /**
+     * Sets the list of recursive DNS servers.
+     *
+     * @param[in] aRecursiveDnsServers A pointer to the list of IPv6 recursive DNS server addresses.
+     * @param[in] aNumServers          The number of recursive DNS servers.
+     */
+    void SetRecursiveDnsServerList(const otIp6Address *aRecursiveDnsServers, uint32_t aNumServers);
 
 private:
     static constexpr uint64_t kDnsServerListNullCacheTimeoutMs = 1 * 60 * 1000;  // 1 minute
@@ -115,23 +133,40 @@ private:
     struct Transaction
     {
         otPlatDnsUpstreamQuery *mThreadTxn;
-        int                     mUdpFd;
+        int                     mUdpFd4;
+        int                     mUdpFd6;
+        // Socket bound to the infra netif, used for recursive DNS servers discovered
+        // on that link. -1 when unavailable (queries then use the unbound `mUdpFd6`).
+        int mInfraUdpFd6;
     };
 
-    Transaction *GetTransaction(int aFd);
+    static int CreateUdpSocket(sa_family_t aFamily, bool aBindToInfraNetif);
+
     Transaction *GetTransaction(otPlatDnsUpstreamQuery *aThreadTxn);
     Transaction *AllocateTransaction(otPlatDnsUpstreamQuery *aThreadTxn);
 
-    void ForwardResponse(Transaction *aTxn);
-    void CloseTransaction(Transaction *aTxn);
-    void FinishTransaction(int aFd);
-    void TryRefreshDnsServerList(void);
-    void LoadDnsServerListFromConf(void);
+    otError SendQueryToServer(Transaction        *aTxn,
+                              const otIp6Address &aServerAddress,
+                              const char         *aPacket,
+                              uint16_t            aLength,
+                              bool                aViaInfraNetif);
+    void    ForwardResponse(otPlatDnsUpstreamQuery *aThreadTxn, int aFd);
+    void    CloseTransaction(Transaction *aTxn);
+    void    TryRefreshDnsServerList(void);
+    void    LoadDnsServerListFromConf(void);
 
-    bool      mIsResolvConfEnabled    = true;
-    int       mUpstreamDnsServerCount = 0;
-    in_addr_t mUpstreamDnsServerList[kMaxUpstreamServerCount];
-    uint64_t  mUpstreamDnsServerListFreshness = 0;
+#if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+    static void BorderRoutingRdnssCallback(void *aResolver);
+    void        BorderRoutingRdnssCallback(void);
+#endif
+
+    bool         mIsResolvConfEnabled    = OPENTHREAD_POSIX_CONFIG_RESOLV_CONF_ENABLED_INIT;
+    uint32_t     mUpstreamDnsServerCount = 0;
+    otIp6Address mUpstreamDnsServerList[kMaxUpstreamServerCount];
+    uint64_t     mUpstreamDnsServerListFreshness = 0;
+
+    uint32_t     mRecursiveDnsServerCount = 0;
+    otIp6Address mRecursiveDnsServerList[kMaxRecursiveServerCount];
 
     Transaction mUpstreamTransaction[kMaxUpstreamTransactionCount];
 };

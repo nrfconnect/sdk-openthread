@@ -31,8 +31,8 @@
  *   This file contains definitions for a simple CLI to control the Joiner role.
  */
 
-#ifndef CLI_JOINER_HPP_
-#define CLI_JOINER_HPP_
+#ifndef OT_CLI_CLI_JOINER_HPP_
+#define OT_CLI_CLI_JOINER_HPP_
 
 #include "openthread-core-config.h"
 
@@ -47,7 +47,6 @@ namespace Cli {
 
 /**
  * Implements the Joiner CLI interpreter.
- *
  */
 class Joiner : private Utils
 {
@@ -57,7 +56,6 @@ public:
      *
      * @param[in]  aInstance            The OpenThread Instance.
      * @param[in]  aOutputImplementer   An `OutputImplementer`.
-     *
      */
     Joiner(otInstance *aInstance, OutputImplementer &aOutputImplementer)
         : Utils(aInstance, aOutputImplementer)
@@ -74,7 +72,6 @@ public:
      * @retval OT_ERROR_INVALID_COMMAND   Invalid or unknown CLI command.
      * @retval OT_ERROR_INVALID_ARGS      Invalid arguments.
      * @retval ...                        Error during execution of the CLI command.
-     *
      */
     otError Process(Arg aArgs[]);
 
@@ -92,4 +89,4 @@ private:
 
 #endif // OPENTHREAD_CONFIG_JOINER_ENABLE
 
-#endif // CLI_JOINER_HPP_
+#endif // OT_CLI_CLI_JOINER_HPP_

@@ -1,26 +1,40 @@
 """
-   Copyright (c) 2023 Nordic Semiconductor ASA
+  Copyright (c) 2025, The OpenThread Authors.
+  All rights reserved.
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+  1. Redistributions of source code must retain the above copyright
+     notice, this list of conditions and the following disclaimer.
+  2. Redistributions in binary form must reproduce the above copyright
+     notice, this list of conditions and the following disclaimer in the
+     documentation and/or other materials provided with the distribution.
+  3. Neither the name of the copyright holder nor the
+     names of its contributors may be used to endorse or promote products
+     derived from this software without specific prior written permission.
 
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  POSSIBILITY OF SUCH DAMAGE.
 """
 
-import struct
-import inspect
-from typing import List
 from abc import ABC, abstractmethod
+import inspect
+import struct
+from typing import List
 
 from tlv.dataset_tlv import MeshcopTlvType
 from tlv.tlv import TLV
+
+MASK_48_BITS = 0xFFFFFFFFFFFF
 
 
 class DatasetEntry(ABC):
@@ -66,13 +80,13 @@ class ActiveTimestamp(DatasetEntry):
     def set(self, args: List[str]):
         if len(args) == 0:
             raise ValueError('No argument for ActiveTimestamp')
-        self._seconds = int(args[0])
+        self.seconds = int(args[0])
 
     def set_from_tlv(self, tlv: TLV):
         (value,) = struct.unpack('>Q', tlv.value)
         self.ubit = value & 0x1
         self.ticks = (value >> 1) & 0x7FFF
-        self.seconds = (value >> 16) & 0xFFFF
+        self.seconds = (value >> 16) & MASK_48_BITS
 
     def to_tlv(self):
         value = (self.seconds << 16) | (self.ticks << 1) | self.ubit
@@ -92,7 +106,7 @@ class PendingTimestamp(DatasetEntry):
     def set(self, args: List[str]):
         if len(args) == 0:
             raise ValueError('No argument for PendingTimestamp')
-        self._seconds = int(args[0])
+        self.seconds = int(args[0])
 
     def set_from_tlv(self, tlv: TLV):
         (value,) = struct.unpack('>Q', tlv.value)
@@ -306,7 +320,7 @@ class Pskc(DatasetEntry):
             args[0] = args[0][2:]
         pskc = args[0]
         if (len(pskc) > self.maxlen * 2):
-            raise ValueError('Invalid length of Pskc. Can be max ' f'{self.length * 2} hex characters.')
+            raise ValueError(f'Invalid length of PSKc. Can be max {self.length * 2} hex characters.')
         self.data = pskc
 
     def set_from_tlv(self, tlv: TLV):
@@ -459,7 +473,9 @@ class ChannelMask(DatasetEntry):
 class ChannelMaskEntry(DatasetEntry):
 
     def __init__(self):
+        super().__init__(MeshcopTlvType.CHANNELMASK)  # Note: type not used in set_from_tlv / to_tlv
         self.channel_page = 0
+        self.mask_length = 0
         self.channel_mask: bytes = None
 
     def set(self, args: List[str]):
@@ -476,23 +492,24 @@ class ChannelMaskEntry(DatasetEntry):
         return TLV.from_bytes(tlv)
 
 
-def create_dataset_entry(type: MeshcopTlvType, args=None):
-    entry_classes = {
-        MeshcopTlvType.ACTIVETIMESTAMP: ActiveTimestamp,
-        MeshcopTlvType.PENDINGTIMESTAMP: PendingTimestamp,
-        MeshcopTlvType.NETWORKKEY: NetworkKey,
-        MeshcopTlvType.NETWORKNAME: NetworkName,
-        MeshcopTlvType.EXTPANID: ExtPanID,
-        MeshcopTlvType.MESHLOCALPREFIX: MeshLocalPrefix,
-        MeshcopTlvType.DELAYTIMER: DelayTimer,
-        MeshcopTlvType.PANID: PanID,
-        MeshcopTlvType.CHANNEL: Channel,
-        MeshcopTlvType.PSKC: Pskc,
-        MeshcopTlvType.SECURITYPOLICY: SecurityPolicy,
-        MeshcopTlvType.CHANNELMASK: ChannelMask
-    }
+ENTRY_CLASSES = {
+    MeshcopTlvType.ACTIVETIMESTAMP: ActiveTimestamp,
+    MeshcopTlvType.PENDINGTIMESTAMP: PendingTimestamp,
+    MeshcopTlvType.NETWORKKEY: NetworkKey,
+    MeshcopTlvType.NETWORKNAME: NetworkName,
+    MeshcopTlvType.EXTPANID: ExtPanID,
+    MeshcopTlvType.MESHLOCALPREFIX: MeshLocalPrefix,
+    MeshcopTlvType.DELAYTIMER: DelayTimer,
+    MeshcopTlvType.PANID: PanID,
+    MeshcopTlvType.CHANNEL: Channel,
+    MeshcopTlvType.PSKC: Pskc,
+    MeshcopTlvType.SECURITYPOLICY: SecurityPolicy,
+    MeshcopTlvType.CHANNELMASK: ChannelMask,
+}
 
-    entry_class = entry_classes.get(type)
+
+def create_dataset_entry(type: MeshcopTlvType, args=None):
+    entry_class = ENTRY_CLASSES.get(type)
     if not entry_class:
         raise ValueError(f"Invalid configuration type: {type}")
 

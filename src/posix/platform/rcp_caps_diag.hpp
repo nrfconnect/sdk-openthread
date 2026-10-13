@@ -56,7 +56,6 @@ public:
      * Constructor initializes the object.
      *
      * @param[in]  aRadioSpinel  A reference to the Spinel::RadioSpinel instance.
-     *
      */
     explicit RcpCapsDiag(Spinel::RadioSpinel &aRadioSpinel)
         : mRadioSpinel(aRadioSpinel)
@@ -76,7 +75,6 @@ public:
      * @retval  OT_ERROR_INVALID_ARGS       The command is supported but invalid arguments provided.
      * @retval  OT_ERROR_NONE               The command is successfully processed.
      * @retval  OT_ERROR_INVALID_COMMAND    The command is not valid or not supported.
-     *
      */
     otError DiagProcess(char *aArgs[], uint8_t aArgsLength);
 
@@ -85,7 +83,6 @@ public:
      *
      * @param[in]  aCallback   A pointer to a function that is called on outputting diag messages.
      * @param[in]  aContext    A user context pointer.
-     *
      */
     void SetDiagOutputCallback(otPlatDiagOutputCallback aCallback, void *aContext);
 
@@ -129,13 +126,14 @@ private:
     void OutputExtendedSrcMatchTableSize(void);
     void OutputShortSrcMatchTableSize(void);
 
-    static void HandleDiagOutput(const char *aFormat, va_list aArguments, void *aContext);
-    void        HandleDiagOutput(const char *aFormat, va_list aArguments);
+    static void HandleDiagOutput(const char *aFormat, va_list aArguments, void *aContext)
+        OT_TOOL_PRINTF_STYLE_FORMAT_ARG_CHECK(1, 0);
+    void HandleDiagOutput(const char *aFormat, va_list aArguments) OT_TOOL_PRINTF_STYLE_FORMAT_ARG_CHECK(2, 0);
 
     void OutputFormat(const char *aName, const char *aValue);
     void OutputFormat(const char *aName, uint32_t aValue);
     void OutputResult(const SpinelEntry &aEntry, otError error);
-    void Output(const char *aFormat, ...);
+    void Output(const char *aFormat, ...) OT_TOOL_PRINTF_STYLE_FORMAT_ARG_CHECK(2, 3);
 
     static const char *SupportToString(bool aSupport);
     static const char *RadioCapbilityToString(uint32_t aCapability);

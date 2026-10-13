@@ -43,6 +43,7 @@
 #include <openthread/cli.h>
 #include <openthread/heap.h>
 #include <openthread/tasklet.h>
+#include <openthread/trel.h>
 #include <openthread/platform/alarm-milli.h>
 #include <openthread/platform/infra_if.h>
 #include <openthread/platform/logging.h>
@@ -58,6 +59,8 @@
 #include "posix/platform/mdns_socket.hpp"
 #include "posix/platform/radio_url.hpp"
 #include "posix/platform/spinel_driver_getter.hpp"
+#include "posix/platform/spinel_manager.hpp"
+#include "posix/platform/tcp.hpp"
 #include "posix/platform/udp.hpp"
 
 otInstance *gInstance = nullptr;
@@ -138,13 +141,17 @@ void platformInitRcpMode(otPlatformConfig *aPlatformConfig)
     // For Dry-Run option, only init the co-processor.
     VerifyOrExit(!aPlatformConfig->mDryRun);
 
-#if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
+#if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE && !OPENTHREAD_POSIX_CONFIG_TREL_SELECT_INFRA_IF
     platformTrelInit(getTrelRadioUrl(aPlatformConfig));
 #endif
     platformRandomInit();
 
 #if OPENTHREAD_POSIX_CONFIG_INFRA_IF_ENABLE
     ot::Posix::InfraNetif::Get().Init();
+#endif
+
+#if OPENTHREAD_CONFIG_PLATFORM_TCP_ENABLE
+    ot::Posix::Tcp::Get().Init();
 #endif
 
 #if OPENTHREAD_CONFIG_MULTICAST_DNS_ENABLE
@@ -167,6 +174,7 @@ void platformInitRcpMode(otPlatformConfig *aPlatformConfig)
     ot::Posix::Udp::Get().Init(aPlatformConfig->mInterfaceName);
 #endif
 #endif
+
 exit:
     return;
 }
@@ -179,6 +187,8 @@ void platformInitNcpMode(otPlatformConfig *aPlatformConfig)
 
 void platformInit(otPlatformConfig *aPlatformConfig)
 {
+    platformSettingsInit(aPlatformConfig->mDataPath, aPlatformConfig->mSettingsFile);
+
 #if OPENTHREAD_POSIX_CONFIG_BACKTRACE_ENABLE
     platformBacktraceInit();
 #endif
@@ -236,8 +246,16 @@ void platformSetUp(otPlatformConfig *aPlatformConfig)
     platformNetifSetUp();
 #endif
 
+#if OPENTHREAD_CONFIG_DNS_UPSTREAM_QUERY_ENABLE
+    platformResolverSetUp();
+#endif
+
 #if OPENTHREAD_CONFIG_PLATFORM_UDP_ENABLE
     ot::Posix::Udp::Get().SetUp();
+#endif
+
+#if OPENTHREAD_CONFIG_PLATFORM_TCP_ENABLE
+    ot::Posix::Tcp::Get().SetUp();
 #endif
 
 #if OPENTHREAD_CONFIG_MULTICAST_DNS_ENABLE
@@ -268,6 +286,16 @@ otInstance *otSysInit(otPlatformConfig *aPlatformConfig)
 
     platformInit(aPlatformConfig);
 
+    {
+        const char *unusedParam = nullptr;
+
+        if (ot::Posix::SpinelManager::GetSpinelManager().GetRadioUrl().Validate(&unusedParam) != OT_ERROR_NONE)
+        {
+            otLogCritPlat("Radio URL contains unused parameter: \"%s\"", unusedParam);
+            DieNow(OT_EXIT_INVALID_ARGUMENTS);
+        }
+    }
+
     gDryRun = aPlatformConfig->mDryRun;
     if (sCoprocessorType == OT_COPROCESSOR_RCP)
     {
@@ -290,6 +318,10 @@ void platformTearDown(void)
 
 #if OPENTHREAD_CONFIG_PLATFORM_UDP_ENABLE
     ot::Posix::Udp::Get().TearDown();
+#endif
+
+#if OPENTHREAD_CONFIG_PLATFORM_TCP_ENABLE
+    ot::Posix::Tcp::Get().TearDown();
 #endif
 
 #if OPENTHREAD_CONFIG_PLATFORM_NETIF_ENABLE
@@ -323,10 +355,16 @@ void platformDeinitRcpMode(void)
 #if OPENTHREAD_CONFIG_PLATFORM_UDP_ENABLE
     ot::Posix::Udp::Get().Deinit();
 #endif
+
+#if OPENTHREAD_CONFIG_PLATFORM_TCP_ENABLE
+    ot::Posix::Tcp::Get().Deinit();
+#endif
+
 #if OPENTHREAD_CONFIG_PLATFORM_NETIF_ENABLE
     platformNetifDeinit();
 #endif
-#if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
+#if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE && !OPENTHREAD_POSIX_CONFIG_TREL_SELECT_INFRA_IF
+    otPlatTrelDisable(/* aInstance */ nullptr);
     platformTrelDeinit();
 #endif
 
@@ -371,7 +409,6 @@ void otSysDeinit(void)
  * @param[in,out]  aContext  A reference to the mainloop context.
  *
  * @returns The value returned from select().
- *
  */
 static int trySelect(otSysMainloopContext &aContext)
 {
@@ -490,13 +527,14 @@ void otSysMainloopProcess(otInstance *aInstance, const otSysMainloopContext *aMa
 bool IsSystemDryRun(void) { return gDryRun; }
 
 #if OPENTHREAD_POSIX_CONFIG_DAEMON_ENABLE && OPENTHREAD_POSIX_CONFIG_DAEMON_CLI_ENABLE
-void otSysCliInitUsingDaemon(otInstance *aInstance)
+namespace {
+int OutputCallback(void *aContext, const char *aFormat, va_list aArguments) OT_TOOL_PRINTF_STYLE_FORMAT_ARG_CHECK(2, 0);
+
+int OutputCallback(void *aContext, const char *aFormat, va_list aArguments)
 {
-    otCliInit(
-        aInstance,
-        [](void *aContext, const char *aFormat, va_list aArguments) -> int {
-            return static_cast<ot::Posix::Daemon *>(aContext)->OutputFormatV(aFormat, aArguments);
-        },
-        &ot::Posix::Daemon::Get());
+    return static_cast<ot::Posix::Daemon *>(aContext)->OutputFormatV(aFormat, aArguments);
 }
+} // namespace
+
+void otSysCliInitUsingDaemon(otInstance *aInstance) { otCliInit(aInstance, OutputCallback, &ot::Posix::Daemon::Get()); }
 #endif

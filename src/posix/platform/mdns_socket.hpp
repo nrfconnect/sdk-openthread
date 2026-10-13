@@ -44,8 +44,30 @@ namespace ot {
 namespace Posix {
 
 /**
- * Implements platform mDNS socket APIs.
+ * Use `getifaddrs()` to enumerate addresses periodically and report to the OpenThread mDNS module.
  *
+ * The polling interval is configured by `OPENTHREAD_POSIX_CONFIG_MDNS_ADDR_MONITOR_PERIOD`.
+ */
+#define OT_POSIX_MDNS_ADDR_MONITOR_PERIODIC 1
+
+/**
+ * Use NetLink to monitor IPv4 and IPv6 address changes and report to the OpenThread mDNS module.
+ */
+#define OT_POSIX_MDNS_ADDR_MONITOR_NETLINK 2
+
+#if (OPENTHREAD_POSIX_CONFIG_MDNS_ADDR_MONITOR != OT_POSIX_MDNS_ADDR_MONITOR_PERIODIC) && \
+    (OPENTHREAD_POSIX_CONFIG_MDNS_ADDR_MONITOR != OT_POSIX_MDNS_ADDR_MONITOR_NETLINK)
+#error "The `OPENTHREAD_POSIX_CONFIG_MDNS_ADDR_MONITOR` is not valid. MUST be one of `OT_POSIX_MDNS_ADDR_MONITOR_*`"
+#endif
+
+#if (OPENTHREAD_POSIX_CONFIG_MDNS_ADDR_MONITOR == OT_POSIX_MDNS_ADDR_MONITOR_NETLINK)
+#ifndef __linux__
+#error "The `OT_POSIX_MDNS_ADDR_MONITOR_NETLINK` requires linux platform"
+#endif
+#endif
+
+/**
+ * Implements platform mDNS socket APIs.
  */
 class MdnsSocket : public Mainloop::Source, public Logger<MdnsSocket>, private NonCopyable
 {
@@ -56,7 +78,6 @@ public:
      * Gets the `MdnsSocket` singleton.
      *
      * @returns The singleton object.
-     *
      */
     static MdnsSocket &Get(void);
 
@@ -64,7 +85,6 @@ public:
      * Initializes the `MdnsSocket`.
      *
      * Called before OpenThread instance is created.
-     *
      */
     void Init(void);
 
@@ -72,7 +92,6 @@ public:
      * Sets up the `MdnsSocket`.
      *
      * Called after OpenThread instance is created.
-     *
      */
     void SetUp(void);
 
@@ -80,7 +99,6 @@ public:
      * Tears down the `MdnsSocket`.
      *
      * Called before OpenThread instance is destructed.
-     *
      */
     void TearDown(void);
 
@@ -88,7 +106,6 @@ public:
      * Deinitializes the `MdnsSocket`.
      *
      * Called after OpenThread instance is destructed.
-     *
      */
     void Deinit(void);
 
@@ -96,17 +113,15 @@ public:
      * Updates the fd_set and timeout for mainloop.
      *
      * @param[in,out]   aContext    A reference to the mainloop context.
-     *
      */
-    void Update(otSysMainloopContext &aContext) override;
+    void Update(Mainloop::Context &aContext) override;
 
     /**
      * Performs `MdnsSocket` processing.
      *
      * @param[in]   aContext   A reference to the mainloop context.
-     *
      */
-    void Process(const otSysMainloopContext &aContext) override;
+    void Process(const Mainloop::Context &aContext) override;
 
     // otPlatMdns APIs
     otError SetListeningEnabled(otInstance *aInstance, bool aEnable, uint32_t aInfraIfIndex);
@@ -114,8 +129,9 @@ public:
     void    SendUnicast(otMessage *aMessage, const otPlatMdnsAddressInfo *aAddress);
 
 private:
-    static constexpr uint16_t kMaxMessageLength = 2000;
-    static constexpr uint16_t kMdnsPort         = 5353;
+    static constexpr uint16_t kMaxMessageLength  = 2000;
+    static constexpr uint16_t kMdnsPort          = 5353;
+    static constexpr uint64_t kAddrMonitorPeriod = OPENTHREAD_POSIX_CONFIG_MDNS_ADDR_MONITOR_PERIOD;
 
     enum MsgType : uint8_t
     {
@@ -133,22 +149,22 @@ private:
         uint16_t     mIp4Port;
     };
 
-    bool           mEnabled;
-    uint32_t       mInfraIfIndex;
-    int            mFd4;
-    int            mFd6;
-    uint32_t       mPendingIp6Tx;
-    uint32_t       mPendingIp4Tx;
-    otMessageQueue mTxQueue;
-    otIp6Address   mMulticastIp6Address;
-    otIp4Address   mMulticastIp4Address;
-    otInstance    *mInstance;
-
     otError Enable(uint32_t aInfraIfIndex);
     void    Disable(uint32_t aInfraIfIndex);
     void    ClearTxQueue(void);
     void    SendQueuedMessages(MsgType aMsgType);
     void    ReceiveMessage(MsgType aMsgType);
+    void    StartAddressMonitoring(void);
+    void    StopAddressMonitoring(void);
+    void    ReportInfraIfAddresses(void);
+#if (OPENTHREAD_POSIX_CONFIG_MDNS_ADDR_MONITOR == OT_POSIX_MDNS_ADDR_MONITOR_PERIODIC)
+    void UpdateTimeout(Mainloop::Context &aContext);
+    void ProcessTimeout(void);
+#elif (OPENTHREAD_POSIX_CONFIG_MDNS_ADDR_MONITOR == OT_POSIX_MDNS_ADDR_MONITOR_NETLINK)
+    void UpdateNetlink(Mainloop::Context &aContext) const;
+    void ProcessNetlink(const Mainloop::Context &aContext) const;
+    void ProcessNetlinkAddrEvent(void *aNetlinkMsg) const;
+#endif
 
     otError OpenIp4Socket(uint32_t aInfraIfIndex);
     otError JoinOrLeaveIp4MulticastGroup(bool aJoin, uint32_t aInfraIfIndex);
@@ -171,6 +187,23 @@ private:
                                         const void *aValue,
                                         uint32_t    aValueLength,
                                         const char *aOptionName);
+
+    bool           mEnabled;
+    uint32_t       mInfraIfIndex;
+    int            mFd4;
+    int            mFd6;
+    uint32_t       mPendingIp6Tx;
+    uint32_t       mPendingIp4Tx;
+    otMessageQueue mTxQueue;
+    otIp6Address   mMulticastIp6Address;
+    otIp4Address   mMulticastIp4Address;
+    otInstance    *mInstance;
+#if (OPENTHREAD_POSIX_CONFIG_MDNS_ADDR_MONITOR == OT_POSIX_MDNS_ADDR_MONITOR_PERIODIC)
+    uint64_t mNextReportTime;
+#endif
+#if (OPENTHREAD_POSIX_CONFIG_MDNS_ADDR_MONITOR == OT_POSIX_MDNS_ADDR_MONITOR_NETLINK)
+    int mNetlinkFd;
+#endif
 };
 
 } // namespace Posix

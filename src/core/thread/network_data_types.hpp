@@ -31,8 +31,8 @@
  *   This file includes definitions for Network Data types and constants.
  */
 
-#ifndef NETWORK_DATA_TYPES_HPP_
-#define NETWORK_DATA_TYPES_HPP_
+#ifndef OT_CORE_THREAD_NETWORK_DATA_TYPES_HPP_
+#define OT_CORE_THREAD_NETWORK_DATA_TYPES_HPP_
 
 #include "openthread-core-config.h"
 
@@ -55,7 +55,6 @@ namespace NetworkData {
 
 /**
  * @addtogroup core-netdata-core
- *
  */
 
 // Forward declarations
@@ -73,7 +72,6 @@ class ContextTlv;
 
 /**
  * Represents the Network Data type.
- *
  */
 enum Type : uint8_t
 {
@@ -83,7 +81,6 @@ enum Type : uint8_t
 
 /**
  * Type represents the route preference values as a signed integer (per RFC-4191).
- *
  */
 enum RoutePreference : int8_t
 {
@@ -99,7 +96,6 @@ static_assert(kRoutePreferenceLow == Preference::kLow, "kRoutePreferenceLow is n
 /**
  * Represents the border router RLOC role filter used when searching for border routers in the Network
  * Data.
- *
  */
 enum RoleFilter : uint8_t
 {
@@ -116,8 +112,6 @@ enum RoleFilter : uint8_t
  *
  * - It has added at least one external route entry.
  * - It has added at least one prefix entry with default-route and on-mesh flags set.
- * - It has added at least one domain prefix (domain and on-mesh flags set).
- *
  */
 enum BorderRouterFilter : uint8_t
 {
@@ -130,13 +124,11 @@ enum BorderRouterFilter : uint8_t
  *
  * This limit is derived from the maximum Network Data size (254 bytes) and the minimum size of an external route entry
  * (3 bytes including the RLOC16 and flags) as `ceil(254/3) = 85`.
- *
  */
 static constexpr uint8_t kMaxRlocs = 85;
 
 /**
  * An array containing RLOC16 of all border routers and server in the Network Data.
- *
  */
 typedef Array<uint16_t, kMaxRlocs> Rlocs;
 
@@ -148,7 +140,6 @@ typedef Array<uint16_t, kMaxRlocs> Rlocs;
  *
  * @retval TRUE   if @p aPref is valid.
  * @retval FALSE  if @p aPref is not valid
- *
  */
 inline bool IsRoutePreferenceValid(int8_t aPref) { return Preference::IsValid(aPref); }
 
@@ -160,7 +151,6 @@ inline bool IsRoutePreferenceValid(int8_t aPref) { return Preference::IsValid(aP
  * @param[in] aPref   The route preference to convert.
  *
  * @returns The 2-bit unsigned value representing @p aPref.
- *
  */
 inline uint8_t RoutePreferenceToValue(int8_t aPref) { return Preference::To2BitUint(aPref); }
 
@@ -171,7 +161,6 @@ inline uint8_t RoutePreferenceToValue(int8_t aPref) { return Preference::To2BitU
  *                     are used and the rest of bits are ignored.
  *
  * @returns The route preference corresponding to @p aValue.
- *
  */
 inline RoutePreference RoutePreferenceFromValue(uint8_t aValue)
 {
@@ -184,13 +173,11 @@ inline RoutePreference RoutePreferenceFromValue(uint8_t aValue)
  * @param[in] aPreference  The preference to convert
  *
  * @returns The string representation of @p aPreference.
- *
  */
 inline const char *RoutePreferenceToString(RoutePreference aPreference) { return Preference::ToString(aPreference); }
 
 /**
  * Represents an On-mesh Prefix (Border Router) configuration.
- *
  */
 class OnMeshPrefixConfig : public otBorderRouterConfig,
                            public Clearable<OnMeshPrefixConfig>,
@@ -206,7 +193,6 @@ public:
      * Gets the prefix.
      *
      * @return The prefix.
-     *
      */
     const Ip6::Prefix &GetPrefix(void) const { return AsCoreType(&mPrefix); }
 
@@ -214,15 +200,20 @@ public:
      * Gets the prefix.
      *
      * @return The prefix.
-     *
      */
     Ip6::Prefix &GetPrefix(void) { return AsCoreType(&mPrefix); }
+
+    /**
+     * Gets the RLOC16.
+     *
+     * @returns The RLOC16.
+     */
+    uint16_t GetRloc16(void) const { return mRloc16; }
 
     /**
      * Gets the preference.
      *
      * @return The preference.
-     *
      */
     RoutePreference GetPreference(void) const { return RoutePreferenceFromValue(RoutePreferenceToValue(mPreference)); }
 
@@ -234,7 +225,6 @@ public:
      *
      * @retval TRUE   The config is a valid on-mesh prefix.
      * @retval FALSE  The config is not a valid on-mesh prefix.
-     *
      */
     bool IsValid(Instance &aInstance) const;
 #endif
@@ -251,7 +241,6 @@ private:
 
 /**
  * Represents an External Route configuration.
- *
  */
 class ExternalRouteConfig : public otExternalRouteConfig,
                             public Clearable<ExternalRouteConfig>,
@@ -266,7 +255,6 @@ public:
      * Gets the prefix.
      *
      * @return The prefix.
-     *
      */
     const Ip6::Prefix &GetPrefix(void) const { return AsCoreType(&mPrefix); }
 
@@ -274,7 +262,6 @@ public:
      * Gets the prefix.
      *
      * @return The prefix.
-     *
      */
     Ip6::Prefix &GetPrefix(void) { return AsCoreType(&mPrefix); }
 
@@ -282,9 +269,15 @@ public:
      * Sets the prefix.
      *
      * @param[in]  aPrefix  The prefix to set to.
-     *
      */
     void SetPrefix(const Ip6::Prefix &aPrefix) { mPrefix = aPrefix; }
+
+    /**
+     * Gets the RLOC16.
+     *
+     * @returns The RLOC16.
+     */
+    uint16_t GetRloc16(void) const { return mRloc16; }
 
 #if OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
     /**
@@ -294,7 +287,6 @@ public:
      *
      * @retval TRUE   The config is a valid external route.
      * @retval FALSE  The config is not a valid extern route.
-     *
      */
     bool IsValid(Instance &aInstance) const;
 #endif
@@ -312,7 +304,6 @@ private:
 
 /**
  * Represents 6LoWPAN Context ID information associated with a prefix in Network Data.
- *
  */
 class LowpanContextInfo : public otLowpanContextInfo, public Clearable<LowpanContextInfo>
 {
@@ -323,7 +314,6 @@ public:
      * Gets the prefix.
      *
      * @return The prefix.
-     *
      */
     const Ip6::Prefix &GetPrefix(void) const { return AsCoreType(&mPrefix); }
 
@@ -334,7 +324,6 @@ private:
 
 /**
  * Represents a Service Data.
- *
  */
 class ServiceData : public Data<kWithUint8Length>
 {
@@ -342,7 +331,6 @@ class ServiceData : public Data<kWithUint8Length>
 
 /**
  * Represents a Server Data.
- *
  */
 class ServerData : public Data<kWithUint8Length>
 {
@@ -350,7 +338,6 @@ class ServerData : public Data<kWithUint8Length>
 
 /**
  * Represents a Service configuration.
- *
  */
 class ServiceConfig : public otServiceConfig, public Clearable<ServiceConfig>, public Unequatable<ServiceConfig>
 {
@@ -359,7 +346,6 @@ class ServiceConfig : public otServiceConfig, public Clearable<ServiceConfig>, p
 public:
     /**
      * Represents a Server configuration.
-     *
      */
     class ServerConfig : public otServerConfig, public Unequatable<ServerConfig>
     {
@@ -370,9 +356,15 @@ public:
          * Gets the Server Data.
          *
          * @param[out] aServerData   A reference to a`ServerData` to return the data.
-         *
          */
         void GetServerData(ServerData &aServerData) const { aServerData.Init(mServerData, mServerDataLength); }
+
+        /**
+         * Gets the server RLOC16.
+         *
+         * @returns The server RLOC16.
+         */
+        uint16_t GetRloc16(void) const { return mRloc16; }
 
         /**
          * Overloads operator `==` to evaluate whether or not two `ServerConfig` instances are equal.
@@ -381,7 +373,6 @@ public:
          *
          * @retval TRUE   If the two `ServerConfig` instances are equal.
          * @retval FALSE  If the two `ServerConfig` instances are not equal.
-         *
          */
         bool operator==(const ServerConfig &aOther) const;
 
@@ -393,7 +384,6 @@ public:
      * Gets the Service Data.
      *
      * @param[out] aServiceData   A reference to a `ServiceData` to return the data.
-     *
      */
     void GetServiceData(ServiceData &aServiceData) const { aServiceData.Init(mServiceData, mServiceDataLength); }
 
@@ -401,7 +391,6 @@ public:
      * Gets the Server configuration.
      *
      * @returns The Server configuration.
-     *
      */
     const ServerConfig &GetServerConfig(void) const { return static_cast<const ServerConfig &>(mServerConfig); }
 
@@ -409,9 +398,15 @@ public:
      * Gets the Server configuration.
      *
      * @returns The Server configuration.
-     *
      */
     ServerConfig &GetServerConfig(void) { return static_cast<ServerConfig &>(mServerConfig); }
+
+    /**
+     * Gets the RLOC16.
+     *
+     * @returns The RLOC16.
+     */
+    uint16_t GetRloc16(void) const { return GetServerConfig().GetRloc16(); }
 
     /**
      * Overloads operator `==` to evaluate whether or not two `ServiceConfig` instances are equal.
@@ -420,7 +415,6 @@ public:
      *
      * @retval TRUE   If the two `ServiceConfig` instances are equal.
      * @retval FALSE  If the two `ServiceConfig` instances are not equal.
-     *
      */
     bool operator==(const ServiceConfig &aOther) const;
 
@@ -442,4 +436,4 @@ DefineCoreType(otServerConfig, NetworkData::ServiceConfig::ServerConfig);
 
 } // namespace ot
 
-#endif // NETWORK_DATA_TYPES_HPP_
+#endif // OT_CORE_THREAD_NETWORK_DATA_TYPES_HPP_

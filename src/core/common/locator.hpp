@@ -31,8 +31,8 @@
  *   This file includes definitions for locator class for OpenThread objects.
  */
 
-#ifndef LOCATOR_HPP_
-#define LOCATOR_HPP_
+#ifndef OT_CORE_COMMON_LOCATOR_HPP_
+#define OT_CORE_COMMON_LOCATOR_HPP_
 
 #include "openthread-core-config.h"
 
@@ -48,6 +48,13 @@ class Instance;
 extern uint64_t gInstanceRaw[];
 #endif
 
+#if OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_ENABLE && OPENTHREAD_CONFIG_LOG_INSTANCE_AWARE_API_ENABLE
+extern Instance *gActiveInstance;
+inline Instance *UpdateActiveInstance(Instance *aInstance) { return gActiveInstance = aInstance; }
+#else
+inline Instance *UpdateActiveInstance(Instance *aInstance) { return aInstance; }
+#endif
+
 /**
  * @addtogroup core-locator
  *
@@ -55,8 +62,16 @@ extern uint64_t gInstanceRaw[];
  *   This module includes definitions for OpenThread instance locator.
  *
  * @{
- *
  */
+
+#if !OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_ENABLE
+/**
+ * Gets the single OpenThread instance.
+ *
+ * @returns The single OpenThread instance.
+ */
+inline Instance &GetSingleInstance(void) { return *reinterpret_cast<Instance *>(&gInstanceRaw); }
+#endif
 
 /**
  * Implements `Get<Type>()` method for different `Type` objects belonging to the OpenThread
@@ -68,7 +83,6 @@ extern uint64_t gInstanceRaw[];
  * @tparam InstanceGetProvider   The template sub-lass used in CRTP style inheritance.
  *                               `InstanceGetProvider` MUST provide a method with the following signature:
  *                               `Instance &GetInstance(void) const`
- *
  */
 template <class InstanceGetProvider> class GetProvider
 {
@@ -82,9 +96,8 @@ public:
      * `Instance` through the member variable property hierarchy.
      *
      * @returns A reference to the `Type` object of the instance.
-     *
      */
-    template <typename Type> inline Type &Get(void) const; // Implemented in `locator_getters.hpp`.
+    template <typename Type> inline Type &Get(void) const; // Implemented in `instance.hpp`.
 
 protected:
     GetProvider(void) = default;
@@ -99,7 +112,6 @@ protected:
  *
  * If multiple-instance feature is supported, the owning/parent OpenThread `Instance` is tracked as a reference. In the
  * single-instance case, this class becomes an empty base class.
- *
  */
 class InstanceLocator : public GetProvider<InstanceLocator>
 {
@@ -110,12 +122,11 @@ public:
      * Returns a reference to the parent OpenThread Instance.
      *
      * @returns A reference to the parent otInstance.
-     *
      */
 #if OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_ENABLE
-    Instance &GetInstance(void) const { return *mInstance; }
+    Instance &GetInstance(void) const { return *UpdateActiveInstance(mInstance); }
 #else
-    Instance &GetInstance(void) const { return *reinterpret_cast<Instance *>(&gInstanceRaw); }
+    Instance &GetInstance(void) const { return GetSingleInstance(); }
 #endif
 
 protected:
@@ -123,7 +134,6 @@ protected:
      * Initializes the object.
      *
      * @param[in]  aInstance  A reference to the OpenThread Instance.
-     *
      */
     explicit InstanceLocator(Instance &aInstance)
 #if OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_ENABLE
@@ -152,14 +162,12 @@ private:
  *
  * The inheriting class from `InstanceLocatorInit` should ensure that object is properly initialized after the object
  * is created and more importantly that it is re-initialized when/if it is cleared or reset.
- *
  */
 class InstanceLocatorInit : public InstanceLocator
 {
 protected:
     /**
      * This is the default constructor for the `InstanceLocatorInit` object.
-     *
      */
     InstanceLocatorInit(void)
         : InstanceLocator()
@@ -182,9 +190,8 @@ protected:
 
 /**
  * @}
- *
  */
 
 } // namespace ot
 
-#endif // LOCATOR_HPP_
+#endif // OT_CORE_COMMON_LOCATOR_HPP_

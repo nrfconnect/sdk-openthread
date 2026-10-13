@@ -35,10 +35,7 @@
 
 #if OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE
 
-#include <openthread/srp_client.h>
-
-#include "common/as_core_type.hpp"
-#include "common/locator_getters.hpp"
+#include "instance/instance.hpp"
 
 using namespace ot;
 
@@ -184,6 +181,15 @@ bool otSrpClientIsServiceKeyRecordEnabled(otInstance *aInstance)
 {
     return AsCoreType(aInstance).Get<Srp::Client>().IsServiceKeyRecordEnabled();
 }
+#endif
+
+#if OPENTHREAD_CONFIG_SRP_CLIENT_COUNTERS_ENABLE
+const otSrpClientCounters *otSrpClientGetCounters(otInstance *aInstance)
+{
+    return &AsCoreType(aInstance).Get<Srp::Client>().GetCounters();
+}
+
+void otSrpClientResetCounters(otInstance *aInstance) { AsCoreType(aInstance).Get<Srp::Client>().ResetCounters(); }
 #endif
 
 #endif // OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE

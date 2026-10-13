@@ -32,9 +32,7 @@
 #include <cutils/sockets.h>
 #endif
 #include <fcntl.h>
-#include <signal.h>
 #include <stdarg.h>
-#include <string.h>
 #include <sys/file.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -47,6 +45,7 @@
 #include "cli/cli_config.h"
 #include "common/code_utils.hpp"
 #include "posix/platform/platform-posix.h"
+#include "posix/platform/utils.hpp"
 
 #if OPENTHREAD_POSIX_CONFIG_DAEMON_ENABLE
 
@@ -61,19 +60,16 @@ namespace {
 
 typedef char(Filename)[sizeof(sockaddr_un::sun_path)];
 
-void GetFilename(Filename &aFilename, const char *aPattern)
-{
-    int         rval;
-    const char *netIfName = strlen(gNetifName) > 0 ? gNetifName : OPENTHREAD_POSIX_CONFIG_THREAD_NETIF_DEFAULT_NAME;
-
-    rval = snprintf(aFilename, sizeof(aFilename), aPattern, netIfName);
-    if (rval < 0 && static_cast<size_t>(rval) >= sizeof(aFilename))
-    {
-        DieNow(OT_EXIT_INVALID_ARGUMENTS);
-    }
-}
-
 } // namespace
+
+// using macro to avoid the warning about format-nonliteral
+#define GetFilename(aFilename, aPattern)                                                                       \
+    do                                                                                                         \
+    {                                                                                                          \
+        int rval = snprintf(aFilename, sizeof(aFilename), aPattern,                                            \
+                            (gNetifName[0] ? gNetifName : OPENTHREAD_POSIX_CONFIG_THREAD_NETIF_DEFAULT_NAME)); \
+        VerifyOrDie(rval > 0 && static_cast<size_t>(rval) < sizeof(aFilename), OT_EXIT_INVALID_ARGUMENTS);     \
+    } while (0)
 
 const char Daemon::kLogModuleName[] = "Daemon";
 
@@ -109,7 +105,7 @@ int Daemon::OutputFormatV(const char *aFormat, va_list aArguments)
 
     VerifyOrExit(mSessionSocket != -1);
 
-#ifdef __linux__
+#ifdef MSG_NOSIGNAL
     // Don't die on SIGPIPE
     rval = send(mSessionSocket, buf, static_cast<size_t>(rval), MSG_NOSIGNAL);
 #else
@@ -140,18 +136,22 @@ void Daemon::InitializeSessionSocket(void)
 
     VerifyOrExit((rval = fcntl(newSessionSocket, F_SETFD, rval)) != -1);
 
-#ifndef __linux__
+#ifndef MSG_NOSIGNAL
     // some platforms (macOS, Solaris) don't have MSG_NOSIGNAL
     // SOME of those (macOS, but NOT Solaris) support SO_NOSIGPIPE
     // if we have SO_NOSIGPIPE, then set it. Otherwise, we're going
     // to simply ignore it.
 #if defined(SO_NOSIGPIPE)
-    rval = setsockopt(newSessionSocket, SOL_SOCKET, SO_NOSIGPIPE, &rval, sizeof(rval));
-    VerifyOrExit(rval != -1);
+    {
+        const int on = 1;
+
+        rval = setsockopt(newSessionSocket, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+        VerifyOrExit(rval != -1);
+    }
 #else
 #warning "no support for MSG_NOSIGNAL or SO_NOSIGPIPE"
 #endif
-#endif // __linux__
+#endif // MSG_NOSIGNAL
 
     if (mSessionSocket != -1)
     {
@@ -196,7 +196,7 @@ void Daemon::createListenSocketOrDie(void)
 void Daemon::createListenSocketOrDie(void)
 {
     struct sockaddr_un sockname;
-    int ret;
+    int                ret;
 
     class AllowAllGuard
     {
@@ -204,7 +204,7 @@ void Daemon::createListenSocketOrDie(void)
         AllowAllGuard(void)
         {
             const char *allowAll = getenv("OT_DAEMON_ALLOW_ALL");
-            mAllowAll = (allowAll != nullptr && strcmp("1", allowAll) == 0);
+            mAllowAll            = (allowAll != nullptr && strcmp("1", allowAll) == 0);
 
             if (mAllowAll)
             {
@@ -220,8 +220,8 @@ void Daemon::createListenSocketOrDie(void)
         }
 
     private:
-        bool mAllowAll = false;
-        mode_t mMode = 0;
+        bool   mAllowAll = false;
+        mode_t mMode     = 0;
     };
 
     mListenSocket = SocketWithCloseExec(AF_UNIX, SOCK_STREAM, 0, kSocketNonBlock);
@@ -333,56 +333,38 @@ void Daemon::TearDown(void)
 #endif
 }
 
-void Daemon::Update(otSysMainloopContext &aContext)
+void Daemon::Update(Mainloop::Context &aContext)
 {
-    if (mListenSocket != -1)
-    {
-        FD_SET(mListenSocket, &aContext.mReadFdSet);
-        FD_SET(mListenSocket, &aContext.mErrorFdSet);
+    Mainloop::AddToReadFdSet(mListenSocket, aContext);
+    Mainloop::AddToErrorFdSet(mListenSocket, aContext);
 
-        if (aContext.mMaxFd < mListenSocket)
-        {
-            aContext.mMaxFd = mListenSocket;
-        }
-    }
-
-    if (mSessionSocket != -1)
-    {
-        FD_SET(mSessionSocket, &aContext.mReadFdSet);
-        FD_SET(mSessionSocket, &aContext.mErrorFdSet);
-
-        if (aContext.mMaxFd < mSessionSocket)
-        {
-            aContext.mMaxFd = mSessionSocket;
-        }
-    }
-
-    return;
+    Mainloop::AddToReadFdSet(mSessionSocket, aContext);
+    Mainloop::AddToErrorFdSet(mSessionSocket, aContext);
 }
 
-void Daemon::Process(const otSysMainloopContext &aContext)
+void Daemon::Process(const Mainloop::Context &aContext)
 {
     ssize_t rval;
 
     VerifyOrExit(mListenSocket != -1);
 
-    if (FD_ISSET(mListenSocket, &aContext.mErrorFdSet))
+    if (Mainloop::HasFdErrored(mListenSocket, aContext))
     {
         DieNowWithMessage("daemon socket error", OT_EXIT_FAILURE);
     }
-    else if (FD_ISSET(mListenSocket, &aContext.mReadFdSet))
+    else if (Mainloop::IsFdReadable(mListenSocket, aContext))
     {
         InitializeSessionSocket();
     }
 
     VerifyOrExit(mSessionSocket != -1);
 
-    if (FD_ISSET(mSessionSocket, &aContext.mErrorFdSet))
+    if (Mainloop::HasFdErrored(mSessionSocket, aContext))
     {
         close(mSessionSocket);
         mSessionSocket = -1;
     }
-    else if (FD_ISSET(mSessionSocket, &aContext.mReadFdSet))
+    else if (Mainloop::IsFdReadable(mSessionSocket, aContext))
     {
         uint8_t buffer[OPENTHREAD_CONFIG_CLI_MAX_LINE_LENGTH];
 

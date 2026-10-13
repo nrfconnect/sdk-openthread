@@ -26,8 +26,8 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CLI_TCAT_HPP_
-#define CLI_TCAT_HPP_
+#ifndef OT_CLI_CLI_TCAT_HPP_
+#define OT_CLI_CLI_TCAT_HPP_
 
 #include "openthread-core-config.h"
 
@@ -43,7 +43,6 @@ namespace Cli {
 
 /**
  * Implements the Tcat CLI interpreter.
- *
  */
 class Tcat : private Utils
 {
@@ -53,10 +52,10 @@ public:
      *
      * @param[in]  aInstance            The OpenThread Instance.
      * @param[in]  aOutputImplementer   An `OutputImplementer`.
-     *
      */
     Tcat(otInstance *aInstance, OutputImplementer &aOutputImplementer)
         : Utils(aInstance, aOutputImplementer)
+        , mSelectedCert(0)
     {
     }
 
@@ -70,7 +69,6 @@ public:
      * @retval OT_ERROR_INVALID_COMMAND   Invalid or unknown CLI command.
      * @retval OT_ERROR_INVALID_ARGS      Invalid arguments.
      * @retval ...                        Error during execution of the CLI command.
-     *
      */
     otError Process(Arg aArgs[]);
 
@@ -80,6 +78,7 @@ private:
     template <CommandId kCommandId> otError Process(Arg aArgs[]);
 
     otTcatVendorInfo mVendorInfo;
+    uint8_t          mSelectedCert;
 };
 
 } // namespace Cli
@@ -88,4 +87,4 @@ private:
 
 #endif // OPENTHREAD_CONFIG_BLE_TCAT_ENABLE && OPENTHREAD_CONFIG_CLI_BLE_SECURE_ENABLE
 
-#endif // CLI_TCAT_HPP_
+#endif // OT_CLI_CLI_TCAT_HPP_

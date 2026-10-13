@@ -29,20 +29,14 @@
 /**
  * @file
  *   This file implements Extended PAN ID management.
- *
  */
 
 #include "extended_panid.hpp"
 
-#include "common/locator_getters.hpp"
-#include "common/notifier.hpp"
+#include "common/random.hpp"
 
 namespace ot {
 namespace MeshCoP {
-
-const otExtendedPanId ExtendedPanIdManager::sExtendedPanidInit = {
-    {0xde, 0xad, 0x00, 0xbe, 0xef, 0x00, 0xca, 0xfe},
-};
 
 ExtendedPanId::InfoString ExtendedPanId::ToString(void) const
 {
@@ -53,16 +47,24 @@ ExtendedPanId::InfoString ExtendedPanId::ToString(void) const
     return string;
 }
 
-ExtendedPanIdManager::ExtendedPanIdManager(Instance &aInstance)
-    : InstanceLocator(aInstance)
-{
-    mExtendedPanId.Clear();
-    SetExtPanId(AsCoreType(&sExtendedPanidInit));
-}
+Error ExtendedPanId::GenerateRandom(void) { return Random::Crypto::Fill(*this); }
 
-void ExtendedPanIdManager::SetExtPanId(const ExtendedPanId &aExtendedPanId)
+bool ExtendedPanId::IsValid(void) const
 {
-    IgnoreError(Get<Notifier>().Update(mExtendedPanId, aExtendedPanId, kEventThreadExtPanIdChanged));
+    // The all-zeros and all-ones Extended PAN IDs are disallowed by
+    // the Thread specification. Determine both cases in a single pass
+    // by OR-ing and AND-ing all bytes together.
+
+    uint8_t oredBytes  = 0x00;
+    uint8_t andedBytes = 0xff;
+
+    for (uint8_t byte : m8)
+    {
+        oredBytes |= byte;
+        andedBytes &= byte;
+    }
+
+    return (oredBytes != 0x00) && (andedBytes != 0xff);
 }
 
 } // namespace MeshCoP

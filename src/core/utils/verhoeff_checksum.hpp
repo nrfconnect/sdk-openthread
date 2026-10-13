@@ -31,8 +31,8 @@
  *   This file includes definitions for Verhoeff checksum calculation and validation.
  */
 
-#ifndef VERHOEFF_CHECKSUM_HPP_
-#define VERHOEFF_CHECKSUM_HPP_
+#ifndef OT_CORE_UTILS_VERHOEFF_CHECKSUM_HPP_
+#define OT_CORE_UTILS_VERHOEFF_CHECKSUM_HPP_
 
 #include "openthread-core-config.h"
 
@@ -50,7 +50,6 @@ class VerhoeffChecksum
 public:
     /**
      * Specifies the maximum length of decimal string input.
-     *
      */
     static constexpr uint16_t kMaxStringLength = OT_VERHOEFF_CHECKSUM_MAX_STRING_LENGTH;
 
@@ -64,7 +63,6 @@ public:
      * @retval kErrorNone          Successfully calculated the checksum, @p aChecksum is updated.
      * @retval kErrorInvalidArgs   The @p aDecimalString is not valid, i.e. it either contains chars other than
      *                             ['0'-'9'], or is longer than `kMaxStringLength`.
-     *
      */
     static Error Calculate(const char *aDecimalString, char &aChecksum);
 
@@ -77,7 +75,6 @@ public:
      * @retval kErrorFailed          Checksum is not valid.
      * @retval kErrorInvalidArgs     The @p aDecimalString is not valid, i.e. it either contains chars other than
      *                               ['0'-'9'], or is longer than `kMaxStringLength`.
-     *
      */
     static Error Validate(const char *aDecimalString);
 
@@ -96,4 +93,4 @@ private:
 
 #endif // OPENTHREAD_CONFIG_VERHOEFF_CHECKSUM_ENABLE
 
-#endif // VERHOEFF_CHECKSUM_HPP_
+#endif // OT_CORE_UTILS_VERHOEFF_CHECKSUM_HPP_

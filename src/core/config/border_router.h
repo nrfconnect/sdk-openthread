@@ -29,11 +29,10 @@
 /**
  * @file
  *   This file includes compile-time configurations for Border Router services.
- *
  */
 
-#ifndef CONFIG_BORDER_ROUTER_H_
-#define CONFIG_BORDER_ROUTER_H_
+#ifndef OT_CORE_CONFIG_BORDER_ROUTER_H_
+#define OT_CORE_CONFIG_BORDER_ROUTER_H_
 
 /**
  * @addtogroup config-border-router
@@ -42,7 +41,6 @@
  *   This module includes configuration variables for Border Router services.
  *
  * @{
- *
  */
 
 #include <config/border_routing.h>
@@ -51,7 +49,6 @@
  * @def OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
  *
  * Define to 1 to enable Border Router support.
- *
  */
 #ifndef OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
 #define OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE 0
@@ -69,7 +66,6 @@
  *
  * - It has added at least one external route entry.
  * - It has added at least one prefix entry with default-route and on-mesh flags set.
- * - It has added at least one domain prefix (domain and on-mesh flags set).
  *
  * A Border Router which provides IP connectivity and is acting as a REED is eligible to request a router role upgrade
  * by sending an "Address Solicit" request to leader with status reason `BorderRouterRequest`. This reason is used when
@@ -77,7 +73,6 @@
  * BRs (determined from the Thread Network Data) that are acting as router is less than two. This mechanism allows up
  * to two eligible Border Routers to request router role upgrade when the number of routers is already above the
  * threshold.
- *
  */
 #ifndef OPENTHREAD_CONFIG_BORDER_ROUTER_REQUEST_ROUTER_ROLE
 #define OPENTHREAD_CONFIG_BORDER_ROUTER_REQUEST_ROUTER_ROLE 1
@@ -87,7 +82,6 @@
  * @def OPENTHREAD_CONFIG_BORDER_ROUTER_SIGNAL_NETWORK_DATA_FULL
  *
  * Define as 1 to enable mechanism to detect and signal when local or leader Network Data gets full.
- *
  */
 #ifndef OPENTHREAD_CONFIG_BORDER_ROUTER_SIGNAL_NETWORK_DATA_FULL
 #define OPENTHREAD_CONFIG_BORDER_ROUTER_SIGNAL_NETWORK_DATA_FULL OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
@@ -95,7 +89,6 @@
 
 /**
  * @}
- *
  */
 
-#endif // CONFIG_BORDER_ROUTER_H_
+#endif // OT_CORE_CONFIG_BORDER_ROUTER_H_

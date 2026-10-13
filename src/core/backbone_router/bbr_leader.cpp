@@ -35,7 +35,6 @@
 
 #if (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
 
-#include "common/locator_getters.hpp"
 #include "instance/instance.hpp"
 
 namespace ot {
@@ -43,22 +42,57 @@ namespace BackboneRouter {
 
 RegisterLogModule("BbrLeader");
 
+//---------------------------------------------------------------------------------------------------------------------
+// Config
+
+void Config::AdjustMlrTimeout(void)
+{
+    uint32_t origTimeout;
+
+    VerifyOrExit(IsPresent());
+
+    origTimeout = GetMlrTimeout();
+    mMlrTimeout = Clamp(mMlrTimeout, kMinMlrTimeout, kMaxMlrTimeout);
+
+    VerifyOrExit(mMlrTimeout != origTimeout);
+    LogNote("MLR timeout adjusted: %lu -> %lu", ToUlong(origTimeout), ToUlong(mMlrTimeout));
+
+exit:
+    return;
+}
+
+uint16_t Config::SelectRandomReregistrationDelay(void) const
+{
+    return Random::NonCrypto::GenerateInClosedRange<uint16_t>(1, mReregistrationDelay);
+}
+
+#if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_INFO)
+void Config::Log(const char *aTitle) const
+{
+    if (IsPresent())
+    {
+        LogInfo("  %s: 0x%04x seqno:%u delay:%u timeout:%lu", aTitle, mServer16, mSequenceNumber, mReregistrationDelay,
+                ToUlong(mMlrTimeout));
+    }
+    else
+    {
+        LogInfo("  %s: none", aTitle);
+    }
+}
+#endif
+
+//---------------------------------------------------------------------------------------------------------------------
+// Leader
+
 Leader::Leader(Instance &aInstance)
     : InstanceLocator(aInstance)
 {
     Reset();
 }
 
-void Leader::Reset(void)
-{
-    // Invalid server short address indicates no available Backbone Router service in the Thread Network.
-    mConfig.mServer16 = Mle::kInvalidRloc16;
+void Leader::Reset(void) { mConfig.MarkAsAbsent(); }
 
-    // Domain Prefix Length 0 indicates no available Domain Prefix in the Thread network.
-    mDomainPrefix.SetLength(0);
-}
-
-Error Leader::GetConfig(Config &aConfig) const
+Error Leader::ReadConfig(Config &aConfig) const
 {
     Error error = kErrorNone;
 
@@ -83,192 +117,80 @@ exit:
 
 #if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_INFO)
 
-void Leader::LogBackboneRouterPrimary(State aState, const Config &aConfig) const
+const char *Leader::PrimaryEventToString(PrimaryEvent aEvent)
 {
-    OT_UNUSED_VARIABLE(aConfig);
+#define PrimaryEventMapList(_)              \
+    _(kPrimaryAdded, "Added")               \
+    _(kPrimaryRemoved, "Removed")           \
+    _(kPrimaryUpdatedReregister, "Updated") \
+    _(kPrimaryConfigParameterChanged, "ConfigChanged")
 
-    LogInfo("PBBR state: %s", StateToString(aState));
+    DefineEnumStringArray(PrimaryEventMapList);
 
-    if (aState != kStateRemoved && aState != kStateNone)
-    {
-        LogInfo("Rloc16:0x%4x, seqno:%u, delay:%u, timeout:%lu", aConfig.mServer16, aConfig.mSequenceNumber,
-                aConfig.mReregistrationDelay, ToUlong(aConfig.mMlrTimeout));
-    }
-}
-
-const char *Leader::StateToString(State aState)
-{
-    static const char *const kStateStrings[] = {
-        "None",            //  (0) kStateNone
-        "Added",           //  (1) kStateAdded
-        "Removed",         //  (2) kStateRemoved
-        "Rereg triggered", //  (3) kStateToTriggerRereg
-        "Refreshed",       //  (4) kStateRefreshed
-        "Unchanged",       //  (5) kStateUnchanged
-    };
-
-    static_assert(0 == kStateNone, "kStateNone value is incorrect");
-    static_assert(1 == kStateAdded, "kStateAdded value is incorrect");
-    static_assert(2 == kStateRemoved, "kStateRemoved value is incorrect");
-    static_assert(3 == kStateToTriggerRereg, "kStateToTriggerRereg value is incorrect");
-    static_assert(4 == kStateRefreshed, "kStateRefreshed value is incorrect");
-    static_assert(5 == kStateUnchanged, "kStateUnchanged value is incorrect");
-
-    return kStateStrings[aState];
-}
-
-const char *Leader::DomainPrefixEventToString(DomainPrefixEvent aEvent)
-{
-    static const char *const kEventStrings[] = {
-        "Added",     // (0) kDomainPrefixAdded
-        "Removed",   // (1) kDomainPrefixRemoved
-        "Refreshed", // (2) kDomainPrefixRefreshed
-        "Unchanged", // (3) kDomainPrefixUnchanged
-    };
-
-    static_assert(0 == kDomainPrefixAdded, "kDomainPrefixAdded value is incorrect");
-    static_assert(1 == kDomainPrefixRemoved, "kDomainPrefixRemoved value is incorrect");
-    static_assert(2 == kDomainPrefixRefreshed, "kDomainPrefixRefreshed value is incorrect");
-    static_assert(3 == kDomainPrefixUnchanged, "kDomainPrefixUnchanged value is incorrect");
-
-    return kEventStrings[aEvent];
+    return kStrings[aEvent];
 }
 
 #endif // OT_SHOULD_LOG_AT(OT_LOG_LEVEL_INFO)
 
-void Leader::Update(void)
+void Leader::HandleNotifierEvents(Events aEvents)
 {
-    UpdateBackboneRouterPrimary();
-    UpdateDomainPrefixConfig();
+    if (aEvents.ContainsAny(kEventThreadNetdataChanged | kEventThreadRoleChanged))
+    {
+        UpdateBackboneRouterPrimary();
+    }
 }
 
 void Leader::UpdateBackboneRouterPrimary(void)
 {
-    Config config;
-    State  state;
+    Config       newConfig;
+    PrimaryEvent event;
 
-    Get<NetworkData::Service::Manager>().GetBackboneRouterPrimary(config);
+    Get<NetworkData::Service::Manager>().GetBackboneRouterPrimary(newConfig);
 
-    if (config.mServer16 != mConfig.mServer16)
+    newConfig.AdjustMlrTimeout();
+
+    if (!mConfig.IsPresent())
     {
-        if (config.mServer16 == Mle::kInvalidRloc16)
-        {
-            state = kStateRemoved;
-        }
-        else if (mConfig.mServer16 == Mle::kInvalidRloc16)
-        {
-            state = kStateAdded;
-        }
-        else
-        {
-            // Short Address of PBBR changes.
-            state = kStateToTriggerRereg;
-        }
+        VerifyOrExit(newConfig.IsPresent());
+        event = kPrimaryAdded;
     }
-    else if (config.mServer16 == Mle::kInvalidRloc16)
+    else if (!newConfig.IsPresent())
     {
-        // If no Primary all the time.
-        state = kStateNone;
+        event = kPrimaryRemoved;
     }
-    else if (config.mSequenceNumber != mConfig.mSequenceNumber)
+    else if (newConfig.GetServer16() != mConfig.GetServer16() ||
+             newConfig.GetSequenceNumber() != mConfig.GetSequenceNumber())
     {
-        state = kStateToTriggerRereg;
+        event = kPrimaryUpdatedReregister;
     }
-    else if (config.mReregistrationDelay != mConfig.mReregistrationDelay || config.mMlrTimeout != mConfig.mMlrTimeout)
+    else if (newConfig.GetReregistrationDelay() != mConfig.GetReregistrationDelay() ||
+             newConfig.GetMlrTimeout() != mConfig.GetMlrTimeout())
     {
-        state = kStateRefreshed;
+        event = kPrimaryConfigParameterChanged;
     }
     else
     {
-        state = kStateUnchanged;
+        ExitNow(); // No changes
     }
 
-    // Restrain the range of MLR timeout to be always valid
-    if (config.mServer16 != Mle::kInvalidRloc16)
-    {
-        uint32_t origTimeout = config.mMlrTimeout;
+#if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_INFO)
+    LogInfo("PrimaryEvent: %s", PrimaryEventToString(event));
+    mConfig.Log("Old");
+    newConfig.Log("New");
+#endif
 
-        config.mMlrTimeout = Clamp(config.mMlrTimeout, kMinMlrTimeout, kMaxMlrTimeout);
-
-        if (config.mMlrTimeout != origTimeout)
-        {
-            LogNote("Leader MLR Timeout is normalized from %lu to %lu", ToUlong(origTimeout),
-                    ToUlong(config.mMlrTimeout));
-        }
-    }
-
-    mConfig = config;
-    LogBackboneRouterPrimary(state, mConfig);
+    mConfig = newConfig;
 
 #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_BACKBONE_ROUTER_ENABLE
-    Get<BackboneRouter::Local>().HandleBackboneRouterPrimaryUpdate(state, mConfig);
+    Get<BackboneRouter::Local>().HandleBackboneRouterPrimaryUpdate(event);
 #endif
 
 #if OPENTHREAD_CONFIG_MLR_ENABLE || (OPENTHREAD_FTD && OPENTHREAD_CONFIG_TMF_PROXY_MLR_ENABLE)
-    Get<MlrManager>().HandleBackboneRouterPrimaryUpdate(state, mConfig);
-#endif
-
-#if OPENTHREAD_CONFIG_DUA_ENABLE || (OPENTHREAD_FTD && OPENTHREAD_CONFIG_TMF_PROXY_DUA_ENABLE)
-    Get<DuaManager>().HandleBackboneRouterPrimaryUpdate(state, mConfig);
-#endif
-}
-
-void Leader::UpdateDomainPrefixConfig(void)
-{
-    NetworkData::Iterator           iterator = NetworkData::kIteratorInit;
-    NetworkData::OnMeshPrefixConfig config;
-    DomainPrefixEvent               event;
-    bool                            found = false;
-
-    while (Get<NetworkData::Leader>().GetNextOnMeshPrefix(iterator, config) == kErrorNone)
-    {
-        if (config.mDp)
-        {
-            found = true;
-            break;
-        }
-    }
-
-    if (!found)
-    {
-        VerifyOrExit(HasDomainPrefix());
-
-        // Domain Prefix does not exist any more.
-        mDomainPrefix.Clear();
-        event = kDomainPrefixRemoved;
-    }
-    else if (config.GetPrefix() == mDomainPrefix)
-    {
-        event = kDomainPrefixUnchanged;
-    }
-    else
-    {
-        event         = HasDomainPrefix() ? kDomainPrefixRefreshed : kDomainPrefixAdded;
-        mDomainPrefix = config.GetPrefix();
-    }
-
-    LogInfo("%s domain Prefix: %s", DomainPrefixEventToString(event), mDomainPrefix.ToString().AsCString());
-
-#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_BACKBONE_ROUTER_ENABLE
-    Get<Local>().HandleDomainPrefixUpdate(event);
-#if OPENTHREAD_CONFIG_BACKBONE_ROUTER_DUA_NDPROXYING_ENABLE
-    Get<NdProxyTable>().HandleDomainPrefixUpdate(event);
-#endif
-#endif
-
-#if OPENTHREAD_CONFIG_DUA_ENABLE || (OPENTHREAD_FTD && OPENTHREAD_CONFIG_TMF_PROXY_DUA_ENABLE)
-    Get<DuaManager>().HandleDomainPrefixUpdate(event);
-#else
-    OT_UNUSED_VARIABLE(event);
+    Get<Mlr::Manager>().HandleBackboneRouterPrimaryUpdate(event);
 #endif
 
 exit:
-    return;
-}
-
-bool Leader::IsDomainUnicast(const Ip6::Address &aAddress) const
-{
-    return HasDomainPrefix() && aAddress.MatchesPrefix(mDomainPrefix);
+    OT_UNUSED_VARIABLE(event);
 }
 
 } // namespace BackboneRouter

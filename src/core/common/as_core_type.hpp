@@ -31,8 +31,8 @@
  *   This file includes helper functions to convert between public OT C structs and corresponding core C++ classes.
  */
 
-#ifndef AS_CORE_TYPE_HPP_
-#define AS_CORE_TYPE_HPP_
+#ifndef OT_CORE_COMMON_AS_CORE_TYPE_HPP_
+#define OT_CORE_COMMON_AS_CORE_TYPE_HPP_
 
 #include "openthread-core-config.h"
 
@@ -49,7 +49,6 @@ namespace ot {
  * named `Type` to provide the corresponding core class/type related to `FromType.
  *
  * For example, `CoreType<otIp6Address>::Type` is defined as `Ip6::Address`.
- *
  */
 template <typename FromType> struct CoreType;
 
@@ -61,7 +60,6 @@ template <typename FromType> struct CoreType;
  * @param[in] aObject   A pointer to the object to convert.
  *
  * @returns A reference of the corresponding C++ type matching @p aObject.
- *
  */
 template <typename Type> typename CoreType<Type>::Type &AsCoreType(Type *aObject)
 {
@@ -78,7 +76,6 @@ template <typename Type> typename CoreType<Type>::Type &AsCoreType(Type *aObject
  * @param[in] aObject   A const pointer to the object to convert.
  *
  * @returns A const reference of the corresponding C++ type matching @p aObject.
- *
  */
 template <typename Type> const typename CoreType<Type>::Type &AsCoreType(const Type *aObject)
 {
@@ -95,7 +92,6 @@ template <typename Type> const typename CoreType<Type>::Type &AsCoreType(const T
  * @param[in] aObject   A pointer to the object to convert.
  *
  * @returns A pointer of the corresponding C++ type matching @p aObject.
- *
  */
 template <typename Type> typename CoreType<Type>::Type *AsCoreTypePtr(Type *aObject)
 {
@@ -110,7 +106,6 @@ template <typename Type> typename CoreType<Type>::Type *AsCoreTypePtr(Type *aObj
  * @param[in] aObject   A pointer to the object to convert.
  *
  * @returns A const pointer of the corresponding C++ type matching @p aObject.
- *
  */
 template <typename Type> const typename CoreType<Type>::Type *AsCoreTypePtr(const Type *aObject)
 {
@@ -126,7 +121,6 @@ template <typename Type> const typename CoreType<Type>::Type *AsCoreTypePtr(cons
  * the related `enum` type mapped with `FromEnumType`.
  *
  * For example, `MappedEnum<otMacFilterAddressMode>::Type` is defined as `Mac::Filter::Mode`.
- *
  */
 template <typename FromEnumType> struct MappedEnum;
 
@@ -136,7 +130,6 @@ template <typename FromEnumType> struct MappedEnum;
  * @param[in] aValue   The enumeration value to convert
  *
  * @returns The matching enumeration value.
- *
  */
 template <typename EnumType> const typename MappedEnum<EnumType>::Type MapEnum(EnumType aValue)
 {
@@ -164,4 +157,4 @@ template <typename EnumType> const typename MappedEnum<EnumType>::Type MapEnum(E
 
 } // namespace ot
 
-#endif // AS_CORE_TYPE_HPP_
+#endif // OT_CORE_COMMON_AS_CORE_TYPE_HPP_

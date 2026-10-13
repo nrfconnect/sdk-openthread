@@ -35,6 +35,8 @@
 #include <stdarg.h>
 #include <stdlib.h>
 
+#include <openthread/border_agent.h>
+#include <openthread/cli.h>
 #include <openthread/diag.h>
 #include <openthread/icmp6.h>
 #include <openthread/link.h>
@@ -46,6 +48,7 @@
 
 #include "common/code_utils.hpp"
 #include "common/debug.hpp"
+#include "lib/spinel/spinel.h"
 #include "radio/radio.hpp"
 
 namespace ot {
@@ -295,7 +298,7 @@ NcpBase::NcpBase(Instance *aInstance)
 #if OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
     , mAllowLocalServerDataChange(false)
 #endif
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
     , mPreferredRouteId(0)
 #endif
     , mCurCommandIid(0)
@@ -317,6 +320,15 @@ NcpBase::NcpBase(Instance *aInstance)
     , mDidInitialUpdates(false)
     , mDatasetSendMgmtPendingSetResult(SPINEL_STATUS_OK)
     , mLogTimestampBase(0)
+#if OPENTHREAD_FTD
+#if OPENTHREAD_CONFIG_NCP_INFRA_IF_ENABLE
+    , mInfraIfAddrCount(0)
+    , mInfraIfIndex(0)
+#endif
+#if OPENTHREAD_CONFIG_NCP_DNSSD_ENABLE && OPENTHREAD_CONFIG_PLATFORM_DNSSD_ENABLE
+    , mDnssdState(OT_PLAT_DNSSD_STOPPED)
+#endif
+#endif
 #if OPENTHREAD_CONFIG_DIAG_ENABLE
     , mDiagOutput(nullptr)
     , mDiagOutputLen(0)
@@ -342,6 +354,9 @@ NcpBase::NcpBase(Instance *aInstance)
     IgnoreError(otSetStateChangedCallback(mInstance, &NcpBase::HandleStateChanged, this));
     otIp6SetReceiveCallback(mInstance, &NcpBase::HandleDatagramFromStack, this);
     otIp6SetReceiveFilterEnabled(mInstance, true);
+#if OPENTHREAD_CONFIG_NCP_CLI_STREAM_ENABLE
+    otCliInit(mInstance, &NcpBase::HandleCliOutput, this);
+#endif
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
     otNetworkTimeSyncSetCallback(mInstance, &NcpBase::HandleTimeSyncUpdate, this);
 #endif // OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
@@ -356,6 +371,12 @@ NcpBase::NcpBase(Instance *aInstance)
 #endif
 #if OPENTHREAD_CONFIG_MLE_PARENT_RESPONSE_CALLBACK_API_ENABLE
     otThreadRegisterParentResponseCallback(mInstance, &NcpBase::HandleParentResponseInfo, static_cast<void *>(this));
+#endif
+#if OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE
+    otBorderAgentSetMeshCoPServiceChangedCallback(mInstance, HandleBorderAgentMeshCoPServiceChanged, this);
+#endif
+#if OPENTHREAD_CONFIG_BORDER_AGENT_EPHEMERAL_KEY_ENABLE
+    otBorderAgentEphemeralKeySetCallback(mInstance, HandleBorderAgentEphemeralKeyStateChanged, this);
 #endif
 #endif // OPENTHREAD_FTD
 #if OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE
@@ -1595,7 +1616,7 @@ template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_MAC_RX_ON_WHEN_IDLE_M
     otError error = OT_ERROR_NONE;
 
     SuccessOrExit(error = mDecoder.ReadBool(enabled));
-    otPlatRadioSetRxOnWhenIdle(mInstance, enabled);
+    SuccessOrExit(error = otLinkSetRxOnWhenIdle(mInstance, enabled));
 
 exit:
     return error;
@@ -1671,6 +1692,31 @@ template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_MAC_RAW_STREAM_ENABLE
 #endif // OPENTHREAD_RADIO || OPENTHREAD_CONFIG_LINK_RAW_ENABLE
 
     mIsRawStreamEnabled[mCurCommandIid] = enabled;
+
+exit:
+    return error;
+}
+
+template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_MAC_RX_AT>(void)
+{
+    otError  error = OT_ERROR_NONE;
+    uint64_t when;
+    uint32_t duration;
+    uint8_t  channel;
+
+    SuccessOrExit(error = mDecoder.ReadUint64(when));
+    SuccessOrExit(error = mDecoder.ReadUint32(duration));
+    SuccessOrExit(error = mDecoder.ReadUint8(channel));
+
+    {
+        otRadioTime64 now = otPlatRadioGetNow(mInstance);
+        uint32_t      start;
+
+        VerifyOrExit(when > now && (when - now) < UINT32_MAX, error = OT_ERROR_INVALID_ARGS);
+
+        start = when - now;
+        error = otPlatRadioReceiveAt(mInstance, channel, start, duration);
+    }
 
 exit:
     return error;
@@ -2105,10 +2151,6 @@ template <> otError NcpBase::HandlePropertyGet<SPINEL_PROP_CAPS>(void)
     SuccessOrExit(error = mEncoder.WriteUintPacked(SPINEL_CAP_THREAD_LINK_METRICS));
 #endif
 
-#if OPENTHREAD_CONFIG_DUA_ENABLE
-    SuccessOrExit(error = mEncoder.WriteUintPacked(SPINEL_CAP_DUA));
-#endif
-
 #if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
     SuccessOrExit(error = mEncoder.WriteUintPacked(SPINEL_CAP_REFERENCE_DEVICE));
 #endif
@@ -2535,8 +2577,7 @@ template <> otError NcpBase::HandlePropertyGet<SPINEL_PROP_DEBUG_TEST_ASSERT>(vo
 template <> otError NcpBase::HandlePropertyGet<SPINEL_PROP_DEBUG_TEST_WATCHDOG>(void)
 {
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    while (true)
-        ;
+    while (true);
 #endif
 
     OT_UNREACHABLE_CODE(return OT_ERROR_NONE;)
@@ -2544,7 +2585,7 @@ template <> otError NcpBase::HandlePropertyGet<SPINEL_PROP_DEBUG_TEST_WATCHDOG>(
 
 template <> otError NcpBase::HandlePropertyGet<SPINEL_PROP_DEBUG_NCP_LOG_LEVEL>(void)
 {
-    return mEncoder.WriteUint8(ConvertLogLevel(otLoggingGetLevel()));
+    return mEncoder.WriteUint8(ConvertLogLevel(otGetLogLevel(mInstance)));
 }
 
 #if OPENTHREAD_CONFIG_LOG_LEVEL_DYNAMIC_ENABLE
@@ -2588,7 +2629,7 @@ template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_DEBUG_NCP_LOG_LEVEL>(
         ExitNow(error = OT_ERROR_INVALID_ARGS);
     }
 
-    IgnoreError(otLoggingSetLevel(logLevel));
+    IgnoreError(otSetLogLevel(mInstance, logLevel));
 
 exit:
     return error;
@@ -2802,6 +2843,22 @@ otError otNcpStreamWrite(int aStreamId, const uint8_t *aDataPtr, int aDataLen)
 
 #if (OPENTHREAD_CONFIG_LOG_OUTPUT == OPENTHREAD_CONFIG_LOG_OUTPUT_APP)
 
+#if OPENTHREAD_CONFIG_LOG_INSTANCE_AWARE_API_ENABLE
+
+extern "C" void otPlatLogOutput(otInstance *aInstance, otLogLevel aLogLevel, const char *aLogLine)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    ot::Ncp::NcpBase *ncp = ot::Ncp::NcpBase::GetNcpInstance();
+
+    if (ncp != nullptr)
+    {
+        ncp->Log(aLogLevel, OT_LOG_REGION_CORE, aLogLine);
+    }
+}
+
+#else
+
 extern "C" void otPlatLog(otLogLevel aLogLevel, otLogRegion aLogRegion, const char *aFormat, ...)
 {
     va_list           args;
@@ -2820,5 +2877,7 @@ extern "C" void otPlatLog(otLogLevel aLogLevel, otLogRegion aLogRegion, const ch
 
     va_end(args);
 }
+
+#endif // OPENTHREAD_CONFIG_LOG_INSTANCE_AWARE_API_ENABLE
 
 #endif // (OPENTHREAD_CONFIG_LOG_OUTPUT == OPENTHREAD_CONFIG_LOG_OUTPUT_APP)

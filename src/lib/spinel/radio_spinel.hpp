@@ -31,8 +31,8 @@
  *   This file includes definitions for the spinel based radio transceiver.
  */
 
-#ifndef RADIO_SPINEL_HPP_
-#define RADIO_SPINEL_HPP_
+#ifndef OT_LIB_SPINEL_RADIO_SPINEL_HPP_
+#define OT_LIB_SPINEL_RADIO_SPINEL_HPP_
 
 #include <openthread/platform/diag.h>
 #include <openthread/platform/radio.h>
@@ -59,7 +59,6 @@ struct RadioSpinelCallbacks
      * @param[in]  aError     kErrorNone when successfully received a frame,
      *                        kErrorAbort when reception was aborted and a frame was not received,
      *                        kErrorNoBufs when a frame could not be received due to lack of rx buffer space.
-     *
      */
     void (*mReceiveDone)(otInstance *aInstance, otRadioFrame *aFrame, Error aError);
 
@@ -74,7 +73,6 @@ struct RadioSpinelCallbacks
      *                        kErrorNoAck when the frame was transmitted but no ACK was received,
      *                        kErrorChannelAccessFailure tx failed due to activity on the channel,
      *                        kErrorAbort when transmission was aborted for other reasons.
-     *
      */
     void (*mTransmitDone)(otInstance *aInstance, otRadioFrame *aFrame, otRadioFrame *aAckFrame, Error aError);
 
@@ -83,7 +81,6 @@ struct RadioSpinelCallbacks
      *
      * @param[in]  aInstance  The OpenThread instance structure.
      * @param[in]  aMaxRssi   Maximum RSSI seen on the channel, or `SubMac::kInvalidRssiValue` if failed.
-     *
      */
     void (*mEnergyScanDone)(otInstance *aInstance, int8_t aMaxRssi);
 
@@ -91,7 +88,6 @@ struct RadioSpinelCallbacks
      * This callback notifies user of `RadioSpinel` that the bus latency has been changed.
      *
      * @param[in]  aInstance  The OpenThread instance structure.
-     *
      */
     void (*mBusLatencyChanged)(otInstance *aInstance);
 
@@ -100,7 +96,6 @@ struct RadioSpinelCallbacks
      *
      * @param[in]  aInstance  A pointer to the OpenThread instance structure.
      * @param[in]  aFrame     A pointer to the frame that is being transmitted.
-     *
      */
     void (*mTxStarted)(otInstance *aInstance, otRadioFrame *aFrame);
 
@@ -109,74 +104,61 @@ struct RadioSpinelCallbacks
      *
      * @param[in]  aInstance  A pointer to the OpenThread instance structure.
      * @param[in]  aSuccess   A value indicating if the switchover was successful or not.
-     *
      */
     void (*mSwitchoverDone)(otInstance *aInstance, bool aSuccess);
 
-#if OPENTHREAD_CONFIG_DIAG_ENABLE
     /**
-     * This callback notifies diagnostics module using `RadioSpinel` of a received frame.
+     * This method saves the radio spinel metrics to the temporary storage.
      *
-     * This callback is used when diagnostics is enabled.
-     *
-     * @param[in]  aInstance  The OpenThread instance structure.
-     * @param[in]  aFrame     A pointer to the received frame or NULL if the receive operation failed.
-     * @param[in]  aError     OT_ERROR_NONE when successfully received a frame,
-     *                        OT_ERROR_ABORT when reception was aborted and a frame was not received,
-     *                        OT_ERROR_NO_BUFS when a frame could not be received due to lack of rx buffer space.
-     *
+     * @param[in]  aMetrics   A reference to the radio spinel metrics.
+     * @param[in]  aContext   A pointer to application-specific context.
      */
-    void (*mDiagReceiveDone)(otInstance *aInstance, otRadioFrame *aFrame, Error aError);
+    void (*mSaveRadioSpinelMetrics)(const otRadioSpinelMetrics &aMetrics, void *aContext);
 
     /**
-     * This callback notifies diagnostics module using `RadioSpinel` that the transmission has completed.
+     * This method restores the radio spinel metrics from the temporary storage.
      *
-     * This callback is used when diagnostics is enabled.
-     *
-     * @param[in]  aInstance  The OpenThread instance structure.
-     * @param[in]  aFrame     A pointer to the frame that was transmitted.
-     * @param[in]  aError     OT_ERROR_NONE when the frame was transmitted,
-     *                        OT_ERROR_CHANNEL_ACCESS_FAILURE tx could not take place due to activity on the
-     * channel, OT_ERROR_ABORT when transmission was aborted for other reasons.
-     *
+     * @param[out] aMetrics   A reference to the radio spinel metrics.
+     * @param[in]  aContext   A pointer to application-specific context.
      */
-    void (*mDiagTransmitDone)(otInstance *aInstance, otRadioFrame *aFrame, Error aError);
-#endif // OPENTHREAD_CONFIG_DIAG_ENABLE
+    otError (*mRestoreRadioSpinelMetrics)(otRadioSpinelMetrics &aMetrics, void *aContext);
+
+    /**
+     * The pointer to application-specific context for methods `mSaveRadioSpinelMetrics()` and
+     * `mRestoreRadioSpinelMetrics()`.
+     */
+    void *mRadioSpinelMetricsContext;
 };
 
 /**
  * The class for providing a OpenThread radio interface by talking with a radio-only
  * co-processor(RCP).
- *
  */
 class RadioSpinel : private Logger
 {
 public:
     /**
      * Initializes the spinel based OpenThread transceiver.
-     *
      */
     RadioSpinel(void);
 
     /**
      * Deinitializes the spinel based OpenThread transceiver.
-     *
      */
     ~RadioSpinel(void) { Deinit(); }
 
     /**
      * Initialize this radio transceiver.
      *
-     * @param[in]  aSkipRcpCompatibilityCheck  TRUE to skip RCP compatibility check, FALSE to perform the check.
+     * @param[in]  aSkipRcpVersionCheck        TRUE to skip RCP version check, FALSE to perform the check.
      * @param[in]  aSoftwareReset              When doing RCP recovery, TRUE to try software reset first, FALSE to
      *                                         directly do a hardware reset.
      * @param[in]  aSpinelDriver               A pointer to the spinel driver instance that this object depends on.
      * @param[in]  aRequiredRadioCaps          The required radio capabilities. RadioSpinel will check if RCP has
      *                                         the required capabilities during initialization.
      * @param[in]  aEnableRcpTimeSync          TRUE to enable RCP time sync, FALSE to not enable.
-     *
      */
-    void Init(bool          aSkipRcpCompatibilityCheck,
+    void Init(bool          aSkipRcpVersionCheck,
               bool          aSoftwareReset,
               SpinelDriver *aSpinelDriver,
               otRadioCaps   aRequiredRadioCaps,
@@ -186,13 +168,11 @@ public:
      * This method sets the notification callbacks.
      *
      * @param[in]  aCallbacks  A pointer to structure with notification callbacks.
-     *
      */
     void SetCallbacks(const struct RadioSpinelCallbacks &aCallbacks);
 
     /**
      * Deinitialize this radio transceiver.
-     *
      */
     void Deinit(void);
 
@@ -201,7 +181,6 @@ public:
      *
      * @retval true   Promiscuous mode is enabled.
      * @retval false  Promiscuous mode is disabled.
-     *
      */
     bool IsPromiscuous(void) const { return mIsPromiscuous; }
 
@@ -213,7 +192,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError SetPromiscuous(bool aEnable);
 
@@ -225,7 +203,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError SetRxOnWhenIdle(bool aEnable);
 
@@ -237,9 +214,19 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError SetShortAddress(uint16_t aAddress);
+
+    /**
+     * Sets the alternate short address.
+     *
+     * @param[in] aShortAddress   The alternate short address.
+     *
+     * @retval  OT_ERROR_NONE               Succeeded.
+     * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
+     * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
+     */
+    otError SetAlternateShortAddress(uint16_t aAddress);
 
     /**
      * Gets the factory-assigned IEEE EUI-64 for this transceiver.
@@ -250,7 +237,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError GetIeeeEui64(uint8_t *aIeeeEui64);
 
@@ -262,7 +248,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError SetExtendedAddress(const otExtAddress &aExtAddress);
 
@@ -274,7 +259,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError SetPanId(uint16_t aPanId);
 
@@ -286,7 +270,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError GetTransmitPower(int8_t &aPower);
 
@@ -298,7 +281,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError SetTransmitPower(int8_t aPower);
 
@@ -310,7 +292,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError GetCcaEnergyDetectThreshold(int8_t &aThreshold);
 
@@ -322,7 +303,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError SetCcaEnergyDetectThreshold(int8_t aThreshold);
 
@@ -334,7 +314,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError GetFemLnaGain(int8_t &aGain);
 
@@ -346,7 +325,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError SetFemLnaGain(int8_t aGain);
 
@@ -354,7 +332,6 @@ public:
      * Returns the radio capabilities.
      *
      * @returns The radio capability bit vector.
-     *
      */
     otRadioCaps GetRadioCaps(void) const { return sRadioCaps; }
 
@@ -373,7 +350,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     int8_t GetReceiveSensitivity(void) const { return mRxSensitivity; }
 
@@ -381,7 +357,6 @@ public:
      * Gets current state of the radio.
      *
      * @return  Current state of the radio.
-     *
      */
     otRadioState GetState(void) const;
 
@@ -389,7 +364,6 @@ public:
      * Gets the current receiving channel.
      *
      * @returns Current receiving channel.
-     *
      */
     uint8_t GetChannel(void) const { return mChannel; }
 
@@ -402,7 +376,6 @@ public:
      *
      * @retval OT_ERROR_NONE     Successfully enabled.
      * @retval OT_ERROR_FAILED   The radio coex could not be enabled.
-     *
      */
     otError SetCoexEnabled(bool aEnabled);
 
@@ -412,7 +385,6 @@ public:
      * @param[in] aInstance  The OpenThread instance structure.
      *
      * @returns TRUE if the radio coex is enabled, FALSE otherwise.
-     *
      */
     bool IsCoexEnabled(void);
 
@@ -423,7 +395,6 @@ public:
      *
      * @retval OT_ERROR_NONE          Successfully retrieved the coex metrics.
      * @retval OT_ERROR_INVALID_ARGS  @p aCoexMetrics was nullptr.
-     *
      */
     otError GetCoexMetrics(otRadioCoexMetrics &aCoexMetrics);
 #endif // OPENTHREAD_CONFIG_PLATFORM_RADIO_COEX_ENABLE
@@ -438,7 +409,6 @@ public:
      * @retval  OT_ERROR_NOT_IMPLEMENTED    Failed due to lack of the support in radio
      * @retval  OT_ERROR_INVALID_COMMAND    Platform supports all interfaces simultaneously.
      *                                      (i.e. no active/inactive interface concept in the platform level)
-     *
      */
     otError GetMultipanActiveInterface(spinel_iid_t *aIid);
 
@@ -462,7 +432,6 @@ public:
      * @retval  OT_ERROR_INVALID_COMMAND    Platform supports all interfaces simultaneously
      *                                      (i.e. no active/inactive interface concept in the platform level)
      * @retval  OT_ERROR_ALREADY            Given interface is already active.
-     *
      */
     otError SetMultipanActiveInterface(spinel_iid_t aIid, bool aCompletePending);
 
@@ -472,7 +441,6 @@ public:
      * The caller forms the IEEE 802.15.4 frame in this buffer then calls otPlatRadioTransmit() to request transmission.
      *
      * @returns A reference to the transmit buffer.
-     *
      */
     otRadioFrame &GetTransmitFrame(void) { return mTxRadioFrame; }
 
@@ -484,7 +452,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError EnableSrcMatch(bool aEnable);
 
@@ -522,7 +489,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError ClearSrcMatchShortEntries(void);
 
@@ -560,7 +526,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError ClearSrcMatchExtEntries(void);
 
@@ -573,7 +538,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError EnergyScan(uint8_t aScanChannel, uint16_t aScanDuration);
 
@@ -596,9 +560,24 @@ public:
      *
      * @retval OT_ERROR_NONE          Successfully transitioned to Receive.
      * @retval OT_ERROR_INVALID_STATE The radio was disabled or transmitting.
-     *
      */
     otError Receive(uint8_t aChannel);
+
+    /**
+     * Schedule a radio reception window at a specific time and duration.
+     *
+     * @param[in]  aWhen      The receive window start time in the local
+     *                        radio clock, see `otPlatRadioGetNow`. The radio
+     *                        receiver SHALL be on and ready to receive the first
+     *                        symbol of a frame's SHR at the window start time.
+     * @param[in]  aDuration  The receive window duration, in microseconds, as
+     *                        measured by the local radio clock.
+     * @param[in]  aChannel   The channel to use for receiving.
+     *
+     * @retval OT_ERROR_NONE          Successfully scheduled the reception.
+     * @retval OT_ERROR_INVALID_STATE The radio was disabled.
+     */
+    otError ReceiveAt(uint64_t aWhen, uint32_t aDuration, uint8_t aChannel);
 
     /**
      * Switches the radio state from Receive to Sleep.
@@ -606,7 +585,6 @@ public:
      * @retval OT_ERROR_NONE          Successfully transitioned to Sleep.
      * @retval OT_ERROR_BUSY          The radio was transmitting
      * @retval OT_ERROR_INVALID_STATE The radio was disabled
-     *
      */
     otError Sleep(void);
 
@@ -617,7 +595,6 @@ public:
      *
      * @retval OT_ERROR_NONE     Successfully enabled.
      * @retval OT_ERROR_FAILED   The radio could not be enabled.
-     *
      */
     otError Enable(otInstance *aInstance);
 
@@ -627,7 +604,6 @@ public:
      * @retval  OT_ERROR_NONE               Successfully transitioned to Disabled.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError Disable(void);
 
@@ -635,7 +611,6 @@ public:
      * Checks whether radio is enabled or not.
      *
      * @returns TRUE if the radio is enabled, FALSE otherwise.
-     *
      */
     bool IsEnabled(void) const { return mState != kStateDisabled; }
 
@@ -644,7 +619,6 @@ public:
      *
      * @retval TRUE  There is a pending transmission.
      * @retval FALSE There is no pending transmission.
-     *
      */
     bool IsTransmitting(void) const { return mState == kStateTransmitting; }
 
@@ -653,7 +627,6 @@ public:
      *
      * @retval TRUE  The transmission is done.
      * @retval FALSE The transmission is not done.
-     *
      */
     bool IsTransmitDone(void) const { return mState == kStateTransmitDone; }
 
@@ -661,7 +634,6 @@ public:
      * Returns the timeout timepoint for the pending transmission.
      *
      * @returns The timeout timepoint for the pending transmission.
-     *
      */
     uint64_t GetTxRadioEndUs(void) const { return mTxRadioEndUs; }
 
@@ -669,7 +641,6 @@ public:
      * Processes any pending the I/O data.
      *
      * @param[in]  aContext   The process context.
-     *
      */
     void Process(const void *aContext);
 
@@ -678,7 +649,6 @@ public:
      * Enables/disables the factory diagnostics mode.
      *
      * @param[in]  aMode  TRUE to enable diagnostics mode, FALSE otherwise.
-     *
      */
     void SetDiagEnabled(bool aMode) { mDiagMode = aMode; }
 
@@ -686,7 +656,6 @@ public:
      * Indicates whether or not factory diagnostics mode is enabled.
      *
      * @returns TRUE if factory diagnostics mode is enabled, FALSE otherwise.
-     *
      */
     bool IsDiagEnabled(void) const { return mDiagMode; }
 
@@ -698,7 +667,6 @@ public:
      *
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_INVALID_ARGS       Failed due to invalid arguments provided.
-     *
      */
     otError RadioSpinelDiagProcess(char *aArgs[], uint8_t aArgsLength);
 
@@ -710,7 +678,6 @@ public:
      * @retval  OT_ERROR_NONE               Succeeded.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError PlatDiagProcess(const char *aString);
 
@@ -719,7 +686,6 @@ public:
      *
      * @param[in]  aCallback   A pointer to a function that is called on outputting diag messages.
      * @param[in]  aContext    A pointer to the user context.
-     *
      */
     void SetDiagOutputCallback(otPlatDiagOutputCallback aCallback, void *aContext);
 
@@ -728,7 +694,6 @@ public:
      *
      * @param[out]  aCallback   A reference to a function that is called on outputting diag messages.
      * @param[out]  aContext    A reference to the user context.
-     *
      */
     void GetDiagOutputCallback(otPlatDiagOutputCallback &aCallback, void *&aContext);
 #endif
@@ -741,7 +706,6 @@ public:
      * @returns The radio channel mask according to @aPreferred:
      *   The radio supported channel mask that the device is allowed to be on.
      *   The radio preferred channel mask that the device prefers to form on.
-     *
      */
     uint32_t GetRadioChannelMask(bool aPreferred);
 
@@ -749,7 +713,7 @@ public:
      * Sets MAC key and key index to RCP.
      *
      * @param[in] aKeyIdMode  The key ID mode.
-     * @param[in] aKeyId      The key index.
+     * @param[in] aKeyIndex   The key index.
      * @param[in] aPrevKey    Pointer to previous MAC key.
      * @param[in] aCurrKey    Pointer to current MAC key.
      * @param[in] aNextKey    Pointer to next MAC key.
@@ -758,10 +722,9 @@ public:
      * @retval  OT_ERROR_INVALID_ARGS       One of the keys passed is invalid..
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError SetMacKey(uint8_t                 aKeyIdMode,
-                      uint8_t                 aKeyId,
+                      uint8_t                 aKeyIndex,
                       const otMacKeyMaterial *aPrevKey,
                       const otMacKeyMaterial *aCurrKey,
                       const otMacKeyMaterial *aNextKey);
@@ -772,7 +735,6 @@ public:
      * @param[in] aMacFrameCounter  The MAC Frame Counter value.
      * @param[in] aSetIfLarger      If `true`, set only if the new value is larger than the current value.
      *                              If `false`, set the new value independent of the current value.
-     *
      */
     otError SetMacFrameCounter(uint32_t aMacFrameCounter, bool aSetIfLarger);
 
@@ -783,7 +745,6 @@ public:
      *
      * @retval  OT_ERROR_NONE             Successfully set region code.
      * @retval  OT_ERROR_FAILED           Other platform specific errors.
-     *
      */
     otError SetRadioRegion(uint16_t aRegionCode);
 
@@ -795,7 +756,6 @@ public:
      * @retval  OT_ERROR_INVALID_ARGS     @p aRegionCode is nullptr.
      * @retval  OT_ERROR_NONE             Successfully got region code.
      * @retval  OT_ERROR_FAILED           Other platform specific errors.
-     *
      */
     otError GetRadioRegion(uint16_t *aRegionCode);
 
@@ -832,7 +792,6 @@ public:
      * @note Platforms may optimize this value based on operational conditions (i.e.: temperature).
      *
      * @retval   The current CSL rx/tx scheduling drift, in units of ± ppm.
-     *
      */
     uint8_t GetCslAccuracy(void);
 #endif
@@ -842,7 +801,6 @@ public:
      * Get the current uncertainty, in units of 10 us, of the clock used for scheduling CSL operations.
      *
      * @retval  The current CSL Clock Uncertainty in units of 10 us.
-     *
      */
     uint8_t GetCslUncertainty(void);
 #endif
@@ -851,7 +809,6 @@ public:
      * Checks whether there is pending frame in the buffer.
      *
      * @returns Whether there is pending frame in the buffer.
-     *
      */
     bool HasPendingFrame(void) const { return mSpinelDriver->HasPendingFrame(); }
 
@@ -859,7 +816,6 @@ public:
      * Returns the next timepoint to recalculate RCP time offset.
      *
      * @returns The timepoint to start the recalculation of RCP time offset.
-     *
      */
     uint64_t GetNextRadioTimeRecalcStart(void) const { return mRadioTimeRecalcStart; }
 
@@ -867,15 +823,13 @@ public:
      * Gets the current estimated time on RCP.
      *
      * @returns The current estimated RCP time in microseconds.
-     *
      */
-    uint64_t GetNow(void);
+    uint64_t GetNow(void) const;
 
     /**
      * Returns the bus speed between the host and the radio.
      *
      * @returns   bus speed in bits/second.
-     *
      */
     uint32_t GetBusSpeed(void) const;
 
@@ -883,7 +837,6 @@ public:
      * Returns the bus latency between the host and the radio.
      *
      * @returns   Bus latency in microseconds.
-     *
      */
     uint32_t GetBusLatency(void) const;
 
@@ -891,7 +844,6 @@ public:
      * Sets the bus latency between the host and the radio.
      *
      * @param[in]   aBusLatency  Bus latency in microseconds.
-     *
      */
     void SetBusLatency(uint32_t aBusLatency);
 
@@ -899,7 +851,6 @@ public:
      * Returns the co-processor sw version string.
      *
      * @returns A pointer to the co-processor version string.
-     *
      */
     const char *GetVersion(void) const { return mSpinelDriver->GetVersion(); }
 
@@ -911,7 +862,6 @@ public:
      *
      * @retval  OT_ERROR_NONE           Successfully set the max transmit power.
      * @retval  OT_ERROR_INVALID_ARGS   Channel is not in valid range.
-     *
      */
     otError SetChannelMaxTransmitPower(uint8_t aChannel, int8_t aMaxPower);
 
@@ -925,7 +875,6 @@ public:
      * @retval  OT_ERROR_NONE               Successfully got the property.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError Get(spinel_prop_key_t aKey, const char *aFormat, ...);
 
@@ -941,7 +890,6 @@ public:
      * @retval  OT_ERROR_NONE               Successfully got the property.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError GetWithParam(spinel_prop_key_t aKey,
                          const uint8_t    *aParam,
@@ -959,7 +907,6 @@ public:
      * @retval  OT_ERROR_NONE               Successfully set the property.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError Set(spinel_prop_key_t aKey, const char *aFormat, ...);
 
@@ -973,7 +920,6 @@ public:
      * @retval  OT_ERROR_NONE               Successfully insert item into the property.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError Insert(spinel_prop_key_t aKey, const char *aFormat, ...);
 
@@ -987,7 +933,6 @@ public:
      * @retval  OT_ERROR_NONE               Successfully removed item from the property.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
-     *
      */
     otError Remove(spinel_prop_key_t aKey, const char *aFormat, ...);
 
@@ -999,7 +944,6 @@ public:
      * @retval  OT_ERROR_NONE               Successfully sent the reset command.
      * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
      * @retval  OT_ERROR_NOT_CAPABLE        Requested reset type is not supported by the co-processor.
-     *
      */
     otError SendReset(uint8_t aResetType);
 
@@ -1007,9 +951,8 @@ public:
      * Returns the radio Spinel metrics.
      *
      * @returns The radio Spinel metrics.
-     *
      */
-    const otRadioSpinelMetrics *GetRadioSpinelMetrics(void) const { return &mRadioSpinelMetrics; }
+    const otRadioSpinelMetrics &GetRadioSpinelMetrics(void) const { return mMetrics.GetMetrics(); }
 
 #if OPENTHREAD_CONFIG_PLATFORM_POWER_CALIBRATION_ENABLE
     /**
@@ -1026,7 +969,6 @@ public:
      * @retval  OT_ERROR_NOT_IMPLEMENTED   This feature is not implemented.
      * @retval  OT_ERROR_BUSY              Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT  Failed due to no response received from the transceiver.
-     *
      */
     otError AddCalibratedPower(uint8_t        aChannel,
                                int16_t        aActualPower,
@@ -1040,7 +982,6 @@ public:
      * @retval  OT_ERROR_NOT_IMPLEMENTED   This feature is not implemented.
      * @retval  OT_ERROR_BUSY              Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT  Failed due to no response received from the transceiver.
-     *
      */
     otError ClearCalibratedPowers(void);
 
@@ -1055,7 +996,6 @@ public:
      * @retval  OT_ERROR_NOT_IMPLEMENTED   The feature is not implemented.
      * @retval  OT_ERROR_BUSY              Failed due to another operation is on going.
      * @retval  OT_ERROR_RESPONSE_TIMEOUT  Failed due to no response received from the transceiver.
-     *
      */
     otError SetChannelTargetPower(uint8_t aChannel, int16_t aTargetPower);
 #endif
@@ -1063,35 +1003,33 @@ public:
 #if OPENTHREAD_SPINEL_CONFIG_RCP_RESTORATION_MAX_COUNT > 0
     /**
      * Restore the properties of Radio Co-processor (RCP).
-     *
      */
     void RestoreProperties(void);
 #endif
 #if OPENTHREAD_SPINEL_CONFIG_VENDOR_HOOK_ENABLE
     /**
-     * Defines a vendor "set property handler" hook to process vendor spinel properties.
+     * Defines a vendor "value is" hook to process vendor spinel properties.
      *
-     * The vendor handler should return `OT_ERROR_NOT_FOUND` status if it does not support "set" operation for the
-     * given property key. Otherwise, the vendor handler should behave like other property set handlers, i.e., it
-     * should first decode the value from the input spinel frame and then perform the corresponding set operation. The
-     * handler should not prepare the spinel response and therefore should not write anything to the NCP buffer. The
-     * `otError` returned from handler (other than `OT_ERROR_NOT_FOUND`) indicates the error in either parsing of the
-     * input or the error of the set operation. In case of a successful "set", `NcpBase` set command handler will call
-     * the `VendorGetPropertyHandler()` for the same property key to prepare the response.
+     * This hook is invoked when RadioSpinel receives a `SPINEL_CMD_PROP_VALUE_IS` command
+     * for a vendor property. Decode the value from `aBuffer`/`aLength` and process it.
+     * Return `OT_ERROR_NOT_FOUND` if the property key is not supported. Return
+     * another error (e.g., `OT_ERROR_PARSE`) if decoding or handling of the value fails.
      *
      * @param[in] aPropKey  The spinel property key.
+     * @param[in] aBuffer   A pointer to the buffer containing the property value.
+     * @param[in] aLength   The length of the @p aBuffer.
      *
-     * @returns OT_ERROR_NOT_FOUND if it does not support the given property key, otherwise the error in either parsing
-     *          of the input or the "set" operation.
-     *
+     * @returns OT_ERROR_NOT_FOUND if it does not support the given property key, or the error status if decoding
+     *          or handling of the value fails.
      */
-    otError VendorHandleValueIs(spinel_prop_key_t aPropKey);
+    otError VendorHandleValueIs(spinel_prop_key_t aPropKey, const uint8_t *aBuffer, uint16_t aLength);
 
     /**
      *  A callback type for restoring vendor properties.
      *
+     * @param[in] aContext  A pointer to the user context.
      */
-    typedef void (*otRadioSpinelVendorRestorePropertiesCallback)(void *context);
+    typedef void (*otRadioSpinelVendorRestorePropertiesCallback)(void *aContext);
 
     /**
      * Registers a callback to restore vendor properties.
@@ -1100,19 +1038,47 @@ public:
      * properties occurs (such as an unexpected RCP reset), the user can restore the vendor properties via the callback.
      *
      * @param[in] aCallback The callback.
-     * @param[in] aContext  The context.
-     *
+     * @param[in] aContext  A pointer to the user context.
      */
     void SetVendorRestorePropertiesCallback(otRadioSpinelVendorRestorePropertiesCallback aCallback, void *aContext);
 #endif // OPENTHREAD_SPINEL_CONFIG_VENDOR_HOOK_ENABLE
+
+#if OPENTHREAD_SPINEL_CONFIG_COMPATIBILITY_ERROR_CALLBACK_ENABLE
+    /**
+     * A callback type for handling compatibility error of radio spinel.
+     *
+     * @param[in] aContext  A pointer to the user context.
+     */
+    typedef void (*otRadioSpinelCompatibilityErrorCallback)(void *aContext);
+
+    /**
+     * Registers a callback to handle error of radio spinel.
+     *
+     * This function is used to register a callback to handle radio spinel compatibility errors. When a radio spinel
+     * compatibility error occurs that cannot be resolved by a restart (e.g., RCP version mismatch), the user can
+     * handle the error through the callback(such as OTA) instead of letting the program crash directly.
+     *
+     * @param[in] aCallback The callback.
+     * @param[in] aContext  A pointer to the user context.
+     */
+    void SetCompatibilityErrorCallback(otRadioSpinelCompatibilityErrorCallback aCallback, void *aContext);
+#endif
 
     /**
      * Enables or disables the time synchronization between the host and RCP.
      *
      * @param[in]  aOn  TRUE to turn on the time synchronization, FALSE otherwise.
-     *
      */
     void SetTimeSyncState(bool aOn) { mTimeSyncOn = aOn; }
+
+#if OPENTHREAD_SPINEL_CONFIG_RCP_RESTORATION_MAX_COUNT > 0
+    /**
+     * Enables or disables the RCP restoration feature.
+     *
+     * @param[in]  aEnabled  TRUE to enable the RCP restoration feature, FALSE otherwise.
+     */
+    void SetRcpRestorationEnabled(bool aEnabled) { mRcpRestorationEnabled = aEnabled; }
+#endif
 
 private:
     enum
@@ -1150,13 +1116,11 @@ private:
 
     /**
      * Triggers a state transfer of the state machine.
-     *
      */
     void ProcessRadioStateMachine(void);
 
     /**
      * Processes the frame queue.
-     *
      */
     void ProcessFrameQueue(void);
 
@@ -1192,7 +1156,6 @@ private:
      * @param[in] aKey The identifier of the property.
      *
      * @returns Whether this property is safe to be handled now.
-     *
      */
     bool IsSafeToHandleNow(spinel_prop_key_t aKey) const
     {
@@ -1228,11 +1191,14 @@ private:
 
     void UpdateParseErrorCount(otError aError)
     {
-        mRadioSpinelMetrics.mSpinelParseErrorCount += (aError == OT_ERROR_PARSE) ? 1 : 0;
+        if (aError == OT_ERROR_PARSE)
+        {
+            mMetrics.IncrementSpinelParseErrorCount();
+        }
     }
 
     otError SetMacKey(uint8_t         aKeyIdMode,
-                      uint8_t         aKeyId,
+                      uint8_t         aKeyIndex,
                       const otMacKey &aPrevKey,
                       const otMacKey &aCurrKey,
                       const otMacKey &NextKey);
@@ -1243,6 +1209,44 @@ private:
 #if OPENTHREAD_CONFIG_DIAG_ENABLE
     void PlatDiagOutput(const char *aFormat, ...);
 #endif
+
+    void HandleCompatibilityError(void);
+
+    typedef otRadioSpinelMetrics Metrics;
+
+    class MetricsTracker
+    {
+    public:
+        explicit MetricsTracker(RadioSpinelCallbacks &aCallbacks)
+            : mCallbacks(aCallbacks)
+        {
+            memset(&mMetrics, 0, sizeof(mMetrics));
+        }
+
+        void Init(void);
+        void IncrementRcpTimeoutCount(void) { IncrementCount(kTypeTimeoutCount); }
+        void IncrementRcpUnexpectedResetCount(void) { IncrementCount(kTypeUnexpectResetCount); }
+        void IncrementRcpRestorationCount(void) { IncrementCount(kTypeRestorationCount); }
+        void IncrementSpinelParseErrorCount(void) { IncrementCount(kTypeSpinelParseErrorCount); }
+
+        const Metrics &GetMetrics(void) const { return mMetrics; }
+
+    private:
+        enum MetricType : uint8_t
+        {
+            kTypeTimeoutCount,
+            kTypeUnexpectResetCount,
+            kTypeRestorationCount,
+            kTypeSpinelParseErrorCount,
+        };
+
+        void RestoreMetrics(void);
+        void SaveMetrics(void);
+        void IncrementCount(MetricType aType);
+
+        RadioSpinelCallbacks &mCallbacks;
+        Metrics               mMetrics;
+    };
 
     otInstance *mInstance;
 
@@ -1302,14 +1306,16 @@ private:
     uint8_t mRcpFailure : 2;          ///< RCP failure reason, should recover and retry operation.
 
     // Properties set by core.
-    uint8_t      mKeyIdMode;
-    uint8_t      mKeyId;
-    otMacKey     mPrevKey;
-    otMacKey     mCurrKey;
-    otMacKey     mNextKey;
-    uint16_t     mSrcMatchShortEntries[OPENTHREAD_CONFIG_MLE_MAX_CHILDREN];
+    uint8_t  mKeyIdMode;
+    uint8_t  mKeyIndex;
+    otMacKey mPrevKey;
+    otMacKey mCurrKey;
+    otMacKey mNextKey;
+    static_assert(OPENTHREAD_SPINEL_CONFIG_MAX_SRC_MATCH_ENTRIES >= OPENTHREAD_CONFIG_MLE_MAX_CHILDREN,
+                  "SPINEL_CONFIG_MAX_SRC_MATCH_ENTRIES is not large enough to cover MLE_MAX_CHILDREN");
+    uint16_t     mSrcMatchShortEntries[OPENTHREAD_SPINEL_CONFIG_MAX_SRC_MATCH_ENTRIES];
     int16_t      mSrcMatchShortEntryCount;
-    otExtAddress mSrcMatchExtEntries[OPENTHREAD_CONFIG_MLE_MAX_CHILDREN];
+    otExtAddress mSrcMatchExtEntries[OPENTHREAD_SPINEL_CONFIG_MAX_SRC_MATCH_ENTRIES];
     int16_t      mSrcMatchExtEntryCount;
     uint8_t      mScanChannel;
     uint16_t     mScanDuration;
@@ -1318,10 +1324,12 @@ private:
     int8_t       mFemLnaGain;
     bool         mCoexEnabled : 1;
     bool         mSrcMatchEnabled : 1;
+    bool         mRcpRestorationEnabled : 1;
 
     bool mMacKeySet : 1;                   ///< Whether MAC key has been set.
     bool mCcaEnergyDetectThresholdSet : 1; ///< Whether CCA energy detect threshold has been set.
     bool mTransmitPowerSet : 1;            ///< Whether transmit power has been set.
+    bool mMaxPowerTableSet : 1;            ///< Whether any channel's max transmit power has been set.
     bool mCoexEnabledSet : 1;              ///< Whether coex enabled has been set.
     bool mFemLnaGainSet : 1;               ///< Whether FEM LNA gain has been set.
     bool mEnergyScanning : 1;              ///< If fails while scanning, restarts scanning.
@@ -1340,13 +1348,17 @@ private:
     uint64_t mRadioTimeRecalcStart; ///< When to recalculate RCP time offset.
     uint64_t mRadioTimeOffset;      ///< Time difference with estimated RCP time minus host time.
 
-    MaxPowerTable mMaxPowerTable;
-
-    otRadioSpinelMetrics mRadioSpinelMetrics;
+    MaxPowerTable  mMaxPowerTable;
+    MetricsTracker mMetrics;
 
 #if OPENTHREAD_SPINEL_CONFIG_VENDOR_HOOK_ENABLE
     otRadioSpinelVendorRestorePropertiesCallback mVendorRestorePropertiesCallback;
     void                                        *mVendorRestorePropertiesContext;
+#endif
+
+#if OPENTHREAD_SPINEL_CONFIG_COMPATIBILITY_ERROR_CALLBACK_ENABLE
+    otRadioSpinelCompatibilityErrorCallback mCompatibilityErrorCallback;
+    void                                   *mCompatibilityErrorContext;
 #endif
 
     bool mTimeSyncEnabled : 1;
@@ -1358,4 +1370,4 @@ private:
 } // namespace Spinel
 } // namespace ot
 
-#endif // RADIO_SPINEL_HPP_
+#endif // OT_LIB_SPINEL_RADIO_SPINEL_HPP_

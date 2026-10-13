@@ -60,6 +60,12 @@ OutputImplementer::OutputImplementer(otCliOutputCallback aCallback, void *aCallb
 {
 }
 
+Interpreter &Utils::GetInterpreter(void) { return static_cast<Interpreter &>(mImplementer); }
+
+const char *Utils::ToYesNo(bool aBool) { return aBool ? "yes" : "no"; }
+
+void Utils::OutputResult(otError aError) { GetInterpreter().OutputResult(aError); }
+
 void Utils::OutputFormat(const char *aFormat, ...)
 {
     va_list args;
@@ -158,6 +164,14 @@ void Utils::OutputUint64Line(uint64_t aUint64)
 
 void Utils::OutputEnabledDisabledStatus(bool aEnabled) { OutputLine(aEnabled ? "Enabled" : "Disabled"); }
 
+void Utils::OutputMsecDurationInSec(uint32_t aMsecDuration)
+{
+    uint32_t durInSec  = aMsecDuration / 1000;
+    uint32_t remainder = aMsecDuration % 1000;
+
+    OutputFormat("%lu.%03u", ToUlong(durInSec), static_cast<uint16_t>(remainder));
+}
+
 #if OPENTHREAD_FTD || OPENTHREAD_MTD
 
 void Utils::OutputIp6Address(const otIp6Address &aAddress)
@@ -217,7 +231,34 @@ void Utils::OutputSockAddrLine(const otSockAddr &aSockAddr)
     OutputNewLine();
 }
 
+void Utils::OutputVendorOui(const otThreadVendorOui &aOui)
+{
+    char string[OT_THREAD_VENDOR_OUI_STRING_SIZE];
+
+    otThreadVendorOuiToString(&aOui, string, sizeof(string));
+    OutputFormat("%s", string);
+}
+
+void Utils::OutputVendorOuiLine(const otThreadVendorOui &aOui)
+{
+    OutputVendorOui(aOui);
+    OutputNewLine();
+}
+
 void Utils::OutputDnsTxtData(const uint8_t *aTxtData, uint16_t aTxtDataLength)
+{
+    OutputDnsTxtData(/* aKeyValuePerLine */ false, 0, aTxtData, aTxtDataLength);
+}
+
+void Utils::OutputDnsTxtData(uint8_t aIndentSize, const uint8_t *aTxtData, uint16_t aTxtDataLength)
+{
+    OutputDnsTxtData(/* aKeyValuePerLine */ true, aIndentSize, aTxtData, aTxtDataLength);
+}
+
+void Utils::OutputDnsTxtData(bool           aKeyValuePerLine,
+                             uint8_t        aIndentSize,
+                             const uint8_t *aTxtData,
+                             uint16_t       aTxtDataLength)
 {
     otDnsTxtEntry         entry;
     otDnsTxtEntryIterator iterator;
@@ -225,11 +266,18 @@ void Utils::OutputDnsTxtData(const uint8_t *aTxtData, uint16_t aTxtDataLength)
 
     otDnsInitTxtEntryIterator(&iterator, aTxtData, aTxtDataLength);
 
-    OutputFormat("[");
+    if (!aKeyValuePerLine)
+    {
+        OutputFormat("[");
+    }
 
     while (otDnsGetNextTxtEntry(&iterator, &entry) == OT_ERROR_NONE)
     {
-        if (!isFirst)
+        if (aKeyValuePerLine)
+        {
+            OutputSpaces(aIndentSize);
+        }
+        else if (!isFirst)
         {
             OutputFormat(", ");
         }
@@ -257,9 +305,17 @@ void Utils::OutputDnsTxtData(const uint8_t *aTxtData, uint16_t aTxtDataLength)
         }
 
         isFirst = false;
+
+        if (aKeyValuePerLine)
+        {
+            OutputNewLine();
+        }
     }
 
-    OutputFormat("]");
+    if (!aKeyValuePerLine)
+    {
+        OutputFormat("]");
+    }
 }
 
 const char *Utils::PercentageToString(uint16_t aValue, PercentageStringBuffer &aBuffer)
@@ -587,24 +643,26 @@ const char *Utils::PreferenceToString(signed int aPreference)
 }
 
 #if OPENTHREAD_FTD || OPENTHREAD_MTD
-otError Utils::ParseToIp6Address(otInstance *aInstance, const Arg &aArg, otIp6Address &aAddress, bool &aSynthesized)
-{
-    Error error = OT_ERROR_NONE;
 
-    VerifyOrExit(!aArg.IsEmpty(), error = OT_ERROR_INVALID_ARGS);
-    error        = aArg.ParseAsIp6Address(aAddress);
+otError Utils::ParseOrSynthesizeIp6Address(const Arg &aArg, otIp6Address &aAddress, bool &aSynthesized)
+{
+    Error        error;
+    otIp4Address ip4Address;
+
     aSynthesized = false;
 
-    if (error != OT_ERROR_NONE)
-    {
-        // It might be an IPv4 address, let's have a try.
-        otIp4Address ip4Address;
+    error = aArg.ParseAsIp6Address(aAddress);
 
-        // Do not touch the error value if we failed to parse it as an IPv4 address.
-        SuccessOrExit(aArg.ParseAsIp4Address(ip4Address));
-        SuccessOrExit(error = otNat64SynthesizeIp6Address(aInstance, &ip4Address, &aAddress));
-        aSynthesized = true;
+    if (error == OT_ERROR_NONE)
+    {
+        ExitNow();
     }
+
+    // Try to parse it as an IPv4 address and synthesize.
+
+    SuccessOrExit(error = aArg.ParseAsIp4Address(ip4Address));
+    SuccessOrExit(error = otNat64SynthesizeIp6Address(GetInstancePtr(), &ip4Address, &aAddress));
+    aSynthesized = true;
 
 exit:
     return error;
@@ -666,11 +724,6 @@ otError Utils::ParsePrefix(Arg aArgs[], otBorderRouterConfig &aConfig)
                     aConfig.mNdDns = true;
                     break;
 
-#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_BACKBONE_ROUTER_ENABLE
-                case 'D':
-                    aConfig.mDp = true;
-                    break;
-#endif
                 case '-':
                     break;
 
@@ -780,6 +833,23 @@ const char *Utils::AddressOriginToString(uint8_t aOrigin)
     static_assert(3 == OT_ADDRESS_ORIGIN_MANUAL, "OT_ADDRESS_ORIGIN_MANUAL value is incorrect");
 
     return Stringify(aOrigin, kOriginStrings);
+}
+
+const char *Utils::BorderRoutingStateToString(otBorderRoutingState aState)
+{
+    static const char *const kStateStrings[] = {
+        "uninitialized", // (0) OT_BORDER_ROUTING_STATE_UNINITIALIZED
+        "disabled",      // (1) OT_BORDER_ROUTING_STATE_DISABLED
+        "stopped",       // (2) OT_BORDER_ROUTING_STATE_STOPPED
+        "running",       // (3) OT_BORDER_ROUTING_STATE_RUNNING
+    };
+
+    static_assert(0 == OT_BORDER_ROUTING_STATE_UNINITIALIZED, "STATE_UNINITIALIZED value is incorrect");
+    static_assert(1 == OT_BORDER_ROUTING_STATE_DISABLED, "STATE_DISABLED value is incorrect");
+    static_assert(2 == OT_BORDER_ROUTING_STATE_STOPPED, "STATE_STOPPED value is incorrect");
+    static_assert(3 == OT_BORDER_ROUTING_STATE_RUNNING, "STATE_RUNNING value is incorrect");
+
+    return Stringify(aState, kStateStrings);
 }
 
 } // namespace Cli

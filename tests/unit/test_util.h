@@ -26,8 +26,8 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TEST_UTIL_H
-#define TEST_UTIL_H
+#ifndef OT_UNIT_TEST_UTIL_H_
+#define OT_UNIT_TEST_UTIL_H_
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,7 +44,6 @@ extern "C" {
  *
  * @param[in]  aStatus     A scalar error status to be evaluated against zero (0).
  * @param[in]  aMessage    An optional message (constant C string) to print on failure.
- *
  */
 #define SuccessOrQuit(...)                                                                                      \
     do                                                                                                          \
@@ -63,12 +62,14 @@ extern "C" {
  *
  * @param[in]  aCondition  A Boolean expression to be evaluated.
  * @param[in]  aMessage    An optional message (constant C string) to print on failure.
- *
  */
 #define VerifyOrQuit(...)                                                                                       \
     do                                                                                                          \
     {                                                                                                           \
-        if (!(OT_FIRST_ARG(__VA_ARGS__)))                                                                       \
+        if ((OT_FIRST_ARG(__VA_ARGS__)))                                                                        \
+        {                                                                                                       \
+        }                                                                                                       \
+        else                                                                                                    \
         {                                                                                                       \
             fprintf(stderr, "\nFAILED %s:%d - VerifyOrQuit(%s) " OT_SECOND_ARG(__VA_ARGS__) "\n", __FUNCTION__, \
                     __LINE__, _Stringize(OT_FIRST_ARG(__VA_ARGS__)));                                           \
@@ -84,4 +85,4 @@ extern "C" {
 }
 #endif
 
-#endif
+#endif // OT_UNIT_TEST_UTIL_H_

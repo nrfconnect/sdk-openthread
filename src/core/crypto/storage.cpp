@@ -28,7 +28,7 @@
 
 /**
  * @file
- *   This file includes implementation for Crypto Internal Trusted Storage (ITS) APIs.
+ *   This file includes implementation for cryptographic secure storage APIs.
  */
 
 #include "crypto/storage.hpp"
@@ -39,6 +39,7 @@ namespace ot {
 namespace Crypto {
 
 #if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
+
 Error Key::ExtractKey(uint8_t *aKeyBuffer, uint16_t &aKeyLength) const
 {
     Error  error = kErrorNone;
@@ -46,7 +47,7 @@ Error Key::ExtractKey(uint8_t *aKeyBuffer, uint16_t &aKeyLength) const
 
     OT_ASSERT(IsKeyRef());
 
-    SuccessOrAssert(Crypto::Storage::ExportKey(GetKeyRef(), aKeyBuffer, aKeyLength, readKeyLength));
+    SuccessOrAssert(Crypto::Storage::ReadKey(GetKeyRef(), aKeyBuffer, aKeyLength, readKeyLength));
 
     VerifyOrExit(readKeyLength <= aKeyLength, error = kErrorNoBufs);
 
@@ -56,17 +57,22 @@ exit:
     return error;
 }
 
-void Storage::DestroyPersistentKeys(void)
+#if OPENTHREAD_FTD || OPENTHREAD_MTD
+
+void Storage::KeyRefManager::DestroyPersistentKeys(void)
 {
-    DestroyKey(kNetworkKeyRef);
-    DestroyKey(kPskcRef);
-    DestroyKey(kActiveDatasetNetworkKeyRef);
-    DestroyKey(kActiveDatasetPskcRef);
-    DestroyKey(kPendingDatasetNetworkKeyRef);
-    DestroyKey(kPendingDatasetPskcRef);
-    DestroyKey(kEcdsaRef);
+    DestroyKey(KeyRefFor(kNetworkKey));
+    DestroyKey(KeyRefFor(kPskc));
+    DestroyKey(KeyRefFor(kActiveDatasetNetworkKey));
+    DestroyKey(KeyRefFor(kActiveDatasetPskc));
+    DestroyKey(KeyRefFor(kPendingDatasetNetworkKey));
+    DestroyKey(KeyRefFor(kPendingDatasetPskc));
+    DestroyKey(KeyRefFor(kEcdsa));
 }
+
 #endif
+
+#endif // OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
 
 LiteralKey::LiteralKey(const Key &aKey)
     : mKey(aKey.GetBytes())

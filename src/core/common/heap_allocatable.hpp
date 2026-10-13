@@ -31,8 +31,8 @@
  *   This file includes definitions for `Heap::Allocatable`.
  */
 
-#ifndef HEAP_ALLOCATABLE_HPP_
-#define HEAP_ALLOCATABLE_HPP_
+#ifndef OT_CORE_COMMON_HEAP_ALLOCATABLE_HPP_
+#define OT_CORE_COMMON_HEAP_ALLOCATABLE_HPP_
 
 #include "openthread-core-config.h"
 
@@ -54,7 +54,6 @@ namespace Heap {
  *
  * The `Type` class destructor is used when `Free()` is called. The destructor frees any heap allocated data members
  * that are stored in a `Type` instance (e.g., `Heap::String`, `Heap::Data`, etc).
- *
  */
 template <class Type> class Allocatable
 {
@@ -68,7 +67,6 @@ public:
      * @param[in] aArgs   A set of arguments to pass to the `Type` constructor of the allocated `Type` instance.
      *
      * @returns A pointer to the newly allocated instance or `nullptr` if it fails to allocate.
-     *
      */
     template <typename... Args> static Type *Allocate(Args &&...aArgs)
     {
@@ -87,7 +85,6 @@ public:
      * @param[in] aArgs   A set of arguments to initialize the allocated `Type` instance.
      *
      * @returns A pointer to the newly allocated instance or `nullptr` if it fails to allocate or initialize.
-     *
      */
     template <typename... Args> static Type *AllocateAndInit(Args &&...aArgs)
     {
@@ -116,7 +113,6 @@ public:
      * The `Free()` method invokes the `Type` destructor before releasing the allocated heap buffer for the instance.
      * This ensures that any heap allocated member variables in `Type` are freed before the `Type` instance itself is
      * freed.
-     *
      */
     void Free(void)
     {
@@ -131,4 +127,4 @@ protected:
 } // namespace Heap
 } // namespace ot
 
-#endif // HEAP_ALLOCATABLE_HPP_
+#endif // OT_CORE_COMMON_HEAP_ALLOCATABLE_HPP_

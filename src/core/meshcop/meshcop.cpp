@@ -33,22 +33,17 @@
  */
 
 #include "meshcop.hpp"
-#include <openthread/platform/toolchain.h>
 
-#include "common/clearable.hpp"
-#include "common/crc16.hpp"
-#include "common/debug.hpp"
-#include "common/locator_getters.hpp"
-#include "common/string.hpp"
-#include "crypto/sha256.hpp"
-#include "mac/mac_types.hpp"
-#include "thread/thread_netif.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 
 RegisterLogModule("MeshCoP");
 
 namespace MeshCoP {
+
+//---------------------------------------------------------------------------------------------------------------------
+// JoinerPskd
 
 Error JoinerPskd::SetFrom(const char *aPskdString)
 {
@@ -75,7 +70,7 @@ bool JoinerPskd::operator==(const JoinerPskd &aOther) const
             ExitNow();
         }
 
-        if (m8[i] == '\0')
+        if (m8[i] == kNullChar)
         {
             break;
         }
@@ -105,6 +100,9 @@ bool JoinerPskd::IsPskdValid(const char *aPskdString)
 exit:
     return valid;
 }
+
+//---------------------------------------------------------------------------------------------------------------------
+// JoinerDiscerner
 
 void JoinerDiscerner::GenerateJoinerId(Mac::ExtAddress &aJoinerId) const
 {
@@ -189,106 +187,7 @@ JoinerDiscerner::InfoString JoinerDiscerner::ToString(void) const
     return string;
 }
 
-void SteeringData::Init(uint8_t aLength)
-{
-    OT_ASSERT(aLength <= kMaxLength);
-    mLength = aLength;
-    ClearAllBytes(m8);
-}
-
-void SteeringData::SetToPermitAllJoiners(void)
-{
-    Init(1);
-    m8[0] = kPermitAll;
-}
-
-void SteeringData::UpdateBloomFilter(const Mac::ExtAddress &aJoinerId)
-{
-    HashBitIndexes indexes;
-
-    CalculateHashBitIndexes(aJoinerId, indexes);
-    UpdateBloomFilter(indexes);
-}
-
-void SteeringData::UpdateBloomFilter(const JoinerDiscerner &aDiscerner)
-{
-    HashBitIndexes indexes;
-
-    CalculateHashBitIndexes(aDiscerner, indexes);
-    UpdateBloomFilter(indexes);
-}
-
-void SteeringData::UpdateBloomFilter(const HashBitIndexes &aIndexes)
-{
-    OT_ASSERT((mLength > 0) && (mLength <= kMaxLength));
-
-    SetBit(aIndexes.mIndex[0] % GetNumBits());
-    SetBit(aIndexes.mIndex[1] % GetNumBits());
-}
-
-bool SteeringData::Contains(const Mac::ExtAddress &aJoinerId) const
-{
-    HashBitIndexes indexes;
-
-    CalculateHashBitIndexes(aJoinerId, indexes);
-
-    return Contains(indexes);
-}
-
-bool SteeringData::Contains(const JoinerDiscerner &aDiscerner) const
-{
-    HashBitIndexes indexes;
-
-    CalculateHashBitIndexes(aDiscerner, indexes);
-
-    return Contains(indexes);
-}
-
-bool SteeringData::Contains(const HashBitIndexes &aIndexes) const
-{
-    return (mLength > 0) && GetBit(aIndexes.mIndex[0] % GetNumBits()) && GetBit(aIndexes.mIndex[1] % GetNumBits());
-}
-
-void SteeringData::CalculateHashBitIndexes(const Mac::ExtAddress &aJoinerId, HashBitIndexes &aIndexes)
-{
-    Crc16 ccitt(Crc16::kCcitt);
-    Crc16 ansi(Crc16::kAnsi);
-
-    for (uint8_t b : aJoinerId.m8)
-    {
-        ccitt.Update(b);
-        ansi.Update(b);
-    }
-
-    aIndexes.mIndex[0] = ccitt.Get();
-    aIndexes.mIndex[1] = ansi.Get();
-}
-
-void SteeringData::CalculateHashBitIndexes(const JoinerDiscerner &aDiscerner, HashBitIndexes &aIndexes)
-{
-    Mac::ExtAddress address;
-
-    address.Clear();
-    aDiscerner.CopyTo(address);
-
-    CalculateHashBitIndexes(address, aIndexes);
-}
-
-bool SteeringData::DoesAllMatch(uint8_t aMatch) const
-{
-    bool matches = true;
-
-    for (uint8_t i = 0; i < mLength; i++)
-    {
-        if (m8[i] != aMatch)
-        {
-            matches = false;
-            break;
-        }
-    }
-
-    return matches;
-}
+//---------------------------------------------------------------------------------------------------------------------
 
 void ComputeJoinerId(const Mac::ExtAddress &aEui64, Mac::ExtAddress &aJoinerId)
 {
@@ -343,6 +242,26 @@ exit:
     return error;
 }
 #endif // OPENTHREAD_FTD
+
+#if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
+
+void LogCertMessage(const char *aText, const Coap::Message &aMessage)
+{
+    OT_UNUSED_VARIABLE(aText);
+
+    uint8_t  buf[Buffer::kSize];
+    uint16_t length = aMessage.DetermineLengthAfterOffset();
+
+    VerifyOrExit(length <= sizeof(buf));
+    aMessage.ReadBytes(aMessage.GetOffset(), buf, length);
+
+    DumpCert(aText, buf, length);
+
+exit:
+    return;
+}
+
+#endif
 
 } // namespace MeshCoP
 } // namespace ot

@@ -48,8 +48,10 @@
 
 #if OPENTHREAD_CONFIG_TLS_ENABLE
 #include <mbedtls/debug.h>
+#if (MBEDTLS_VERSION_NUMBER >= 0x03000000) && (MBEDTLS_VERSION_NUMBER < 0x04000000)
 #include <mbedtls/ecjpake.h>
 #include "crypto/mbedtls.hpp"
+#endif
 #endif
 
 namespace ot {
@@ -148,7 +150,9 @@ template <> otError TcpExample::Process<Cmd("init")>(Arg aArgs[])
 
             mbedtls_ssl_init(&mSslContext);
             mbedtls_ssl_config_init(&mSslConfig);
+#if (MBEDTLS_VERSION_NUMBER < 0x04000000)
             mbedtls_ssl_conf_rng(&mSslConfig, Crypto::MbedTls::CryptoSecurePrng, nullptr);
+#endif
             mbedtls_ssl_conf_authmode(&mSslConfig, MBEDTLS_SSL_VERIFY_NONE);
             mbedtls_ssl_conf_ciphersuites(&mSslConfig, sCipherSuites);
 
@@ -160,8 +164,7 @@ template <> otError TcpExample::Process<Cmd("init")>(Arg aArgs[])
             mbedtls_ssl_conf_max_version(&mSslConfig, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 #endif
 
-#if (MBEDTLS_VERSION_NUMBER >= 0x03000000)
-#include "crypto/mbedtls.hpp"
+#if (MBEDTLS_VERSION_NUMBER >= 0x03000000) && (MBEDTLS_VERSION_NUMBER < 0x04000000)
             int rv = mbedtls_pk_parse_key(&mPKey, reinterpret_cast<const unsigned char *>(sSrvKey), sSrvKeyLength,
                                           nullptr, 0, Crypto::MbedTls::CryptoSecurePrng, nullptr);
 #else
@@ -304,6 +307,8 @@ template <> otError TcpExample::Process<Cmd("deinit")>(Arg aArgs[])
 
         mbedtls_pk_free(&mPKey);
         mbedtls_x509_crt_free(&mSrvCert);
+
+        mUseTls = false;
     }
 #endif
 
@@ -395,7 +400,7 @@ template <> otError TcpExample::Process<Cmd("connect")>(Arg aArgs[])
 
     VerifyOrExit(mInitialized, error = OT_ERROR_INVALID_STATE);
 
-    SuccessOrExit(error = ParseToIp6Address(GetInstancePtr(), aArgs[0], sockaddr.mAddress, nat64Synth));
+    SuccessOrExit(error = ParseOrSynthesizeIp6Address(aArgs[0], sockaddr.mAddress, nat64Synth));
 
     if (nat64Synth)
     {
@@ -461,29 +466,52 @@ exit:
  * tcp send hello
  * Done
  * @endcode
- * @cparam tcp send @ca{message}
+ * @code
+ * tcp send -x 68656c6c6f
+ * Done
+ * @endcode
+ * @cparam tcp send [@ca{type}] @ca{message}
  * The `message` parameter contains the message you want to send to the
  * remote TCP endpoint.
+ * If `type` is `-x`, then
+ * binary data in hexadecimal representation is given in the `message` parameter.
  * @par
  * Sends data over the TCP connection associated with the example TCP endpoint
  * that is provided with the `tcp` CLI. @moreinfo{@tcp}.
  */
 template <> otError TcpExample::Process<Cmd("send")>(Arg aArgs[])
 {
-    otError error;
+    static constexpr uint16_t kBufferSizeForHexData = 128;
+
+    otError  error;
+    uint16_t dataLen;
+    uint8_t *data;
+    uint8_t  buf[kBufferSizeForHexData];
 
     VerifyOrExit(mInitialized, error = OT_ERROR_INVALID_STATE);
     VerifyOrExit(mBenchmarkBytesTotal == 0, error = OT_ERROR_BUSY);
     VerifyOrExit(!aArgs[0].IsEmpty(), error = OT_ERROR_INVALID_ARGS);
-    VerifyOrExit(aArgs[1].IsEmpty(), error = OT_ERROR_INVALID_ARGS);
+
+    if (aArgs[0] == "-x" && !aArgs[1].IsEmpty())
+    {
+        // Binary hex data payload
+        dataLen = sizeof(buf);
+        data    = &buf[0];
+        SuccessOrExit(error = aArgs[1].ParseAsHexString(dataLen, buf));
+    }
+    else
+    {
+        VerifyOrExit(aArgs[1].IsEmpty(), error = OT_ERROR_INVALID_ARGS);
+        dataLen = aArgs[0].GetLength();
+        data    = reinterpret_cast<uint8_t *>(aArgs[0].GetCString());
+    }
 
     if (mUseCircularSendBuffer)
     {
 #if OPENTHREAD_CONFIG_TLS_ENABLE
         if (mUseTls)
         {
-            int rv = mbedtls_ssl_write(&mSslContext, reinterpret_cast<unsigned char *>(aArgs[0].GetCString()),
-                                       aArgs[0].GetLength());
+            int rv = mbedtls_ssl_write(&mSslContext, data, dataLen);
 
             if (rv < 0 && rv != MBEDTLS_ERR_SSL_WANT_WRITE && rv != MBEDTLS_ERR_SSL_WANT_READ)
             {
@@ -497,8 +525,7 @@ template <> otError TcpExample::Process<Cmd("send")>(Arg aArgs[])
         {
             size_t written;
 
-            SuccessOrExit(error = otTcpCircularSendBufferWrite(&mEndpoint, &mSendBuffer, aArgs[0].GetCString(),
-                                                               aArgs[0].GetLength(), &written, 0));
+            SuccessOrExit(error = otTcpCircularSendBufferWrite(&mEndpoint, &mSendBuffer, data, dataLen, &written, 0));
         }
     }
     else
@@ -507,8 +534,8 @@ template <> otError TcpExample::Process<Cmd("send")>(Arg aArgs[])
 
         mSendLink.mNext   = nullptr;
         mSendLink.mData   = mSendBufferBytes;
-        mSendLink.mLength = OT_MIN(aArgs[0].GetLength(), sizeof(mSendBufferBytes));
-        memcpy(mSendBufferBytes, aArgs[0].GetCString(), mSendLink.mLength);
+        mSendLink.mLength = OT_MIN(dataLen, sizeof(mSendBufferBytes));
+        memcpy(mSendBufferBytes, data, mSendLink.mLength);
 
         SuccessOrExit(error = otTcpSendByReference(&mEndpoint, &mSendLink, 0));
         mSendBusy = true;
@@ -752,10 +779,7 @@ exit:
 
 otError TcpExample::Process(Arg aArgs[])
 {
-#define CmdEntry(aCommandString)                                  \
-    {                                                             \
-        aCommandString, &TcpExample::Process<Cmd(aCommandString)> \
-    }
+#define CmdEntry(aCommandString) {aCommandString, &TcpExample::Process<Cmd(aCommandString)>}
 
     static constexpr Command kCommands[] = {
         CmdEntry("abort"), CmdEntry("benchmark"), CmdEntry("bind"), CmdEntry("connect"), CmdEntry("deinit"),

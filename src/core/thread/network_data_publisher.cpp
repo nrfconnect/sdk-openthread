@@ -29,21 +29,13 @@
 /**
  * @file
  *   This file implements the Network Data Publisher.
- *
  */
 
 #include "network_data_publisher.hpp"
 
 #if OPENTHREAD_CONFIG_NETDATA_PUBLISHER_ENABLE
 
-#include "common/array.hpp"
-#include "common/code_utils.hpp"
-#include "common/const_cast.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/random.hpp"
 #include "instance/instance.hpp"
-#include "thread/network_data_local.hpp"
 
 namespace ot {
 namespace NetworkData {
@@ -57,6 +49,9 @@ Publisher::Publisher(Instance &aInstance)
     : InstanceLocator(aInstance)
 #if OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
     , mDnsSrpServiceEntry(aInstance)
+#if OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE && OPENTHREAD_CONFIG_BORDER_AGENT_ADMITTER_ENABLE
+    , mBorderAdmitterEntry(aInstance)
+#endif
 #endif
     , mTimer(aInstance)
 {
@@ -228,6 +223,9 @@ void Publisher::HandleNotifierEvents(Events aEvents)
 {
 #if OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
     mDnsSrpServiceEntry.HandleNotifierEvents(aEvents);
+#if OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE && OPENTHREAD_CONFIG_BORDER_AGENT_ADMITTER_ENABLE
+    mBorderAdmitterEntry.HandleNotifierEvents(aEvents);
+#endif
 #endif
 
 #if OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
@@ -242,6 +240,9 @@ void Publisher::HandleTimer(void)
 {
 #if OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
     mDnsSrpServiceEntry.HandleTimer();
+#if OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE && OPENTHREAD_CONFIG_BORDER_AGENT_ADMITTER_ENABLE
+    mBorderAdmitterEntry.HandleTimer();
+#endif
 #endif
 
 #if OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
@@ -287,6 +288,8 @@ void Publisher::Entry::UpdateState(uint8_t aNumEntries, uint8_t aNumPreferredEnt
     // entries we aim to have in the Network Data to decide whether or
     // not to take any action (add or remove our entry).
 
+    TimeMilli now = TimerMilli::GetNow();
+
     LogInfo("%s in netdata - total:%d, preferred:%d, desired:%d", ToString().AsCString(), aNumEntries,
             aNumPreferredEntries, aDesiredNumEntries);
 
@@ -302,10 +305,10 @@ void Publisher::Entry::UpdateState(uint8_t aNumEntries, uint8_t aNumPreferredEnt
 
         if (aNumEntries < aDesiredNumEntries)
         {
-            mUpdateTime = TimerMilli::GetNow() + Random::NonCrypto::GetUint32InRange(1, kMaxDelayToAdd);
+            mUpdateTime = now + Random::NonCrypto::GenerateInClosedRange<uint32_t>(1, kMaxDelayToAdd);
             SetState(kAdding);
             Get<Publisher>().GetTimer().FireAtIfEarlier(mUpdateTime);
-            LogUpdateTime();
+            LogUpdateTime(now);
         }
         break;
 
@@ -329,28 +332,47 @@ void Publisher::Entry::UpdateState(uint8_t aNumEntries, uint8_t aNumPreferredEnt
         // aDesiredNumEntries`) we add an extra delay before removing
         // the entry. This gives higher chance for a non-preferred
         // entry from another device to be removed before our entry.
+        // If `aDesiredNumEntries` is explicitly set to zero (which
+        // indicates that all entries should be removed), no delay is
+        // added. This helps with SRP/DNS unicast entries, where if
+        // any service data unicast or anycast entry is seen, we set
+        // the desired number to zero to quickly remove any previously
+        // added server data unicast entry.
 
         if (aNumEntries > aDesiredNumEntries)
         {
-            mUpdateTime = TimerMilli::GetNow() + Random::NonCrypto::GetUint32InRange(1, kMaxDelayToRemove);
+            mUpdateTime = now;
 
-            if (aNumPreferredEntries < aDesiredNumEntries)
+            if (aDesiredNumEntries > 0)
             {
-                mUpdateTime += kExtraDelayToRemovePreferred;
+                mUpdateTime += Random::NonCrypto::GenerateInClosedRange<uint32_t>(1, kMaxDelayToRemove);
+
+                if (aNumPreferredEntries < aDesiredNumEntries)
+                {
+                    mUpdateTime += kExtraDelayToRemovePreferred;
+                }
             }
 
             SetState(kRemoving);
             Get<Publisher>().GetTimer().FireAtIfEarlier(mUpdateTime);
-            LogUpdateTime();
+            LogUpdateTime(now);
         }
         break;
 
     case kRemoving:
-        // Our entry is being removed (wait time before remove). If we
-        // now see that there are enough or too few entries, we stop
+        // Our entry is being removed (wait time before remove). If
+        // `aDesiredNumEntries` is zero, we update `mUpdateTime` to
+        // `now` to quickly remove the entry. Otherwise, if we now
+        // see that there are enough or too few entries, we stop
         // removing our entry.
 
-        if (aNumEntries <= aDesiredNumEntries)
+        if ((aDesiredNumEntries == 0) && (mUpdateTime > now))
+        {
+            mUpdateTime = now;
+            Get<Publisher>().GetTimer().FireAtIfEarlier(mUpdateTime);
+            LogUpdateTime(now);
+        }
+        else if (aNumEntries <= aDesiredNumEntries)
         {
             SetState(kAdded);
         }
@@ -394,6 +416,12 @@ void Publisher::Entry::Add(void)
     {
         static_cast<DnsSrpServiceEntry *>(this)->Add();
     }
+#if OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE && OPENTHREAD_CONFIG_BORDER_AGENT_ADMITTER_ENABLE
+    if (Get<Publisher>().IsBorderAdmitterEntry(*this))
+    {
+        static_cast<BorderAdmitterEntry *>(this)->Add();
+    }
+#endif
 #endif
 
 #if OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
@@ -411,6 +439,12 @@ void Publisher::Entry::Remove(State aNextState)
     {
         static_cast<DnsSrpServiceEntry *>(this)->Remove(aNextState);
     }
+#if OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE && OPENTHREAD_CONFIG_BORDER_AGENT_ADMITTER_ENABLE
+    if (Get<Publisher>().IsBorderAdmitterEntry(*this))
+    {
+        static_cast<BorderAdmitterEntry *>(this)->Remove(aNextState);
+    }
+#endif
 #endif
 
 #if OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
@@ -431,6 +465,13 @@ Publisher::Entry::InfoString Publisher::Entry::ToString(bool aIncludeState) cons
         string.Append("DNS/SRP service");
         ExitNow();
     }
+#if OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE && OPENTHREAD_CONFIG_BORDER_AGENT_ADMITTER_ENABLE
+    if (Get<Publisher>().IsBorderAdmitterEntry(*this))
+    {
+        string.Append("Border Admitter service");
+        ExitNow();
+    }
+#endif
 #endif
 
 #if OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
@@ -463,28 +504,27 @@ exit:
     return string;
 }
 
-void Publisher::Entry::LogUpdateTime(void) const
+#if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_INFO)
+void Publisher::Entry::LogUpdateTime(TimeMilli aNow) const
 {
-    LogInfo("%s - update in %lu msec", ToString().AsCString(), ToUlong(mUpdateTime - TimerMilli::GetNow()));
+    LogInfo("%s - update in %lu msec", ToString().AsCString(), ToUlong(mUpdateTime - aNow));
 }
+#else
+void Publisher::Entry::LogUpdateTime(TimeMilli) const {}
+#endif
 
 const char *Publisher::Entry::StateToString(State aState)
 {
-    static const char *const kStateStrings[] = {
-        "NoEntry",  // (0) kNoEntry
-        "ToAdd",    // (1) kToAdd
-        "Adding",   // (2) kAdding
-        "Added",    // (3) kAdded
-        "Removing", // (4) kRemoving
-    };
+#define StateMapList(_)    \
+    _(kNoEntry, "NoEntry") \
+    _(kToAdd, "ToAdd")     \
+    _(kAdding, "Adding")   \
+    _(kAdded, "Added")     \
+    _(kRemoving, "Removing")
 
-    static_assert(0 == kNoEntry, "kNoEntry value is not correct");
-    static_assert(1 == kToAdd, "kToAdd value is not correct");
-    static_assert(2 == kAdding, "kAdding value is not correct");
-    static_assert(3 == kAdded, "kAdded value is not correct");
-    static_assert(4 == kRemoving, "kRemoving value is not correct");
+    DefineEnumStringArray(StateMapList);
 
-    return kStateStrings[aState];
+    return kStrings[aState];
 }
 
 #if OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
@@ -494,22 +534,23 @@ const char *Publisher::Entry::StateToString(State aState)
 
 Publisher::DnsSrpServiceEntry::DnsSrpServiceEntry(Instance &aInstance) { Init(aInstance); }
 
-void Publisher::DnsSrpServiceEntry::PublishAnycast(uint8_t aSequenceNumber)
+void Publisher::DnsSrpServiceEntry::PublishAnycast(uint8_t aSequenceNumber, uint8_t aVersion)
 {
-    LogInfo("Publishing DNS/SRP service anycast (seq-num:%d)", aSequenceNumber);
-    Publish(Info::InfoAnycast(aSequenceNumber));
+    LogInfo("Publishing DNS/SRP service anycast (seq-num:%u, ver:%u)", aSequenceNumber, aVersion);
+    Publish(Info::InfoAnycast(aSequenceNumber, aVersion));
 }
 
-void Publisher::DnsSrpServiceEntry::PublishUnicast(const Ip6::Address &aAddress, uint16_t aPort)
+void Publisher::DnsSrpServiceEntry::PublishUnicast(const Ip6::Address &aAddress, uint16_t aPort, uint8_t aVersion)
 {
-    LogInfo("Publishing DNS/SRP service unicast (%s, port:%d)", aAddress.ToString().AsCString(), aPort);
-    Publish(Info::InfoUnicast(kTypeUnicast, aAddress, aPort));
+    LogInfo("Publishing DNS/SRP service unicast (%s, port:%u, ver:%u)", aAddress.ToString().AsCString(), aPort,
+            aVersion);
+    Publish(Info::InfoUnicast(kTypeUnicast, aAddress, aPort, aVersion));
 }
 
-void Publisher::DnsSrpServiceEntry::PublishUnicast(uint16_t aPort)
+void Publisher::DnsSrpServiceEntry::PublishUnicast(uint16_t aPort, uint8_t aVersion)
 {
-    LogInfo("Publishing DNS/SRP service unicast (ml-eid, port:%d)", aPort);
-    Publish(Info::InfoUnicast(kTypeUnicastMeshLocalEid, Get<Mle::Mle>().GetMeshLocalEid(), aPort));
+    LogInfo("Publishing DNS/SRP service unicast (ml-eid, port:%u, ver:%u)", aPort, aVersion);
+    Publish(Info::InfoUnicast(kTypeUnicastMeshLocalEid, Get<Mle::Mle>().GetMeshLocalEid(), aPort, aVersion));
 }
 
 void Publisher::DnsSrpServiceEntry::Publish(const Info &aInfo)
@@ -572,17 +613,17 @@ void Publisher::DnsSrpServiceEntry::Add(void)
     switch (GetType())
     {
     case kTypeAnycast:
-        SuccessOrExit(Get<Service::Manager>().AddDnsSrpAnycastService(mInfo.GetSequenceNumber()));
+        SuccessOrExit(Get<Service::Manager>().AddDnsSrpAnycastService(mInfo.GetSequenceNumber(), mInfo.GetVersion()));
         break;
 
     case kTypeUnicast:
-        SuccessOrExit(
-            Get<Service::Manager>().AddDnsSrpUnicastServiceWithAddrInServiceData(mInfo.GetAddress(), mInfo.GetPort()));
+        SuccessOrExit(Get<Service::Manager>().AddDnsSrpUnicastServiceWithAddrInServiceData(
+            mInfo.GetAddress(), mInfo.GetPort(), mInfo.GetVersion()));
         break;
 
     case kTypeUnicastMeshLocalEid:
-        SuccessOrExit(
-            Get<Service::Manager>().AddDnsSrpUnicastServiceWithAddrInServerData(mInfo.GetAddress(), mInfo.GetPort()));
+        SuccessOrExit(Get<Service::Manager>().AddDnsSrpUnicastServiceWithAddrInServerData(
+            mInfo.GetAddress(), mInfo.GetPort(), mInfo.GetVersion()));
         break;
     }
 
@@ -607,8 +648,8 @@ void Publisher::DnsSrpServiceEntry::Remove(State aNextState)
         break;
 
     case kTypeUnicast:
-        SuccessOrExit(Get<Service::Manager>().RemoveDnsSrpUnicastServiceWithAddrInServiceData(mInfo.GetAddress(),
-                                                                                              mInfo.GetPort()));
+        SuccessOrExit(Get<Service::Manager>().RemoveDnsSrpUnicastServiceWithAddrInServiceData(
+            mInfo.GetAddress(), mInfo.GetPort(), mInfo.GetVersion()));
         break;
 
     case kTypeUnicastMeshLocalEid:
@@ -687,19 +728,22 @@ void Publisher::DnsSrpServiceEntry::CountAnycastEntries(uint8_t &aNumEntries, ui
 {
     // Count the number of matching "DNS/SRP Anycast" service entries
     // in the Network Data (the match requires the entry to use same
-    // "sequence number" value). We prefer the entries associated with
-    // smaller RLCO16.
+    // "sequence number" value and same or higher version value). An
+    //  entry with higher version number is preferred. If versions
+    //  are equal then the associated RLOC16 values are used
+    //  (routers are preferred over end-devices. If same type, then
+    //  the smaller RLOC16 value is preferred).
 
-    Service::Manager::Iterator iterator;
+    Service::Iterator          iterator(GetInstance());
     Service::DnsSrpAnycastInfo anycastInfo;
 
-    while (Get<Service::Manager>().GetNextDnsSrpAnycastInfo(iterator, anycastInfo) == kErrorNone)
+    while (iterator.GetNextDnsSrpAnycastInfo(anycastInfo) == kErrorNone)
     {
-        if (anycastInfo.mSequenceNumber == mInfo.GetSequenceNumber())
+        if (anycastInfo.mSequenceNumber == mInfo.GetSequenceNumber() && (anycastInfo.mVersion >= mInfo.GetVersion()))
         {
             aNumEntries++;
 
-            if (IsPreferred(anycastInfo.mRloc16))
+            if ((anycastInfo.mVersion > mInfo.GetVersion()) || IsPreferred(anycastInfo.mRloc16))
             {
                 aNumPreferredEntries++;
             }
@@ -709,10 +753,10 @@ void Publisher::DnsSrpServiceEntry::CountAnycastEntries(uint8_t &aNumEntries, ui
 
 bool Publisher::DnsSrpServiceEntry::HasAnyAnycastEntry(void) const
 {
-    Service::Manager::Iterator iterator;
+    Service::Iterator          iterator(GetInstance());
     Service::DnsSrpAnycastInfo anycastInfo;
 
-    return (Get<Service::Manager>().GetNextDnsSrpAnycastInfo(iterator, anycastInfo) == kErrorNone);
+    return (iterator.GetNextDnsSrpAnycastInfo(anycastInfo) == kErrorNone);
 }
 
 void Publisher::DnsSrpServiceEntry::CountUnicastEntries(Service::DnsSrpUnicastType aType,
@@ -720,36 +764,45 @@ void Publisher::DnsSrpServiceEntry::CountUnicastEntries(Service::DnsSrpUnicastTy
                                                         uint8_t                   &aNumPreferredEntries) const
 {
     // Count the number of DNS/SRP unicast entries in the Network Data.
+    // Only entries with the same or higher version number are considered.
+    // An entry with higher version is preferred. If versions are equal
+    // then the associated RLOC16 values are used (routers are preferred
+    // over end-devices. If same type, then the smaller RLOC16 value is
+    // preferred).
 
-    Service::Manager::Iterator iterator;
+    Service::Iterator          iterator(GetInstance());
     Service::DnsSrpUnicastInfo unicastInfo;
 
-    while (Get<Service::Manager>().GetNextDnsSrpUnicastInfo(iterator, aType, unicastInfo) == kErrorNone)
+    while (iterator.GetNextDnsSrpUnicastInfo(aType, unicastInfo) == kErrorNone)
     {
-        aNumEntries++;
-
-        if (IsPreferred(unicastInfo.mRloc16))
+        if (unicastInfo.mVersion >= mInfo.GetVersion())
         {
-            aNumPreferredEntries++;
+            aNumEntries++;
+
+            if ((unicastInfo.mVersion > mInfo.GetVersion()) || IsPreferred(unicastInfo.mRloc16))
+            {
+                aNumPreferredEntries++;
+            }
         }
     }
 }
 
 bool Publisher::DnsSrpServiceEntry::HasAnyServiceDataUnicastEntry(void) const
 {
-    Service::Manager::Iterator iterator;
+    Service::Iterator          iterator(GetInstance());
     Service::DnsSrpUnicastInfo unicastInfo;
     Service::DnsSrpUnicastType type = Service::kAddrInServiceData;
 
-    return (Get<Service::Manager>().GetNextDnsSrpUnicastInfo(iterator, type, unicastInfo) == kErrorNone);
+    return (iterator.GetNextDnsSrpUnicastInfo(type, unicastInfo) == kErrorNone);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
 // Publisher::DnsSrpServiceEntry::Info
 
-Publisher::DnsSrpServiceEntry::Info::Info(Type aType, uint16_t aPortOrSeqNumber, const Ip6::Address *aAddress)
-    : mPortOrSeqNumber(aPortOrSeqNumber)
-    , mType(aType)
+Publisher::DnsSrpServiceEntry::Info::Info(Type                aType,
+                                          uint16_t            aPortOrSeqNumber,
+                                          uint8_t             aVersion,
+                                          const Ip6::Address *aAddress)
 {
     // It is important to `Clear()` the object since we compare all
     // bytes using overload of operator `==`.
@@ -758,12 +811,114 @@ Publisher::DnsSrpServiceEntry::Info::Info(Type aType, uint16_t aPortOrSeqNumber,
 
     mType            = aType;
     mPortOrSeqNumber = aPortOrSeqNumber;
+    mVersion         = aVersion;
 
     if (aAddress != nullptr)
     {
         mAddress = *aAddress;
     }
 }
+
+#if OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE && OPENTHREAD_CONFIG_BORDER_AGENT_ADMITTER_ENABLE
+
+//---------------------------------------------------------------------------------------------------------------------
+// Publisher::BorderAddmitterEntry
+
+Publisher::BorderAdmitterEntry::BorderAdmitterEntry(Instance &aInstance) { Init(aInstance); }
+
+void Publisher::BorderAdmitterEntry::Publish(void)
+{
+    VerifyOrExit(GetState() == kNoEntry);
+    LogInfo("Publishing Border Admitter service");
+    SetState(kToAdd);
+    Process();
+
+exit:
+    return;
+}
+
+void Publisher::BorderAdmitterEntry::Unpublish(void)
+{
+    VerifyOrExit(GetState() != kNoEntry);
+    LogInfo("Unpublishing Border Admitter service");
+    Remove(/* aNextState */ kNoEntry);
+
+exit:
+    return;
+}
+
+void Publisher::BorderAdmitterEntry::HandleNotifierEvents(Events aEvents)
+{
+    if (aEvents.ContainsAny(kEventThreadNetdataChanged | kEventThreadRoleChanged))
+    {
+        Process();
+    }
+}
+
+void Publisher::BorderAdmitterEntry::Add(void)
+{
+    SuccessOrExit(Get<Service::Manager>().AddBorderAdmitterService());
+    Get<Notifier>().HandleServerDataUpdated();
+    SetState(kAdded);
+    Notify(kEventEntryAdded);
+
+exit:
+    return;
+}
+
+void Publisher::BorderAdmitterEntry::Remove(State aNextState)
+{
+    VerifyOrExit((GetState() == kAdded) || (GetState() == kRemoving));
+
+    SuccessOrExit(Get<Service::Manager>().RemoveBorderAdmitterService());
+    Get<Notifier>().HandleServerDataUpdated();
+    Notify(kEventEntryRemoved);
+
+exit:
+    SetState(aNextState);
+}
+
+void Publisher::BorderAdmitterEntry::Notify(Event aEvent) const
+{
+    Get<MeshCoP::BorderAgent::Admitter>().HandleNetDataPublisherEvent(aEvent);
+}
+
+void Publisher::BorderAdmitterEntry::Process(void)
+{
+    // This method checks the entries currently present in Network Data
+    // based on which it then decides whether or not take action
+    // (add/remove or keep monitoring).
+
+    uint8_t numEntries          = 0;
+    uint8_t numPreferredEntries = 0;
+
+    VerifyOrExit(Get<Mle::Mle>().IsAttached());
+    VerifyOrExit(GetState() != kNoEntry);
+
+    CountEntries(numEntries, numPreferredEntries);
+    UpdateState(numEntries, numPreferredEntries, kDesiredNum);
+
+exit:
+    return;
+}
+
+void Publisher::BorderAdmitterEntry::CountEntries(uint8_t &aNumEntries, uint8_t &aNumPreferredEntries) const
+{
+    Service::Iterator iterator(GetInstance());
+    uint16_t          rloc16;
+
+    while (iterator.GetNextBorderAdmitterInfo(rloc16) == kErrorNone)
+    {
+        aNumEntries++;
+
+        if (IsPreferred(rloc16))
+        {
+            aNumPreferredEntries++;
+        }
+    }
+}
+
+#endif // OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE && OPENTHREAD_CONFIG_BORDER_AGENT_ADMITTER_ENABLE
 
 #endif // OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
 

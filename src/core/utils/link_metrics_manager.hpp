@@ -26,8 +26,8 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef LINK_METRICS_MANAGER_HPP_
-#define LINK_METRICS_MANAGER_HPP_
+#ifndef OT_CORE_UTILS_LINK_METRICS_MANAGER_HPP_
+#define OT_CORE_UTILS_LINK_METRICS_MANAGER_HPP_
 
 #include "openthread-core-config.h"
 
@@ -98,7 +98,6 @@ namespace Utils {
  *   An OT API is provided to get the link metrics data of any
  *   subject (neighbor) by its extended address. In production, this
  *   data may be fetched by some other means like RPC.
- *
  */
 
 class LinkMetricsManager : public InstanceLocator, private NonCopyable
@@ -147,7 +146,6 @@ public:
      * Initializes a `LinkMetricsManager` object.
      *
      * @param[in]   aInstance  A reference to the OpenThread instance.
-     *
      */
     explicit LinkMetricsManager(Instance &aInstance);
 
@@ -156,7 +154,6 @@ public:
      *
      * @retval TRUE   Link Metrics Manager is enabled.
      * @retval FALSE  Link Metrics Manager is not enabled.
-     *
      */
     bool IsEnabled(void) { return mEnabled; }
 
@@ -164,7 +161,6 @@ public:
      * Enable/Disable the LinkMetricsManager feature.
      *
      * @param[in]   aEnable  A boolean to indicate enable or disable.
-     *
      */
     void SetEnabled(bool aEnable);
 
@@ -177,7 +173,6 @@ public:
      * @retval kErrorNone             Successfully got the metrics value.
      * @retval kErrorInvalidArgs      The arguments are invalid.
      * @retval kNotFound              No neighbor with the given extended address is found.
-     *
      */
     Error GetLinkMetricsValueByExtAddr(const Mac::ExtAddress &aExtAddress, LinkMetrics::MetricsValues &aMetricsValues);
 
@@ -221,7 +216,6 @@ private:
 
 /**
  * @}
- *
  */
 
 } // namespace Utils
@@ -229,4 +223,4 @@ private:
 
 #endif // OPENTHREAD_CONFIG_LINK_METRICS_MANAGER_ENABLE
 
-#endif // LINK_METRICS_MANAGER_HPP_
+#endif // OT_CORE_UTILS_LINK_METRICS_MANAGER_HPP_

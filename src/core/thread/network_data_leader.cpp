@@ -33,22 +33,7 @@
 
 #include "network_data_leader.hpp"
 
-#include "coap/coap_message.hpp"
-#include "common/code_utils.hpp"
-#include "common/debug.hpp"
-#include "common/encoding.hpp"
-#include "common/locator_getters.hpp"
-#include "common/logging.hpp"
-#include "common/message.hpp"
-#include "common/random.hpp"
-#include "common/timer.hpp"
 #include "instance/instance.hpp"
-#include "mac/mac_types.hpp"
-#include "thread/lowpan.hpp"
-#include "thread/mle_router.hpp"
-#include "thread/thread_netif.hpp"
-#include "thread/thread_tlvs.hpp"
-#include "thread/uri_paths.hpp"
 
 namespace ot {
 namespace NetworkData {
@@ -72,8 +57,8 @@ Leader::Leader(Instance &aInstance)
 
 void Leader::Reset(void)
 {
-    mVersion       = Random::NonCrypto::GetUint8();
-    mStableVersion = Random::NonCrypto::GetUint8();
+    mVersion       = Random::NonCrypto::Generate<uint8_t>();
+    mStableVersion = Random::NonCrypto::Generate<uint8_t>();
     SetLength(0);
     SignalNetDataChanged();
 
@@ -92,7 +77,7 @@ Error Leader::GetServiceId(uint32_t           aEnterpriseNumber,
     ServiceConfig serviceConfig;
     ServiceData   serviceData;
 
-    while (GetNextService(iterator, serviceConfig) == kErrorNone)
+    while (GetNext(iterator, serviceConfig) == kErrorNone)
     {
         serviceConfig.GetServiceData(serviceData);
 
@@ -108,23 +93,23 @@ exit:
     return error;
 }
 
-Error Leader::GetPreferredNat64Prefix(ExternalRouteConfig &aConfig) const
+Error Leader::FindPreferredNat64Prefix(ExternalRouteConfig &aConfig) const
 {
     Error               error    = kErrorNotFound;
     Iterator            iterator = kIteratorInit;
-    ExternalRouteConfig config;
+    ExternalRouteConfig routeConfig;
 
-    while (GetNextExternalRoute(iterator, config) == kErrorNone)
+    while (GetNext(iterator, routeConfig) == kErrorNone)
     {
-        if (!config.mNat64 || !config.GetPrefix().IsValidNat64())
+        if (!routeConfig.mNat64 || !routeConfig.GetPrefix().IsValidNat64())
         {
             continue;
         }
 
-        if ((error == kErrorNotFound) || (config.mPreference > aConfig.mPreference) ||
-            (config.mPreference == aConfig.mPreference && config.GetPrefix() < aConfig.GetPrefix()))
+        if ((error == kErrorNotFound) || (routeConfig.mPreference > aConfig.mPreference) ||
+            (routeConfig.mPreference == aConfig.mPreference && routeConfig.GetPrefix() < aConfig.GetPrefix()))
         {
-            aConfig = config;
+            aConfig = routeConfig;
             error   = kErrorNone;
         }
     }
@@ -136,11 +121,12 @@ bool Leader::IsNat64(const Ip6::Address &aAddress) const
 {
     bool                isNat64  = false;
     Iterator            iterator = kIteratorInit;
-    ExternalRouteConfig config;
+    ExternalRouteConfig routeConfig;
 
-    while (GetNextExternalRoute(iterator, config) == kErrorNone)
+    while (GetNext(iterator, routeConfig) == kErrorNone)
     {
-        if (config.mNat64 && config.GetPrefix().IsValidNat64() && aAddress.MatchesPrefix(config.GetPrefix()))
+        if (routeConfig.mNat64 && routeConfig.GetPrefix().IsValidNat64() &&
+            aAddress.MatchesPrefix(routeConfig.GetPrefix()))
         {
             isNat64 = true;
             break;
@@ -172,16 +158,16 @@ const PrefixTlv *Leader::FindNextMatchingPrefixTlv(const Ip6::Address &aAddress,
     return prefixTlv;
 }
 
-Error Leader::GetContext(const Ip6::Address &aAddress, Lowpan::Context &aContext) const
+void Leader::FindContextForAddress(const Ip6::Address &aAddress, Lowpan::Context &aContext) const
 {
     const PrefixTlv  *prefixTlv = nullptr;
     const ContextTlv *contextTlv;
 
-    aContext.mPrefix.SetLength(0);
+    aContext.Clear();
 
-    if (Get<Mle::MleRouter>().IsMeshLocalAddress(aAddress))
+    if (Get<Mle::Mle>().IsMeshLocalAddress(aAddress))
     {
-        GetContextForMeshLocalPrefix(aContext);
+        aContext.InitForMeshLocalPrefix(GetInstance());
     }
 
     while ((prefixTlv = FindNextMatchingPrefixTlv(aAddress, prefixTlv)) != nullptr)
@@ -195,14 +181,9 @@ Error Leader::GetContext(const Ip6::Address &aAddress, Lowpan::Context &aContext
 
         if (prefixTlv->GetPrefixLength() > aContext.mPrefix.GetLength())
         {
-            prefixTlv->CopyPrefixTo(aContext.mPrefix);
-            aContext.mContextId    = contextTlv->GetContextId();
-            aContext.mCompressFlag = contextTlv->IsCompress();
-            aContext.mIsValid      = true;
+            aContext.InitFrom(*prefixTlv, *contextTlv);
         }
     }
-
-    return (aContext.mPrefix.GetLength() > 0) ? kErrorNone : kErrorNotFound;
 }
 
 const PrefixTlv *Leader::FindPrefixTlvForContextId(uint8_t aContextId, const ContextTlv *&aContextTlv) const
@@ -224,37 +205,26 @@ const PrefixTlv *Leader::FindPrefixTlvForContextId(uint8_t aContextId, const Con
     return prefixTlv;
 }
 
-Error Leader::GetContext(uint8_t aContextId, Lowpan::Context &aContext) const
+void Leader::FindContextForId(uint8_t aContextId, Lowpan::Context &aContext) const
 {
-    Error             error = kErrorNone;
-    TlvIterator       tlvIterator(GetTlvsStart(), GetTlvsEnd());
     const PrefixTlv  *prefixTlv;
     const ContextTlv *contextTlv;
 
+    aContext.Clear();
+
     if (aContextId == Mle::kMeshLocalPrefixContextId)
     {
-        GetContextForMeshLocalPrefix(aContext);
+        aContext.InitForMeshLocalPrefix(GetInstance());
         ExitNow();
     }
 
     prefixTlv = FindPrefixTlvForContextId(aContextId, contextTlv);
-    VerifyOrExit(prefixTlv != nullptr, error = kErrorNotFound);
+    VerifyOrExit(prefixTlv != nullptr);
 
-    prefixTlv->CopyPrefixTo(aContext.mPrefix);
-    aContext.mContextId    = contextTlv->GetContextId();
-    aContext.mCompressFlag = contextTlv->IsCompress();
-    aContext.mIsValid      = true;
+    aContext.InitFrom(*prefixTlv, *contextTlv);
 
 exit:
-    return error;
-}
-
-void Leader::GetContextForMeshLocalPrefix(Lowpan::Context &aContext) const
-{
-    aContext.mPrefix.Set(Get<Mle::MleRouter>().GetMeshLocalPrefix());
-    aContext.mContextId    = Mle::kMeshLocalPrefixContextId;
-    aContext.mCompressFlag = true;
-    aContext.mIsValid      = true;
+    return;
 }
 
 bool Leader::IsOnMesh(const Ip6::Address &aAddress) const
@@ -262,7 +232,7 @@ bool Leader::IsOnMesh(const Ip6::Address &aAddress) const
     const PrefixTlv *prefixTlv = nullptr;
     bool             isOnMesh  = false;
 
-    VerifyOrExit(!Get<Mle::MleRouter>().IsMeshLocalAddress(aAddress), isOnMesh = true);
+    VerifyOrExit(!Get<Mle::Mle>().IsMeshLocalAddress(aAddress), isOnMesh = true);
 
     while ((prefixTlv = FindNextMatchingPrefixTlv(aAddress, prefixTlv)) != nullptr)
     {
@@ -318,7 +288,7 @@ Error Leader::RouteLookup(const Ip6::Address &aSource, const Ip6::Address &aDest
 
         uint8_t domainId;
 
-        if (Get<Utils::Slaac>().FindDomainIdFor(aSource, domainId) == kErrorNone)
+        if (Get<Ip6::Slaac>().FindDomainIdFor(aSource, domainId) == kErrorNone)
         {
             error = ExternalRouteLookup(domainId, aDestination, aRloc16);
         }
@@ -483,13 +453,30 @@ Error Leader::SetNetworkData(uint8_t            aVersion,
                              const Message     &aMessage,
                              const OffsetRange &aOffsetRange)
 {
-    Error    error  = kErrorNone;
-    uint16_t length = aOffsetRange.GetLength();
+    Error   error = kErrorNone;
+    uint8_t oldData[kMaxSize];
+    uint8_t oldLength;
 
-    VerifyOrExit(length <= kMaxSize, error = kErrorParse);
-    SuccessOrExit(error = aMessage.Read(aOffsetRange.GetOffset(), GetBytes(), length));
+    VerifyOrExit(aOffsetRange.GetLength() <= kMaxSize, error = kErrorParse);
+    VerifyOrExit(aOffsetRange.GetEndOffset() <= aMessage.GetLength(), error = kErrorParse);
 
-    SetLength(static_cast<uint8_t>(length));
+    oldLength = sizeof(oldData);
+    IgnoreError(CopyNetworkData(kFullSet, oldData, oldLength));
+
+    aMessage.ReadBytes(aOffsetRange, GetBytes());
+    SetLength(static_cast<uint8_t>(aOffsetRange.GetLength()));
+
+    error = ValidateTlvs();
+
+    if (error != kErrorNone)
+    {
+        // Restores the old data back
+
+        memcpy(GetBytes(), oldData, oldLength);
+        SetLength(oldLength);
+        ExitNow();
+    }
+
     mVersion       = aVersion;
     mStableVersion = aStableVersion;
 
@@ -499,7 +486,7 @@ Error Leader::SetNetworkData(uint8_t            aVersion,
     }
 
 #if OPENTHREAD_FTD
-    if (Get<Mle::MleRouter>().IsLeader())
+    if (Get<Mle::Mle>().IsLeader())
     {
         Get<Leader>().HandleNetworkDataRestoredAfterReset();
     }
@@ -518,26 +505,36 @@ const CommissioningDataTlv *Leader::FindCommissioningData(void) const
     return NetworkDataTlv::Find<CommissioningDataTlv>(GetTlvsStart(), GetTlvsEnd());
 }
 
-const MeshCoP::Tlv *Leader::FindCommissioningDataSubTlv(uint8_t aType) const
+Error Leader::FindCommissioningDataSubTlv(uint8_t aType, CommissioningDataSubTlvInfo &aSubTlvInfo) const
 {
-    const MeshCoP::Tlv   *subTlv  = nullptr;
+    Error                 error   = kErrorNotFound;
     const NetworkDataTlv *dataTlv = FindCommissioningData();
+    const MeshCoP::Tlv   *subTlv;
 
     VerifyOrExit(dataTlv != nullptr);
+
     subTlv = As<MeshCoP::Tlv>(Tlv::FindTlv(dataTlv->GetValue(), dataTlv->GetLength(), aType));
+    VerifyOrExit(subTlv != nullptr);
+
+    aSubTlvInfo.mTlv    = subTlv;
+    aSubTlvInfo.mValue  = subTlv->GetValue();
+    aSubTlvInfo.mLength = subTlv->IsExtended() ? As<ExtendedTlv>(subTlv)->GetLength() : subTlv->GetLength();
+
+    error = kErrorNone;
 
 exit:
-    return subTlv;
+    return error;
 }
 
 Error Leader::ReadCommissioningDataUint16SubTlv(MeshCoP::Tlv::Type aType, uint16_t &aValue) const
 {
-    Error               error  = kErrorNone;
-    const MeshCoP::Tlv *subTlv = FindCommissioningDataSubTlv(aType);
+    Error                       error;
+    CommissioningDataSubTlvInfo subTlvInfo;
 
-    VerifyOrExit(subTlv != nullptr, error = kErrorNotFound);
-    VerifyOrExit(subTlv->GetLength() >= sizeof(uint16_t), error = kErrorParse);
-    aValue = BigEndian::ReadUint16(subTlv->GetValue());
+    SuccessOrExit(error = FindCommissioningDataSubTlv(aType, subTlvInfo));
+
+    VerifyOrExit(subTlvInfo.mLength >= sizeof(uint16_t), error = kErrorParse);
+    aValue = BigEndian::ReadUint16(subTlvInfo.mValue);
 
 exit:
     return error;
@@ -587,7 +584,7 @@ Coap::Message *Leader::ProcessCommissionerGetRequest(const Coap::Message &aMessa
     Coap::Message *response = nullptr;
     OffsetRange    offsetRange;
 
-    response = Get<Tmf::Agent>().NewPriorityResponseMessage(aMessage);
+    response = Get<Tmf::Agent>().AllocateAndInitPriorityResponseFor(aMessage);
     VerifyOrExit(response != nullptr, error = kErrorNoBufs);
 
     if (Tlv::FindTlvValueOffsetRange(aMessage, MeshCoP::Tlv::kGet, offsetRange) == kErrorNone)
@@ -596,17 +593,14 @@ Coap::Message *Leader::ProcessCommissionerGetRequest(const Coap::Message &aMessa
 
         while (!offsetRange.IsEmpty())
         {
-            uint8_t             type;
-            const MeshCoP::Tlv *subTlv;
+            uint8_t                     type;
+            CommissioningDataSubTlvInfo subTlvInfo;
 
-            IgnoreError(aMessage.Read(offsetRange, type));
-            offsetRange.AdvanceOffset(sizeof(type));
+            IgnoreError(aMessage.ReadAndAdvance(offsetRange, type));
 
-            subTlv = FindCommissioningDataSubTlv(type);
-
-            if (subTlv != nullptr)
+            if (FindCommissioningDataSubTlv(type, subTlvInfo) == kErrorNone)
             {
-                SuccessOrExit(error = subTlv->AppendTo(*response));
+                SuccessOrExit(error = subTlvInfo.mTlv->AppendTo(*response));
             }
         }
     }
@@ -632,6 +626,13 @@ Error Leader::FindBorderAgentRloc(uint16_t &aRloc16) const
     return ReadCommissioningDataUint16SubTlv(MeshCoP::Tlv::kBorderAgentLocator, aRloc16);
 }
 
+bool Leader::HasBorderAgentRloc(void) const
+{
+    uint16_t rloc16;
+
+    return (FindBorderAgentRloc(rloc16) == kErrorNone);
+}
+
 Error Leader::FindCommissioningSessionId(uint16_t &aSessionId) const
 {
     return ReadCommissioningDataUint16SubTlv(MeshCoP::Tlv::kCommissionerSessionId, aSessionId);
@@ -644,11 +645,14 @@ Error Leader::FindJoinerUdpPort(uint16_t &aPort) const
 
 Error Leader::FindSteeringData(MeshCoP::SteeringData &aSteeringData) const
 {
-    Error                           error           = kErrorNone;
-    const MeshCoP::SteeringDataTlv *steeringDataTlv = FindInCommissioningData<MeshCoP::SteeringDataTlv>();
+    Error                       error = kErrorNotFound;
+    CommissioningDataSubTlvInfo subTlvInfo;
+    uint16_t                    steeringDataLength;
 
-    VerifyOrExit(steeringDataTlv != nullptr, error = kErrorNotFound);
-    steeringDataTlv->CopyTo(aSteeringData);
+    SuccessOrExit(FindCommissioningDataSubTlv(MeshCoP::Tlv::kSteeringData, subTlvInfo));
+
+    steeringDataLength = Min<uint16_t>(subTlvInfo.mLength, MeshCoP::SteeringData::kMaxLength);
+    error              = aSteeringData.Init(static_cast<uint8_t>(steeringDataLength), subTlvInfo.mValue);
 
 exit:
     return error;
@@ -712,7 +716,7 @@ bool Leader::ContainsOmrPrefix(const Ip6::Prefix &aPrefix) const
     const PrefixTlv       *prefixTlv;
     const BorderRouterTlv *brSubTlv;
 
-    VerifyOrExit(BorderRouter::RoutingManager::IsValidOmrPrefix(aPrefix));
+    VerifyOrExit(BorderRouter::IsValidOmrPrefix(aPrefix));
 
     prefixTlv = FindPrefix(aPrefix);
     VerifyOrExit(prefixTlv != nullptr);
@@ -727,7 +731,7 @@ bool Leader::ContainsOmrPrefix(const Ip6::Prefix &aPrefix) const
 
         config.SetFrom(*prefixTlv, *brSubTlv, *entry);
 
-        if (BorderRouter::RoutingManager::IsValidOmrPrefix(config))
+        if (BorderRouter::IsValidOmrPrefix(config))
         {
             ExitNow(contains = true);
         }

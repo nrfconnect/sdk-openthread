@@ -31,8 +31,8 @@
  *   This file includes definitions for the Thread network interface.
  */
 
-#ifndef THREAD_NETIF_HPP_
-#define THREAD_NETIF_HPP_
+#ifndef OT_CORE_THREAD_THREAD_NETIF_HPP_
+#define OT_CORE_THREAD_THREAD_NETIF_HPP_
 
 #include "openthread-core-config.h"
 
@@ -57,19 +57,16 @@ public:
      * Initializes the Thread network interface.
      *
      * @param[in]  aInstance  A reference to the OpenThread instance.
-     *
      */
     explicit ThreadNetif(Instance &aInstance);
 
     /**
      * Enables the Thread network interface.
-     *
      */
     void Up(void);
 
     /**
      * Disables the Thread network interface.
-     *
      */
     void Down(void);
 
@@ -78,7 +75,6 @@ public:
      *
      * @retval TRUE   If the Thread network interface is enabled.
      * @retval FALSE  If the Thread network interface is not enabled.
-     *
      */
     bool IsUp(void) const { return mIsUp; }
 
@@ -92,4 +88,4 @@ private:
 
 } // namespace ot
 
-#endif // THREAD_NETIF_HPP_
+#endif // OT_CORE_THREAD_THREAD_NETIF_HPP_

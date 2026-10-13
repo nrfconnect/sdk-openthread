@@ -91,11 +91,12 @@ class OtbrDocker:
         logging.info(f"socat running: device PTY: {rcp_device_pty}, device: {rcp_device}")
 
         ot_rcp_path = self._get_ot_rcp_path()
-        self._ot_rcp_proc = subprocess.Popen(f"{ot_rcp_path} {nodeid} > {rcp_device_pty} < {rcp_device_pty}",
-                                             shell=True,
-                                             stdin=subprocess.DEVNULL,
-                                             stdout=subprocess.DEVNULL,
-                                             stderr=subprocess.DEVNULL)
+        self._ot_rcp_proc = subprocess.Popen(
+            f"{ot_rcp_path} {'-U' if config.VIRTUAL_TIME else ''} {nodeid} > {rcp_device_pty} < {rcp_device_pty}",
+            shell=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
 
         try:
             self._ot_rcp_proc.wait(1)
@@ -177,9 +178,15 @@ class OtbrDocker:
         self.bash('service otbr-agent stop')
 
     def stop_mdns_service(self):
+        self.send_command('mdns disable')
+        # OT build may not include mdns, so ignore `InvalidCommand` errors.
+        self._expect(r'Done|Error 35: InvalidCommand')
         self.bash('service avahi-daemon stop; service mdns stop; !(cat /proc/net/udp | grep -i :14E9)')
 
     def start_mdns_service(self):
+        self.send_command('mdns enable')
+        # OT build may not include mdns, so ignore `InvalidCommand` errors.
+        self._expect(r'Done|Error 35: InvalidCommand')
         self.bash('service avahi-daemon start; service mdns start; cat /proc/net/udp | grep -i :14E9')
 
     def start_ot_ctl(self):
@@ -425,8 +432,8 @@ class OtbrDocker:
     def activate_ephemeral_key_mode(self, lifetime):
         return self.call_dbus_method('io.openthread.BorderRouter', 'ActivateEphemeralKeyMode', lifetime)
 
-    def deactivate_ephemeral_key_mode(self):
-        return self.call_dbus_method('io.openthread.BorderRouter', 'DeactivateEphemeralKeyMode')
+    def deactivate_ephemeral_key_mode(self, retain_active_session):
+        return self.call_dbus_method('io.openthread.BorderRouter', 'DeactivateEphemeralKeyMode', retain_active_session)
 
     @property
     def nat64_cidr(self):
@@ -638,8 +645,8 @@ class OtCli:
                     cmd = '%s/examples/apps/cli/ot-cli-%s' % (srcdir, mode)
 
             if 'RADIO_DEVICE' in os.environ:
-                cmd += ' --real-time-signal=+1 -v spinel+hdlc+uart://%s?forkpty-arg=%d' % (os.environ['RADIO_DEVICE'],
-                                                                                           nodeid)
+                cmd += ' --real-time-signal=+1 -v spinel+hdlc+uart://%s?%sforkpty-arg=%d' % (
+                    os.environ['RADIO_DEVICE'], 'forkpty-arg=-U&' if config.VIRTUAL_TIME else '', nodeid)
                 self.is_posix = True
             else:
                 cmd += ' %d' % nodeid
@@ -654,8 +661,8 @@ class OtCli:
                 cmd = '%s/examples/apps/cli/ot-cli-%s' % (srcdir, mode)
 
             if 'RADIO_DEVICE_1_1' in os.environ:
-                cmd += ' --real-time-signal=+1 -v spinel+hdlc+uart://%s?forkpty-arg=%d' % (
-                    os.environ['RADIO_DEVICE_1_1'], nodeid)
+                cmd += ' --real-time-signal=+1 -v spinel+hdlc+uart://%s?%sforkpty-arg=%d' % (
+                    os.environ['RADIO_DEVICE_1_1'], 'forkpty-arg=-U&' if config.VIRTUAL_TIME else '', nodeid)
                 self.is_posix = True
             else:
                 cmd += ' %d' % nodeid
@@ -683,8 +690,8 @@ class OtCli:
         # If Thread version of node matches the testing environment version.
         if self.version == self.env_version:
             if 'RADIO_DEVICE' in os.environ:
-                args = ' --real-time-signal=+1 spinel+hdlc+uart://%s?forkpty-arg=%d' % (os.environ['RADIO_DEVICE'],
-                                                                                        nodeid)
+                args = ' --real-time-signal=+1 spinel+hdlc+uart://%s?%sforkpty-arg=%d' % (
+                    os.environ['RADIO_DEVICE'], 'forkpty-arg=-U&' if config.VIRTUAL_TIME else '', nodeid)
                 self.is_posix = True
             else:
                 args = ''
@@ -723,8 +730,8 @@ class OtCli:
         # Load Thread 1.1 node when testing Thread 1.2 scenarios for interoperability.
         elif self.version == '1.1':
             if 'RADIO_DEVICE_1_1' in os.environ:
-                args = ' --real-time-signal=+1 spinel+hdlc+uart://%s?forkpty-arg=%d' % (os.environ['RADIO_DEVICE_1_1'],
-                                                                                        nodeid)
+                args = ' --real-time-signal=+1 spinel+hdlc+uart://%s?%sforkpty-arg=%d' % (
+                    os.environ['RADIO_DEVICE_1_1'], 'forkpty-arg=-U&' if config.VIRTUAL_TIME else '', nodeid)
                 self.is_posix = True
             else:
                 args = ''
@@ -922,11 +929,11 @@ class NodeImpl:
         assert len(payload) == payload_len
         return (direction, type, payload)
 
-    def send_command(self, cmd, go=True, expect_command_echo=True):
+    def send_command(self, cmd, go=True, expect_command_echo=True, maybeoff=False):
         print("%d: %s" % (self.nodeid, cmd))
         self.pexpect.send(cmd + '\n')
         if go:
-            self.simulator.go(0, nodeid=self.nodeid)
+            self.simulator.go(0, nodeid=self.nodeid, maybeoff=maybeoff)
         sys.stdout.flush()
 
         if expect_command_echo:
@@ -936,7 +943,7 @@ class NodeImpl:
         cmd = cmd.strip()
         while True:
             line = self.__readline()
-            if line == cmd:
+            if line.strip() == cmd:
                 break
 
             logging.warning("expecting echo %r, but read %r", cmd, line)
@@ -945,7 +952,7 @@ class NodeImpl:
         PROMPT = 'spinel-cli > ' if self.node_type == 'ncp-sim' else '> '
         while True:
             self._expect(r"[^\n]+\n")
-            line = self.pexpect.match.group(0).decode('utf8').strip()
+            line = self.pexpect.match.group(0).decode('utf-8', errors='backslashreplace').strip()
             while line.startswith(PROMPT):
                 line = line[len(PROMPT):]
 
@@ -1150,7 +1157,11 @@ class NodeImpl:
                'fullname': 'my-host.default.service.arpa.',
                'name': 'my-host',
                'deleted': 'false',
-               'addresses': ['2001::1', '2001::2']
+               'addresses': ['2001::1', '2001::2'],
+               'lease': '7200',
+               'key-lease': '1209600',
+               'remaining lease': '6345.459',
+               'remaining key-lease': '1208734.459'
            }]
         """
 
@@ -1166,12 +1177,21 @@ class NodeImpl:
 
             host['deleted'] = lines.pop(0).strip().split(':')[1].strip()
             if host['deleted'] == 'true':
+                for _ in range(2):
+                    # `key-lease` and `remaining key-lease`
+                    key_value = lines.pop(0).strip().split(':')
+                    host[key_value[0].strip()] = key_value[1].strip()
                 host_list.append(host)
                 continue
 
             addresses = lines.pop(0).strip().split('[')[1].strip(' ]').split(',')
             map(str.strip, addresses)
             host['addresses'] = [addr.strip() for addr in addresses if addr]
+
+            for _ in range(4):
+                # `lease`, `key-lease`, `remaining lease` and `remaining key-lease`
+                key_value = lines.pop(0).strip().split(':')
+                host[key_value[0].strip()] = key_value[1].strip()
 
             host_list.append(host)
 
@@ -1203,7 +1223,9 @@ class NodeImpl:
                'weight': '0',
                'ttl': '7200',
                'lease': '7200',
-               'key-lease': '7200',
+               'key-lease': '1209600',
+               'remaining lease': '6345.459',
+               'remaining key-lease': '1208734.459',
                'TXT': ['abc=010203'],
                'host_fullname': 'my-host.default.service.arpa.',
                'host': 'my-host',
@@ -1228,11 +1250,15 @@ class NodeImpl:
 
             service['deleted'] = lines.pop(0).strip().split(':')[1].strip()
             if service['deleted'] == 'true':
+                for _ in range(2):
+                    key_value = lines.pop(0).strip().split(':')
+                    service[key_value[0].strip()] = key_value[1].strip()
                 service_list.append(service)
                 continue
 
-            # 'subtypes', port', 'priority', 'weight', 'ttl', 'lease', and 'key-lease'
-            for i in range(0, 7):
+            # 'subtypes', port', 'priority', 'weight', 'ttl', 'lease', 'key-lease',
+            # 'remaining lease', and `remaining key-lease`
+            for i in range(0, 9):
                 key_value = lines.pop(0).strip().split(':')
                 service[key_value[0].strip()] = key_value[1].strip()
 
@@ -1264,17 +1290,8 @@ class NodeImpl:
                 return service
 
     def get_srp_server_port(self):
-        """Returns the SRP server UDP port by parsing
-           the SRP Server Data in Network Data.
-        """
-
-        for service in self.get_services():
-            # TODO: for now, we are using 0xfd as the SRP service data.
-            #       May use a dedicated bit flag for SRP server.
-            if int(service[1], 16) == 0x5d:
-                # The SRP server data contains IPv6 address (16 bytes)
-                # followed by UDP port number.
-                return int(service[2][2 * 16:], 16)
+        self.send_command('srp server port')
+        return int(self._expect_result(r'\d+'))
 
     def srp_client_start(self, server_address, server_port):
         self.send_command(f'srp client start {server_address} {server_port}')
@@ -1385,7 +1402,7 @@ class NodeImpl:
     def srp_client_get_lease_interval(self) -> int:
         cmd = 'srp client leaseinterval'
         self.send_command(cmd)
-        return int(self._expect_result('\d+'))
+        return int(self._expect_result(r'\d+'))
 
     def srp_client_set_key_lease_interval(self, leaseinterval: int):
         cmd = f'srp client keyleaseinterval {leaseinterval}'
@@ -1395,7 +1412,7 @@ class NodeImpl:
     def srp_client_get_key_lease_interval(self) -> int:
         cmd = 'srp client keyleaseinterval'
         self.send_command(cmd)
-        return int(self._expect_result('\d+'))
+        return int(self._expect_result(r'\d+'))
 
     def srp_client_set_ttl(self, ttl: int):
         cmd = f'srp client ttl {ttl}'
@@ -1405,7 +1422,7 @@ class NodeImpl:
     def srp_client_get_ttl(self) -> int:
         cmd = 'srp client ttl'
         self.send_command(cmd)
-        return int(self._expect_result('\d+'))
+        return int(self._expect_result(r'\d+'))
 
     #
     # TREL utilities
@@ -1451,14 +1468,17 @@ class NodeImpl:
         self.send_command(cmd)
         self._expect_done()
 
-    def set_epskc(self, keystring: str, timeout=120000, port=0):
-        cmd = 'ba ephemeralkey set ' + keystring + ' ' + str(timeout) + ' ' + str(port)
+    def get_trel_port(self):
+        cmd = 'trel port'
         self.send_command(cmd)
-        self._expect(r"(Done|Error .*)")
+        return int(self._expect_command_output()[0])
 
-    def clear_epskc(self):
-        cmd = 'ba ephemeralkey clear'
-        self.send_command(cmd)
+    def enable_border_agent(self):
+        self.send_command('ba enable')
+        self._expect_done()
+
+    def disable_border_agent(self):
+        self.send_command('ba disable')
         self._expect_done()
 
     def get_border_agent_counters(self):
@@ -1588,46 +1608,12 @@ class NodeImpl:
         self.send_command(cmd)
         self._expect_done()
 
-    def set_domain_prefix(self, prefix, flags='prosD'):
-        self.add_prefix(prefix, flags)
-        self.register_netdata()
-
-    def remove_domain_prefix(self, prefix):
-        self.remove_prefix(prefix)
-        self.register_netdata()
-
-    def set_next_dua_response(self, status: Union[str, int], iid=None):
-        # Convert 5.00 to COAP CODE 160
-        if isinstance(status, str):
-            assert '.' in status
-            status = status.split('.')
-            status = (int(status[0]) << 5) + int(status[1])
-
-        cmd = 'bbr mgmt dua {}'.format(status)
-        if iid is not None:
-            cmd += ' ' + str(iid)
-        self.send_command(cmd)
-        self._expect_done()
-
-    def set_dua_iid(self, iid: str):
-        assert len(iid) == 16
-        int(iid, 16)
-
-        cmd = 'dua iid {}'.format(iid)
-        self.send_command(cmd)
-        self._expect_done()
-
-    def clear_dua_iid(self):
-        cmd = 'dua iid clear'
-        self.send_command(cmd)
-        self._expect_done()
-
     def multicast_listener_list(self) -> Dict[IPv6Address, int]:
         cmd = 'bbr mgmt mlr listener'
         self.send_command(cmd)
 
         table = {}
-        for line in self._expect_results("\S+ \d+"):
+        for line in self._expect_results(r"\S+ \d+"):
             line = line.split()
             assert len(line) == 2, line
             ip = IPv6Address(line[0])
@@ -1751,6 +1737,7 @@ class NodeImpl:
         cmd = 'networkkey %s' % networkkey
         self.send_command(cmd)
         self._expect_done()
+        self.simulator.add_network_key(network_key)
 
     def get_key_sequence_counter(self):
         self.send_command('keysequence counter')
@@ -1927,9 +1914,14 @@ class NodeImpl:
         self.send_command(cmd)
         self._expect_done()
 
+    def get_ba_state(self):
+        states = [r'Disabled', r'Inactive', r'Active']
+        self.send_command('ba state')
+        return self._expect_result(states)
+
     def get_ephemeral_key_state(self):
         cmd = 'ba ephemeralkey'
-        states = [r'inactive', r'active']
+        states = [r'Disabled', r'Stopped', r'Started', r'Connected', r'Accepted']
         self.send_command(cmd)
         return self._expect_result(states)
 
@@ -2127,7 +2119,7 @@ class NodeImpl:
         omr_addrs = []
         for addr in self.get_addrs():
             for prefix in prefixes:
-                if (addr.startswith(prefix)) and (addr != self.__getDua()):
+                if addr.startswith(prefix):
                     omr_addrs.append(addr)
                     break
 
@@ -2176,13 +2168,6 @@ class NodeImpl:
 
         return None
 
-    def __getDua(self) -> Optional[str]:
-        for ip6Addr in self.get_addrs():
-            if re.match(config.DOMAIN_PREFIX_REGEX_PATTERN, ip6Addr, re.I):
-                return ip6Addr
-
-        return None
-
     def get_ip6_address_by_prefix(self, prefix: Union[str, IPv6Network]) -> List[IPv6Address]:
         """Get addresses matched with given prefix.
 
@@ -2218,8 +2203,6 @@ class NodeImpl:
             return self.__getAloc()
         elif address_type == config.ADDRESS_TYPE.ML_EID:
             return self.__getMleid()
-        elif address_type == config.ADDRESS_TYPE.DUA:
-            return self.__getDua()
         elif address_type == config.ADDRESS_TYPE.BACKBONE_GUA:
             return self._getBackboneGua()
         elif address_type == config.ADDRESS_TYPE.OMR:
@@ -2281,8 +2264,8 @@ class NodeImpl:
 
     def get_br_routers(self) -> List[str]:
         # Example output of `br routers` command:
-        #   fe80:0:0:0:42:acff:fe14:3 (M:0 O:0 Stub:1) ms-since-rx:144160 reachable:yes age:00:17:36 (peer BR)
-        #   fe80:0:0:0:42:acff:fe14:2 (M:0 O:0 Stub:1) ms-since-rx:45179 reachable:yes age:00:17:36
+        #   fe80:0:0:0:42:acff:fe14:3 (M:0 O:0 S:1) ms-since-rx:144160 reachable:yes age:00:17:36 (peer BR)
+        #   fe80:0:0:0:42:acff:fe14:2 (M:0 O:0 S:1) ms-since-rx:45179 reachable:yes age:00:17:36
         #   Done
         self.send_command('br routers')
         return self._expect_command_output()
@@ -2304,6 +2287,20 @@ class NodeImpl:
         cmd = 'br onlinkprefix local'
         self.send_command(cmd)
         return self._expect_command_output()[0]
+
+    def pd_get_prefix(self):
+        cmd = 'br pd omrprefix'
+        self.send_command(cmd)
+        return self._expect_command_output()[0].split(" ")[0]
+
+    def pd_set_enabled(self, enable):
+        self.send_command('br pd {}'.format("enable" if enable else "disable"))
+        self._expect_done()
+
+    @property
+    def pd_state(self):
+        self.send_command('br pd state')
+        return self._expect_command_output()[0].strip()
 
     def get_netdata_non_nat64_routes(self):
         nat64_routes = []
@@ -2496,16 +2493,16 @@ class NodeImpl:
         self.send_command('netdata register')
         self._expect_done()
 
-    def netdata_publish_dnssrp_anycast(self, seqnum):
-        self.send_command(f'netdata publish dnssrp anycast {seqnum}')
+    def netdata_publish_dnssrp_anycast(self, seqnum, version=0):
+        self.send_command(f'netdata publish dnssrp anycast {seqnum} {version}')
         self._expect_done()
 
-    def netdata_publish_dnssrp_unicast(self, address, port):
-        self.send_command(f'netdata publish dnssrp unicast {address} {port}')
+    def netdata_publish_dnssrp_unicast(self, address, port, version=0):
+        self.send_command(f'netdata publish dnssrp unicast {address} {port} {version}')
         self._expect_done()
 
-    def netdata_publish_dnssrp_unicast_mleid(self, port):
-        self.send_command(f'netdata publish dnssrp unicast {port}')
+    def netdata_publish_dnssrp_unicast_mleid(self, port, version=0):
+        self.send_command(f'netdata publish dnssrp unicast {port} {version}')
         self._expect_done()
 
     def netdata_unpublish_dnssrp(self):
@@ -2654,7 +2651,7 @@ class NodeImpl:
         self._reset('factoryreset')
 
     def _reset(self, cmd):
-        self.send_command(cmd, expect_command_echo=False)
+        self.send_command(cmd, expect_command_echo=False, maybeoff=True)
         time.sleep(self.RESET_DELAY)
         # Send a "version" command and drain the CLI output after reset
         self.send_command('version', expect_command_echo=False)
@@ -2723,6 +2720,7 @@ class NodeImpl:
             cmd = 'dataset networkkey %s' % network_key
             self.send_command(cmd, go=False)
             self._expect_done()
+            self.simulator.add_network_key(network_key)
 
         if network_name is not None:
             cmd = 'dataset networkname %s' % network_name
@@ -2858,6 +2856,7 @@ class NodeImpl:
 
         if network_key is not None:
             cmd += 'networkkey %s ' % network_key
+            self.simulator.add_network_key(network_key)
 
         if mesh_local is not None:
             cmd += 'localprefix %s ' % mesh_local
@@ -2935,6 +2934,7 @@ class NodeImpl:
 
         if network_key is not None:
             cmd += 'networkkey %s ' % network_key
+            self.simulator.add_network_key(network_key)
 
         if mesh_local is not None:
             cmd += 'localprefix %s ' % mesh_local
@@ -3069,20 +3069,20 @@ class NodeImpl:
         else:
             timeout = 5
 
-        self._expect(r'coap request from ([\da-f:]+)(?: OBS=(\d+))?'
-                     r'(?: with payload: ([\da-f]+))?\b',
-                     timeout=timeout)
-        (source, observe, payload) = self.pexpect.match.groups()
+        self._expect(
+            r'coap request from ([\da-f:]+) (GET|PUT|DELETE|POST)(?: OBS=(\d+))?'
+            r'(?: with payload: ([\da-f]+))?\b',
+            timeout=timeout)
+        (source, method, observe, payload) = self.pexpect.match.groups()
+
         source = source.decode('UTF-8')
+        method = method.decode('UTF-8')
 
         if observe is not None:
             observe = int(observe, base=10)
 
-        if payload is not None:
-            payload = binascii.a2b_hex(payload).decode('UTF-8')
-
         # Return the values received
-        return dict(source=source, observe=observe, payload=payload)
+        return dict(source=source, observe=observe, payload=payload, method=method)
 
     def coap_wait_subscribe(self):
         """
@@ -3245,6 +3245,14 @@ class NodeImpl:
             payload += tlv.to_hex()
         self.commissioner_mgmtset(self.bytes_to_hex_str(payload))
 
+    def tcat(self, cmd):
+        self.send_command(f'tcat {cmd}')
+        self._expect_done()
+
+    def udp_start_client(self):
+        self.send_command('udp open')
+        self._expect_done()
+
     def udp_start(self, local_ipaddr, local_port, bind_unspecified=False):
         cmd = 'udp open'
         self.send_command(cmd)
@@ -3259,8 +3267,11 @@ class NodeImpl:
         self.send_command(cmd)
         self._expect_done()
 
-    def udp_send(self, bytes, ipaddr, port, success=True):
-        cmd = 'udp send %s %d -s %d ' % (ipaddr, port, bytes)
+    def udp_send(self, bytes_count, ipaddr, port, success=True, data_bytes: bytes = None):
+        if data_bytes is None:
+            cmd = 'udp send %s %d -s %d ' % (ipaddr, port, bytes_count)
+        else:
+            cmd = 'udp send %s %d -x %s ' % (ipaddr, port, data_bytes.hex())
         self.send_command(cmd)
         if success:
             self._expect_done()
@@ -3269,6 +3280,20 @@ class NodeImpl:
 
     def udp_check_rx(self, bytes_should_rx):
         self._expect('%d bytes' % bytes_should_rx)
+
+    def udp_rx(self) -> bytes:
+        PROMPT = 'spinel-cli > ' if self.node_type == 'ncp-sim' else '> '
+        while True:
+            # match non-newline chars until EOL, such as prompts, whitespace, or UDP results '\d+ bytes from'
+            self._expect(r"[^\n]+$")
+            line = self.pexpect.match.group(0)
+            line_utf = line.decode('utf-8', errors='backslashreplace').lstrip()
+            if line_utf.startswith(PROMPT) or len(line_utf.rstrip()) == 0 or self.__is_logging_line(line_utf):
+                continue
+            else:
+                break
+
+        return line.strip()
 
     def set_routereligible(self, enable: bool):
         cmd = f'routereligible {"enable" if enable else "disable"}'
@@ -3581,6 +3606,52 @@ class NodeImpl:
             index = index + (5 if result[ins] else 1)
         return result
 
+    def dns_query(self, rrtype, first_label, next_labels, server=None, port=53):
+        """
+        Send a DNS query for a given record type and name.
+
+        Output is an array of records (as dictionary) with string keys and values.
+        [
+           {'RecordType': '25',
+           'RecordLength': '78',
+           'TTL': '7105',
+           'Section': 'answer',
+           'Name': 'ins1._IPPS._TCP.DEFAULT.SERVICE.ARPA.',
+           'RecordData': '[001900010000a0610...d45d3]'
+           }
+        ]
+        """
+        cmd = f'dns query {rrtype} {first_label} {next_labels}'
+        if server is not None:
+            cmd += f' {server} {port}'
+
+        self.send_command(cmd)
+        self.simulator.go(10)
+        output = self._expect_command_output()
+
+        # Example output:
+        # DNS query response for ins1._IPPS._TCP.DEFAULT.SERVICE.ARPA.
+        # 0)
+        #   RecordType:25, RecordLength:78, TTL:7105, Section:answer
+        #   Name:ins1._IPPS._TCP.DEFAULT.SERVICE.ARPA.
+        #   RecordData:[00190001000...cdb]
+        # Done
+
+        result = []
+        index = 1  # Skip first line
+        while (index < len(output)):
+            if (index > len(output) - 4):
+                break
+            record = {}
+            for line in output[index + 1:index + 4]:
+                for item in line.strip().split(','):
+                    k, v = item.split(':')
+                    record[k.strip()] = v.strip()
+            result.append(record)
+            index += 4
+
+        return result
+
     def set_mliid(self, mliid: str):
         cmd = f'mliid {mliid}'
         self.send_command(cmd)
@@ -3799,19 +3870,27 @@ class LinuxHost():
 
         self.bash(f'ip link set {self.ETH_DEV} down')
 
-    def get_ether_addrs(self):
-        output = self.bash(f'ip -6 addr list dev {self.ETH_DEV}')
+    def get_ether_addrs(self, ipv4=False, ipv6=True):
+        output = self.bash(f'ip addr list dev {self.ETH_DEV}')
 
         addrs = []
         for line in output:
-            # line example: "inet6 fe80::42:c0ff:fea8:903/64 scope link"
+            # line examples:
+            # "inet6 fe80::42:c0ff:fea8:903/64 scope link"
+            # "inet 192.168.9.1/24 brd 192.168.9.255 scope global eth0"
             line = line.strip().split()
 
-            if line and line[0] == 'inet6':
-                addr = line[1]
-                if '/' in addr:
-                    addr = addr.split('/')[0]
-                addrs.append(addr)
+            if not line or not line[0].startswith('inet'):
+                continue
+            if line[0] == 'inet' and not ipv4:
+                continue
+            if line[0] == 'inet6' and not ipv6:
+                continue
+
+            addr = line[1]
+            if '/' in addr:
+                addr = addr.split('/')[0]
+            addrs.append(addr)
 
         logging.debug('%s: get_ether_addrs: %r', self, addrs)
         return addrs
@@ -4023,6 +4102,8 @@ class LinuxHost():
         for line in self.bash(f'cat {host_name_file}', encoding='raw_unicode_escape'):
             elements = line.split()
             fullname = f'{host_name}.local.'
+            if 'No Such Record' in line:
+                continue
             if fullname not in elements:
                 continue
             if 'Add' not in elements:
@@ -4065,6 +4146,15 @@ class LinuxHost():
                 service['addresses'] = addresses
         return service or None
 
+    def _start_radvd_and_verify(self):
+        self.bash('service radvd start')
+
+        output = self.bash('service radvd status')
+        for line in output:
+            if "running" in line:
+                return
+        raise Exception("Failed to start radvd service")
+
     def start_radvd_service(self, prefix, slaac):
         self.bash("""cat >/etc/radvd.conf <<EOF
 interface eth0
@@ -4089,8 +4179,55 @@ interface eth0
 };
 EOF
 """ % (prefix, 'on' if slaac else 'off'))
-        self.bash('service radvd start')
-        self.bash('service radvd status')  # Make sure radvd service is running
+        self._start_radvd_and_verify()
+
+    def start_pd_radvd_service(self, prefix):
+        self.bash("""cat >/etc/radvd.conf <<EOF
+interface wpan0
+{
+    AdvSendAdvert on;
+
+    AdvReachableTime 20;
+    AdvRetransTimer 20;
+    AdvDefaultLifetime 180;
+    MinRtrAdvInterval 120;
+    MaxRtrAdvInterval 180;
+    AdvDefaultPreference low;
+
+    prefix %s
+    {
+        AdvOnLink on;
+        AdvAutonomous on;
+        AdvRouterAddr off;
+        AdvPreferredLifetime 180;
+        AdvValidLifetime 180;
+    };
+};
+EOF
+""" % (prefix,))
+        self._start_radvd_and_verify()
+
+    def start_rdnss_radvd_service(self, dns_server_address):
+        self.bash(f"""cat >/etc/radvd.conf <<EOF
+interface eth0
+{{
+    AdvSendAdvert on;
+
+    AdvReachableTime 20;
+    AdvRetransTimer 20;
+    AdvDefaultLifetime 180;
+    MinRtrAdvInterval 120;
+    MaxRtrAdvInterval 180;
+    AdvDefaultPreference low;
+
+    RDNSS {dns_server_address}
+    {{
+        AdvRDNSSLifetime 1800;
+    }};
+}};
+EOF
+""")
+        self._start_radvd_and_verify()
 
     def stop_radvd_service(self):
         self.bash('service radvd stop')

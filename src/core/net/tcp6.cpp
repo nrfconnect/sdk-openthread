@@ -31,23 +31,11 @@
  *   This file implements TCP/IPv6 sockets.
  */
 
-#include "openthread-core-config.h"
+#include "tcp6.hpp"
 
 #if OPENTHREAD_CONFIG_TCP_ENABLE
 
-#include "tcp6.hpp"
-
-#include "common/as_core_type.hpp"
-#include "common/code_utils.hpp"
-#include "common/error.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/num_utils.hpp"
-#include "common/random.hpp"
 #include "instance/instance.hpp"
-#include "net/checksum.hpp"
-#include "net/ip6.hpp"
-#include "net/netif.hpp"
 
 #include "../../third_party/tcplp/tcplp.h"
 
@@ -121,7 +109,10 @@ exit:
     return error;
 }
 
-Instance &Tcp::Endpoint::GetInstance(void) const { return AsNonConst(AsCoreType(GetTcb().instance)); }
+Instance &Tcp::Endpoint::GetInstance(void) const
+{
+    return *UpdateActiveInstance(&AsNonConst(AsCoreType(GetTcb().instance)));
+}
 
 const SockAddr &Tcp::Endpoint::GetLocalAddress(void) const
 {
@@ -175,6 +166,7 @@ Error Tcp::Endpoint::Connect(const SockAddr &aSockName, uint32_t aFlags)
         struct sockaddr_in6 sin6p;
 
         tp.t_flags &= ~TF_FASTOPEN;
+        ClearAllBytes(sin6p);
         memcpy(&sin6p.sin6_addr, &aSockName.mAddress, sizeof(sin6p.sin6_addr));
         sin6p.sin6_port = BigEndian::HostSwap16(aSockName.mPort);
         error           = BsdErrorToOtError(tcp6_usr_connect(&tp, &sin6p));
@@ -205,6 +197,7 @@ Error Tcp::Endpoint::SendByReference(otLinkedBuffer &aBuffer, uint32_t aFlags)
 
     if (IS_FASTOPEN(tp.t_flags))
     {
+        ClearAllBytes(sin6p);
         memcpy(&sin6p.sin6_addr, &tp.faddr, sizeof(sin6p.sin6_addr));
         sin6p.sin6_port = tp.fport;
         name            = &sin6p;
@@ -233,6 +226,7 @@ Error Tcp::Endpoint::SendByExtension(size_t aNumBytes, uint32_t aFlags)
 
     if (IS_FASTOPEN(tp.t_flags))
     {
+        ClearAllBytes(sin6p);
         memcpy(&sin6p.sin6_addr, &tp.faddr, sizeof(sin6p.sin6_addr));
         sin6p.sin6_port = tp.fport;
         name            = &sin6p;
@@ -556,7 +550,10 @@ exit:
     return error;
 }
 
-Instance &Tcp::Listener::GetInstance(void) const { return AsNonConst(AsCoreType(GetTcbListen().instance)); }
+Instance &Tcp::Listener::GetInstance(void) const
+{
+    return *UpdateActiveInstance(&AsNonConst(AsCoreType(GetTcbListen().instance)));
+}
 
 Error Tcp::Listener::Listen(const SockAddr &aSockName)
 {
@@ -637,22 +634,21 @@ Error Tcp::HandleMessage(ot::Ip6::Header &aIp6Header, Message &aMessage, Message
     struct tcphdr  *tcpHeader;
 
     Endpoint *endpoint;
-    Endpoint *endpointPrev;
-
     Listener *listener;
-    Listener *listenerPrev;
 
     struct tcplp_signals sig;
     int                  nextAction;
 
-    VerifyOrExit(length == aMessage.GetLength() - aMessage.GetOffset(), error = kErrorParse);
-    VerifyOrExit(length >= sizeof(Tcp::Header), error = kErrorParse);
+    VerifyOrExit(length == aMessage.DetermineLengthAfterOffset(), error = kErrorParse);
+    VerifyOrExit(length >= sizeof(TcpHeader), error = kErrorParse);
     SuccessOrExit(error = aMessage.Read(aMessage.GetOffset() + offsetof(struct tcphdr, th_off_x2), headerSize));
     headerSize = static_cast<uint8_t>((headerSize >> TH_OFF_SHIFT) << 2);
     VerifyOrExit(headerSize >= sizeof(struct tcphdr) && headerSize <= sizeof(header) &&
                      static_cast<uint16_t>(headerSize) <= length,
                  error = kErrorParse);
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     SuccessOrExit(error = Checksum::VerifyMessageChecksum(aMessage, aMessageInfo, kProtoTcp));
+#endif
     SuccessOrExit(error = aMessage.Read(aMessage.GetOffset(), &header[0], headerSize));
 
     ip6Header = reinterpret_cast<struct ip6_hdr *>(&aIp6Header);
@@ -662,7 +658,8 @@ Error Tcp::HandleMessage(ot::Ip6::Header &aIp6Header, Message &aMessage, Message
     aMessageInfo.mPeerPort = BigEndian::HostSwap16(tcpHeader->th_sport);
     aMessageInfo.mSockPort = BigEndian::HostSwap16(tcpHeader->th_dport);
 
-    endpoint = mEndpoints.FindMatching(aMessageInfo, endpointPrev);
+    endpoint = mEndpoints.FindMatching(aMessageInfo);
+
     if (endpoint != nullptr)
     {
         struct tcpcb *tp = &endpoint->GetTcb();
@@ -671,7 +668,7 @@ Error Tcp::HandleMessage(ot::Ip6::Header &aIp6Header, Message &aMessage, Message
         size_t          priorBacklog = endpoint->GetSendBufferBytes() - endpoint->GetInFlightBytes();
 
         ClearAllBytes(sig);
-        nextAction = tcp_input(ip6Header, tcpHeader, &aMessage, tp, nullptr, &sig);
+        nextAction = tcplp_input(ip6Header, tcpHeader, &aMessage, tp, nullptr, &sig);
         if (nextAction != RELOOKUP_REQUIRED)
         {
             ProcessSignals(*endpoint, priorHead, priorBacklog, sig);
@@ -680,13 +677,14 @@ Error Tcp::HandleMessage(ot::Ip6::Header &aIp6Header, Message &aMessage, Message
         /* If the matching socket was in the TIME-WAIT state, then we try passive sockets. */
     }
 
-    listener = mListeners.FindMatching(aMessageInfo, listenerPrev);
+    listener = mListeners.FindMatching(aMessageInfo);
+
     if (listener != nullptr)
     {
         struct tcpcb_listen *tpl = &listener->GetTcbListen();
 
         ClearAllBytes(sig);
-        nextAction = tcp_input(ip6Header, tcpHeader, &aMessage, nullptr, tpl, &sig);
+        nextAction = tcplp_input(ip6Header, tcpHeader, &aMessage, nullptr, tpl, &sig);
         OT_ASSERT(nextAction != RELOOKUP_REQUIRED);
         if (sig.accepted_connection != nullptr)
         {
@@ -954,7 +952,7 @@ extern "C" {
 otMessage *tcplp_sys_new_message(otInstance *aInstance)
 {
     Instance &instance = AsCoreType(aInstance);
-    Message  *message  = instance.Get<ot::Ip6::Ip6>().NewMessage(0);
+    Message  *message  = instance.Get<ot::Ip6::Ip6>().NewMessage();
 
     if (message)
     {
@@ -1102,13 +1100,9 @@ void tcplp_sys_connection_lost(struct tcpcb *aTcb, uint8_t aErrNum)
 
 void tcplp_sys_on_state_change(struct tcpcb *aTcb, int aNewState)
 {
-    if (aNewState == TCP6S_CLOSED)
-    {
-        /* Re-initialize the TCB. */
-        cbuf_pop(&aTcb->recvbuf, cbuf_used_space(&aTcb->recvbuf));
-        aTcb->accepted_from = nullptr;
-        initialize_tcb(aTcb);
-    }
+    OT_UNUSED_VARIABLE(aTcb);
+    OT_UNUSED_VARIABLE(aNewState);
+
     /* Any adaptive changes to the sleep interval would go here. */
 }
 

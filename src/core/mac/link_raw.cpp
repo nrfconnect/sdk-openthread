@@ -35,16 +35,10 @@
 
 #if OPENTHREAD_RADIO || OPENTHREAD_CONFIG_LINK_RAW_ENABLE
 
-#include <string.h>
 #include <openthread/diag.h>
 #include <openthread/platform/diag.h>
 
-#include "common/debug.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/random.hpp"
 #include "instance/instance.hpp"
-#include "mac/mac_frame.hpp"
 
 namespace ot {
 namespace Mac {
@@ -167,6 +161,17 @@ exit:
     return error;
 }
 
+Error LinkRaw::SetAlternateShortAddress(ShortAddress aShortAddress)
+{
+    Error error = kErrorNone;
+
+    VerifyOrExit(IsEnabled(), error = kErrorInvalidState);
+    mSubMac.SetAlternateShortAddress(aShortAddress);
+
+exit:
+    return error;
+}
+
 Error LinkRaw::Receive(void)
 {
     Error error = kErrorNone;
@@ -202,13 +207,13 @@ exit:
     return error;
 }
 
-void LinkRaw::InvokeTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
+void LinkRaw::InvokeTransmitDone(TxFrame::ParseInfo &aFrameInfo, RxFrame *aAckFrame, Error aError)
 {
-    LogDebg("TransmitDone(%d bytes), error:%s", aFrame.mLength, ErrorToString(aError));
+    LogDebg("TransmitDone(%u bytes), error:%s", aFrameInfo.GetTxFrame()->GetLength(), ErrorToString(aError));
 
     if (mTransmitDoneCallback)
     {
-        mTransmitDoneCallback(&GetInstance(), &aFrame, aAckFrame, aError);
+        mTransmitDoneCallback(&GetInstance(), aFrameInfo.GetTxFrame(), aAckFrame, aError);
         mTransmitDoneCallback = nullptr;
     }
 }
@@ -235,24 +240,13 @@ void LinkRaw::InvokeEnergyScanDone(int8_t aEnergyScanMaxRssi)
     }
 }
 
-Error LinkRaw::SetMacKey(uint8_t    aKeyIdMode,
-                         uint8_t    aKeyId,
-                         const Key &aPrevKey,
-                         const Key &aCurrKey,
-                         const Key &aNextKey)
+Error LinkRaw::SetMode1MacKeys(uint8_t aKeyIndex, const Key &aPrevKey, const Key &aCurKey, const Key &aNextKey)
 {
-    Error       error = kErrorNone;
-    KeyMaterial prevKey;
-    KeyMaterial currKey;
-    KeyMaterial nextKey;
+    Error error = kErrorNone;
 
     VerifyOrExit(IsEnabled(), error = kErrorInvalidState);
 
-    prevKey.SetFrom(aPrevKey);
-    currKey.SetFrom(aCurrKey);
-    nextKey.SetFrom(aNextKey);
-
-    mSubMac.SetMacKey(aKeyIdMode, aKeyId, prevKey, currKey, nextKey);
+    mSubMac.SetMode1MacKeys(aKeyIndex, aPrevKey, aCurKey, aNextKey);
 
 exit:
     return error;
@@ -273,14 +267,17 @@ exit:
 
 #if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_INFO)
 
-void LinkRaw::RecordFrameTransmitStatus(const TxFrame &aFrame, Error aError, uint8_t aRetryCount, bool aWillRetx)
+void LinkRaw::RecordFrameTransmitStatus(const TxFrame::ParseInfo &aFrameInfo,
+                                        Error                     aError,
+                                        uint8_t                   aRetryCount,
+                                        bool                      aWillRetx)
 {
     OT_UNUSED_VARIABLE(aWillRetx);
 
     if (aError != kErrorNone)
     {
         LogInfo("Frame tx failed, error:%s, retries:%d/%d, %s", ErrorToString(aError), aRetryCount,
-                aFrame.GetMaxFrameRetries(), aFrame.ToInfoString().AsCString());
+                aFrameInfo.GetTxFrame()->GetMaxFrameRetries(), aFrameInfo.ToInfoString().AsCString());
     }
 }
 

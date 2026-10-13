@@ -33,10 +33,7 @@
 
 #include "openthread-core-config.h"
 
-#include <openthread/netdata.h>
-
-#include "common/as_core_type.hpp"
-#include "common/locator_getters.hpp"
+#include "instance/instance.hpp"
 
 using namespace ot;
 
@@ -70,7 +67,7 @@ otError otNetDataGetNextOnMeshPrefix(otInstance            *aInstance,
 {
     AssertPointerIsNotNull(aIterator);
 
-    return AsCoreType(aInstance).Get<NetworkData::Leader>().GetNextOnMeshPrefix(*aIterator, AsCoreType(aConfig));
+    return AsCoreType(aInstance).Get<NetworkData::Leader>().GetNext(*aIterator, AsCoreType(aConfig));
 }
 
 #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
@@ -84,14 +81,14 @@ otError otNetDataGetNextRoute(otInstance *aInstance, otNetworkDataIterator *aIte
 {
     AssertPointerIsNotNull(aIterator);
 
-    return AsCoreType(aInstance).Get<NetworkData::Leader>().GetNextExternalRoute(*aIterator, AsCoreType(aConfig));
+    return AsCoreType(aInstance).Get<NetworkData::Leader>().GetNext(*aIterator, AsCoreType(aConfig));
 }
 
 otError otNetDataGetNextService(otInstance *aInstance, otNetworkDataIterator *aIterator, otServiceConfig *aConfig)
 {
     AssertPointerIsNotNull(aIterator);
 
-    return AsCoreType(aInstance).Get<NetworkData::Leader>().GetNextService(*aIterator, AsCoreType(aConfig));
+    return AsCoreType(aInstance).Get<NetworkData::Leader>().GetNext(*aIterator, AsCoreType(aConfig));
 }
 
 otError otNetDataGetNextLowpanContextInfo(otInstance            *aInstance,
@@ -100,8 +97,7 @@ otError otNetDataGetNextLowpanContextInfo(otInstance            *aInstance,
 {
     AssertPointerIsNotNull(aIterator);
 
-    return AsCoreType(aInstance).Get<NetworkData::Leader>().GetNextLowpanContextInfo(*aIterator,
-                                                                                     AsCoreType(aContextInfo));
+    return AsCoreType(aInstance).Get<NetworkData::Leader>().GetNext(*aIterator, AsCoreType(aContextInfo));
 }
 
 void otNetDataGetCommissioningDataset(otInstance *aInstance, otCommissioningDataset *aDataset)
@@ -111,12 +107,12 @@ void otNetDataGetCommissioningDataset(otInstance *aInstance, otCommissioningData
 
 uint8_t otNetDataGetVersion(otInstance *aInstance)
 {
-    return AsCoreType(aInstance).Get<Mle::MleRouter>().GetLeaderData().GetDataVersion(NetworkData::kFullSet);
+    return AsCoreType(aInstance).Get<Mle::Mle>().GetLeaderData().GetDataVersion(NetworkData::kFullSet);
 }
 
 uint8_t otNetDataGetStableVersion(otInstance *aInstance)
 {
-    return AsCoreType(aInstance).Get<Mle::MleRouter>().GetLeaderData().GetDataVersion(NetworkData::kStableSubset);
+    return AsCoreType(aInstance).Get<Mle::Mle>().GetLeaderData().GetDataVersion(NetworkData::kStableSubset);
 }
 
 otError otNetDataSteeringDataCheckJoiner(otInstance *aInstance, const otExtAddress *aEui64)

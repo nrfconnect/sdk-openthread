@@ -31,8 +31,8 @@
  *   This file includes definitions for `Heap::String` (a heap allocated string).
  */
 
-#ifndef HEAP_STRING_HPP_
-#define HEAP_STRING_HPP_
+#ifndef OT_CORE_COMMON_HEAP_STRING_HPP_
+#define OT_CORE_COMMON_HEAP_STRING_HPP_
 
 #include "openthread-core-config.h"
 
@@ -49,14 +49,12 @@ namespace Heap {
  * The buffer to store the string is allocated from heap and is managed by the `Heap::String` class itself, e.g., it may
  * be reused and/or freed and reallocated when the string is set. The `Heap::String` destructor will always free the
  * allocated buffer.
- *
  */
-class String : public Unequatable<String>
+class OT_GSL_OWNER String : public Unequatable<String>
 {
 public:
     /**
      * Initializes the `String` as null (or empty).
-     *
      */
     String(void)
         : mStringBuffer(nullptr)
@@ -68,7 +66,6 @@ public:
      *
      * `String` is non-copyable (copy constructor is deleted) but move constructor is provided to allow it to to be
      * used as return type (return by value) from functions/methods (which will then use move semantics).
-     *
      */
     String(String &&aString)
         : mStringBuffer(aString.mStringBuffer)
@@ -78,7 +75,6 @@ public:
 
     /**
      * This is the destructor for `HealString` object
-     *
      */
     ~String(void) { Free(); }
 
@@ -88,7 +84,6 @@ public:
      *
      * @retval TRUE  The `String` is null.
      * @retval FALSE The `String` is not null.
-     *
      */
     bool IsNull(void) const { return (mStringBuffer == nullptr); }
 
@@ -96,9 +91,8 @@ public:
      * Returns the `String` as a C string.
      *
      * @returns A pointer to C string buffer or `nullptr` if the `String` is null (never set or freed).
-     *
      */
-    const char *AsCString(void) const { return mStringBuffer; }
+    const char *AsCString(void) const OT_LIFETIME_BOUND { return mStringBuffer; }
 
     /**
      * Sets the string from a given C string.
@@ -107,7 +101,6 @@ public:
      *
      * @retval kErrorNone     Successfully set the string.
      * @retval kErrorNoBufs   Failed to allocate buffer for string.
-     *
      */
     Error Set(const char *aCString);
 
@@ -118,27 +111,34 @@ public:
      *
      * @retval kErrorNone     Successfully set the string.
      * @retval kErrorNoBufs   Failed to allocate buffer for string.
-     *
      */
     Error Set(const String &aString) { return Set(aString.AsCString()); }
 
     /**
-     * Sets the string from another `String`.
+     * Sets the string by taking ownership of the buffer from another `String`.
      *
-     * @param[in] aString     The other `String` to set from (rvalue reference using move semantics).
+     * This method uses move semantics. After the call, `aString` will be null and this `String` will hold the
+     * buffer previously held by `aString`.
      *
-     * @retval kErrorNone     Successfully set the string.
-     * @retval kErrorNoBufs   Failed to allocate buffer for string.
-     *
+     * @param[in] aString     An rvalue reference to another `String` to take from.
      */
-    Error Set(String &&aString);
+    void TakeFrom(String &&aString);
+
+    /**
+     * Casts the `String` to an rvalue reference.
+     *
+     * This method is intended to be used with `TakeFrom()` to explicitly indicate a move operation and transfer of
+     * the underlying buffer.
+     *
+     * @returns An rvalue reference to this `String`.
+     */
+    String &&Move(void) OT_LIFETIME_BOUND { return static_cast<String &&>(*this); }
 
     /**
      * Frees any buffer allocated by the `String`.
      *
      * The `String` destructor will automatically call `Free()`. This method allows caller to free buffer
      * explicitly.
-     *
      */
     void Free(void);
 
@@ -149,7 +149,6 @@ public:
      *
      * @retval TRUE   If the two strings are equal.
      * @retval FALSE  If the two strings are not equal.
-     *
      */
     bool operator==(const char *aCString) const;
 
@@ -160,7 +159,6 @@ public:
      *
      * @retval TRUE   If the two strings are not equal.
      * @retval FALSE  If the two strings are equal.
-     *
      */
     bool operator!=(const char *aCString) const { return !(*this == aCString); }
 
@@ -171,9 +169,18 @@ public:
      *
      * @retval TRUE   If the two strings are equal.
      * @retval FALSE  If the two strings are not equal.
-     *
      */
     bool operator==(const String &aString) const { return (*this == aString.AsCString()); }
+
+    /**
+     * Overloads operator `!=` to evaluate whether or not two `String` are not equal.
+     *
+     * @param[in]  aString  The other string to compare with.
+     *
+     * @retval TRUE   If the two strings are not equal.
+     * @retval FALSE  If the two strings are equal.
+     */
+    bool operator!=(const String &aString) const { return (*this != aString.AsCString()); }
 
     String(const String &)            = delete;
     String &operator=(const String &) = delete;
@@ -185,4 +192,4 @@ private:
 } // namespace Heap
 } // namespace ot
 
-#endif // HEAP_STRING_HPP_
+#endif // OT_CORE_COMMON_HEAP_STRING_HPP_

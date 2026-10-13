@@ -29,22 +29,11 @@
 /**
  * @file
  *   This file implements common methods for manipulating MeshCoP Datasets.
- *
  */
 
 #include "dataset.hpp"
 
-#include <stdio.h>
-
-#include "common/code_utils.hpp"
-#include "common/encoding.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
 #include "instance/instance.hpp"
-#include "mac/mac_types.hpp"
-#include "meshcop/meshcop_tlvs.hpp"
-#include "meshcop/timestamp.hpp"
-#include "thread/mle_tlvs.hpp"
 
 namespace ot {
 namespace MeshCoP {
@@ -55,7 +44,7 @@ Error Dataset::Info::GenerateRandom(Instance &aInstance)
 {
     Error            error;
     Mac::ChannelMask supportedChannels = aInstance.Get<Mac::Mac>().GetSupportedChannelMask();
-    Mac::ChannelMask preferredChannels(aInstance.Get<Radio>().GetPreferredChannelMask());
+    Mac::ChannelMask preferredChannels(aInstance.Get<Radio::Radio>().GetPreferredChannelMask());
     StringWriter     nameWriter(mNetworkName.m8, sizeof(mNetworkName));
 
     // If the preferred channel mask is not empty, select a random
@@ -81,10 +70,10 @@ Error Dataset::Info::GenerateRandom(Instance &aInstance)
 
     SuccessOrExit(error = AsCoreType(&mNetworkKey).GenerateRandom());
     SuccessOrExit(error = AsCoreType(&mPskc).GenerateRandom());
-    SuccessOrExit(error = Random::Crypto::Fill(mExtendedPanId));
+    SuccessOrExit(error = AsCoreType(&mExtendedPanId).GenerateRandom());
     SuccessOrExit(error = AsCoreType(&mMeshLocalPrefix).GenerateRandomUla());
 
-    nameWriter.Append("%s-%04x", NetworkName::kNetworkNameInit, mPanId);
+    nameWriter.Append("%s-%04x", NetworkIdentity::kDefaultNetworkName, mPanId);
 
     mComponents.mIsActiveTimestampPresent = true;
     mComponents.mIsNetworkKeyPresent      = true;
@@ -118,7 +107,7 @@ Error Dataset::ValidateTlvs(void) const
 
     for (const Tlv *tlv = GetTlvsStart(); tlv < end; tlv = tlv->GetNext())
     {
-        VerifyOrExit(!tlv->IsExtended() && ((tlv + 1) <= end) && (tlv->GetNext() <= end));
+        VerifyOrExit(((tlv + 1) <= end) && !tlv->IsExtended() && (tlv->GetNext() <= end));
         VerifyOrExit(IsTlvValid(*tlv));
 
         // Ensure there are no duplicate TLVs.
@@ -137,13 +126,20 @@ bool Dataset::IsTlvValid(const Tlv &aTlv)
     bool    isValid   = true;
     uint8_t minLength = 0;
 
+    // Validate the TLV format, i.e., that the value is long enough for
+    // the TLV type. TLV types whose `IsValid()` does its own length
+    // checking are not included here.
+
     switch (aTlv.GetType())
     {
-    case Tlv::kPanId:
-        minLength = sizeof(PanIdTlv::UintValueType);
+    case Tlv::kActiveTimestamp:
+        minLength = sizeof(ActiveTimestampTlv::ValueType);
         break;
-    case Tlv::kExtendedPanId:
-        minLength = sizeof(ExtendedPanIdTlv::ValueType);
+    case Tlv::kPendingTimestamp:
+        minLength = sizeof(PendingTimestampTlv::ValueType);
+        break;
+    case Tlv::kDelayTimer:
+        minLength = sizeof(DelayTimerTlv::UintValueType);
         break;
     case Tlv::kPskc:
         minLength = sizeof(PskcTlv::ValueType);
@@ -151,25 +147,18 @@ bool Dataset::IsTlvValid(const Tlv &aTlv)
     case Tlv::kNetworkKey:
         minLength = sizeof(NetworkKeyTlv::ValueType);
         break;
+    case Tlv::kPanId:
+        minLength = sizeof(PanIdTlv::UintValueType);
+        break;
+    case Tlv::kExtendedPanId:
+        minLength = sizeof(ExtendedPanIdTlv::ValueType);
+        break;
     case Tlv::kMeshLocalPrefix:
         minLength = sizeof(MeshLocalPrefixTlv::ValueType);
         break;
     case Tlv::kChannel:
-        VerifyOrExit(aTlv.GetLength() >= sizeof(ChannelTlvValue), isValid = false);
-        isValid = aTlv.ReadValueAs<ChannelTlv>().IsValid();
+        minLength = sizeof(ChannelTlvValue);
         break;
-    case Tlv::kNetworkName:
-        isValid = As<NetworkNameTlv>(aTlv).IsValid();
-        break;
-
-    case Tlv::kSecurityPolicy:
-        isValid = As<SecurityPolicyTlv>(aTlv).IsValid();
-        break;
-
-    case Tlv::kChannelMask:
-        isValid = As<ChannelMaskTlv>(aTlv).IsValid();
-        break;
-
     default:
         break;
     }
@@ -177,6 +166,38 @@ bool Dataset::IsTlvValid(const Tlv &aTlv)
     if (minLength > 0)
     {
         isValid = (aTlv.GetLength() >= minLength);
+        VerifyOrExit(isValid);
+    }
+
+    // Validate the TLV value.
+
+    switch (aTlv.GetType())
+    {
+    case Tlv::kPanId:
+        // The broadcast PAN ID does not identify a network.
+        isValid = (aTlv.ReadValueAs<PanIdTlv>() != Mac::kPanIdBroadcast);
+        break;
+    case Tlv::kExtendedPanId:
+        isValid = aTlv.ReadValueAs<ExtendedPanIdTlv>().IsValid();
+        break;
+    case Tlv::kMeshLocalPrefix:
+        // The Mesh-Local Prefix is required to be a locally assigned ULA prefix.
+        isValid = aTlv.ReadValueAs<MeshLocalPrefixTlv>().IsLocallyAssignedUla();
+        break;
+    case Tlv::kChannel:
+        isValid = aTlv.ReadValueAs<ChannelTlv>().IsValid();
+        break;
+    case Tlv::kNetworkName:
+        isValid = As<NetworkNameTlv>(aTlv).IsValid();
+        break;
+    case Tlv::kSecurityPolicy:
+        isValid = As<SecurityPolicyTlv>(aTlv).IsValid();
+        break;
+    case Tlv::kChannelMask:
+        isValid = As<ChannelMaskTlv>(aTlv).IsValid();
+        break;
+    default:
+        break;
     }
 
 exit:
@@ -549,6 +570,27 @@ Error Dataset::WriteTimestamp(Type aType, const Timestamp &aTimestamp)
 
 void Dataset::RemoveTimestamp(Type aType) { RemoveTlv(TimestampTlvFor(aType)); }
 
+bool Dataset::Equals(const Dataset &aOther) const
+{
+    bool equals = false;
+
+    VerifyOrExit(mLength == aOther.mLength);
+
+    // Ensure every TLV in this dataset is present in `aOther` with the same type and value.
+    for (const Tlv *tlv = GetTlvsStart(); tlv < GetTlvsEnd(); tlv = tlv->GetNext())
+    {
+        const Tlv *otherTlv = aOther.FindTlv(tlv->GetType());
+
+        VerifyOrExit(otherTlv != nullptr);
+        VerifyOrExit(memcmp(tlv, otherTlv, tlv->GetSize()) == 0);
+    }
+
+    equals = true;
+
+exit:
+    return equals;
+}
+
 bool Dataset::IsSubsetOf(const Dataset &aOther) const
 {
     bool isSubset = false;
@@ -572,6 +614,51 @@ bool Dataset::IsSubsetOf(const Dataset &aOther) const
 
 exit:
     return isSubset;
+}
+
+bool Dataset::AffectsConnectivity(Instance &aInstance) const
+{
+    bool               affects = true;
+    ChannelTlvValue    channelValue;
+    Mac::PanId         panId;
+    Ip6::NetworkPrefix meshLocalPrefix;
+
+    if (Read<ChannelTlv>(channelValue) == kErrorNone)
+    {
+        VerifyOrExit(channelValue.GetChannel() == aInstance.Get<Mac::Mac>().GetPanChannel());
+    }
+
+    if (Read<PanIdTlv>(panId) == kErrorNone)
+    {
+        VerifyOrExit(panId == aInstance.Get<Mac::Mac>().GetPanId());
+    }
+
+    if (Read<MeshLocalPrefixTlv>(meshLocalPrefix) == kErrorNone)
+    {
+        VerifyOrExit(meshLocalPrefix == aInstance.Get<Mle::Mle>().GetMeshLocalPrefix());
+    }
+
+    VerifyOrExit(!AffectsNetworkKey(aInstance));
+
+    affects = false;
+
+exit:
+    return affects;
+}
+
+bool Dataset::AffectsNetworkKey(Instance &aInstance) const
+{
+    bool       affects = false;
+    NetworkKey networkKey;
+    NetworkKey localNetworkKey;
+
+    SuccessOrExit(Read<NetworkKeyTlv>(networkKey));
+
+    aInstance.Get<KeyManager>().GetNetworkKey(localNetworkKey);
+    affects = (networkKey != localNetworkKey);
+
+exit:
+    return affects;
 }
 
 const char *Dataset::TypeToString(Type aType) { return (aType == kActive) ? "Active" : "Pending"; }

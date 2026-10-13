@@ -38,7 +38,6 @@
 #include <openthread/cli.h>
 #include <openthread/diag.h>
 #include <openthread/tasklet.h>
-#include <openthread/platform/logging.h>
 #include <openthread/platform/misc.h>
 
 #include "openthread-system.h"
@@ -51,7 +50,6 @@
  * Initializes the CLI app.
  *
  * @param[in]  aInstance  The OpenThread instance structure.
- *
  */
 extern void otAppCliInit(otInstance *aInstance);
 
@@ -60,8 +58,6 @@ OT_TOOL_WEAK void *otPlatCAlloc(size_t aNum, size_t aSize) { return calloc(aNum,
 
 OT_TOOL_WEAK void otPlatFree(void *aPtr) { free(aPtr); }
 #endif
-
-void otTaskletsSignalPending(otInstance *aInstance) { OT_UNUSED_VARIABLE(aInstance); }
 
 #if OPENTHREAD_POSIX && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
 static otError ProcessExit(void *aContext, uint8_t aArgsLength, char *aArgs[])
@@ -75,6 +71,9 @@ static otError ProcessExit(void *aContext, uint8_t aArgsLength, char *aArgs[])
 
 #if OPENTHREAD_EXAMPLES_SIMULATION
 extern otError ProcessNodeIdFilter(void *aContext, uint8_t aArgsLength, char *aArgs[]);
+#if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
+extern otError ProcessTrelTest(void *aContext, uint8_t aArgsLength, char *aArgs[]);
+#endif
 #endif
 
 static const otCliCommand kCommands[] = {
@@ -95,6 +94,9 @@ static const otCliCommand kCommands[] = {
      *     - `nodeidfilter`               :  Outputs filter mode (allow-list or deny-list) and filtered node IDs.
      */
     {"nodeidfilter", ProcessNodeIdFilter},
+#if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
+    {"treltest", ProcessTrelTest},
+#endif
 #endif
 };
 #endif // OPENTHREAD_POSIX && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
@@ -160,14 +162,3 @@ pseudo_reset:
 
     return 0;
 }
-
-#if OPENTHREAD_CONFIG_LOG_OUTPUT == OPENTHREAD_CONFIG_LOG_OUTPUT_APP
-void otPlatLog(otLogLevel aLogLevel, otLogRegion aLogRegion, const char *aFormat, ...)
-{
-    va_list ap;
-
-    va_start(ap, aFormat);
-    otCliPlatLogv(aLogLevel, aLogRegion, aFormat, ap);
-    va_end(ap);
-}
-#endif

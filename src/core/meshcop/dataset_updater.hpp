@@ -31,8 +31,8 @@
  *   This file includes definitions for Dataset Updater.
  */
 
-#ifndef DATASET_UPDATER_HPP_
-#define DATASET_UPDATER_HPP_
+#ifndef OT_CORE_MESHCOP_DATASET_UPDATER_HPP_
+#define OT_CORE_MESHCOP_DATASET_UPDATER_HPP_
 
 #include "openthread-core-config.h"
 
@@ -54,7 +54,6 @@ namespace MeshCoP {
 
 /**
  * Implements the Dataset Updater.
- *
  */
 class DatasetUpdater : public InstanceLocator, private NonCopyable
 {
@@ -63,7 +62,6 @@ class DatasetUpdater : public InstanceLocator, private NonCopyable
 public:
     /**
      * Default delay (in ms).
-     *
      */
     static constexpr uint32_t kDefaultDelay = OPENTHREAD_CONFIG_DATASET_UPDATER_DEFAULT_DELAY;
 
@@ -71,7 +69,6 @@ public:
      * Initializes a `DatasetUpdater` object.
      *
      * @param[in]   aInstance  A reference to the OpenThread instance.
-     *
      */
     explicit DatasetUpdater(Instance &aInstance);
 
@@ -80,7 +77,6 @@ public:
      * reporting success or failure status of the request.
      *
      * The function pointer has the syntax `void (*UpdaterCallback)(Error aError, void *aContext)`.
-     *
      */
     typedef otDatasetUpdaterCallback UpdaterCallback;
 
@@ -100,13 +96,11 @@ public:
      * @retval kErrorInvalidArgs    The @p aDataset is not valid (contains Active or Pending Timestamp).
      * @retval kErrorBusy           Cannot start update, a previous one is ongoing.
      * @retval kErrorNoBufs         Could not allocated buffer to save Dataset.
-     *
      */
     Error RequestUpdate(const Dataset::Info &aDataset, UpdaterCallback aCallback, void *aContext);
 
     /**
      * Cancels an ongoing (if any) Operational Dataset update request.
-     *
      */
     void CancelUpdate(void);
 
@@ -115,7 +109,6 @@ public:
      *
      * @retval TRUE    There is an ongoing update.
      * @retval FALSE   There is no ongoing update.
-     *
      */
     bool IsUpdateOngoing(void) const { return (mDataset != nullptr); }
 
@@ -134,4 +127,4 @@ private:
 
 #endif // (OPENTHREAD_CONFIG_DATASET_UPDATER_ENABLE || OPENTHREAD_CONFIG_CHANNEL_MANAGER_ENABLE) && OPENTHREAD_FTD
 
-#endif // DATASET_UPDATER_HPP_
+#endif // OT_CORE_MESHCOP_DATASET_UPDATER_HPP_

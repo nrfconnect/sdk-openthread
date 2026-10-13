@@ -31,12 +31,13 @@
  *   This file includes definitions for `FrameData`.
  */
 
-#ifndef FRAME_DATA_HPP_
-#define FRAME_DATA_HPP_
+#ifndef OT_CORE_COMMON_FRAME_DATA_HPP_
+#define OT_CORE_COMMON_FRAME_DATA_HPP_
 
 #include "openthread-core-config.h"
 
 #include "common/data.hpp"
+#include "common/encoding.hpp"
 #include "common/type_traits.hpp"
 
 namespace ot {
@@ -46,9 +47,8 @@ namespace ot {
  *
  * It provide helper method to parse the content. As data is parsed and read, the `FrameData` is updated to skip over
  * the read content.
- *
  */
-class FrameData : public Data<kWithUint16Length>
+class OT_GSL_POINTER FrameData : public Data<kWithUint16Length>
 {
 public:
     /**
@@ -59,7 +59,6 @@ public:
      *
      * @retval TRUE   There are enough remaining bytes to read @p aLength bytes.
      * @retval FALSE  There are not enough remaining bytes to read @p aLength bytes.
-     *
      */
     bool CanRead(uint16_t aLength) const { return GetLength() >= aLength; }
 
@@ -72,61 +71,26 @@ public:
      *
      * @retval kErrorNone   Successfully read `uint8_t` value and skipped over it.
      * @retval kErrorParse  Not enough bytes remaining to read.
-     *
      */
     Error ReadUint8(uint8_t &aUint8);
 
     /**
-     * Reads an `uint16_t` value assuming big endian encoding from the `FrameData`.
+     * Reads an integer value with a specified encoding from the `FrameData`.
+     *
+     * The value is read from the frame data, converted from the specified @p kEncoding byte order to
+     * host byte order, and returned in @p aUint.
      *
      * If read successfully, the `FrameData` is updated to skip over the read content.
      *
-     * @param[out] aUint16   A reference to an `uint16_t` to return the read value.
+     * @tparam  kEncoding  The encoding of the integer in the frame data (big or little endian).
+     * @tparam  UintType   The unsigned integer type.
      *
-     * @retval kErrorNone   Successfully read `uint16_t` value and skipped over it.
-     * @retval kErrorParse  Not enough bytes remaining to read.
+     * @param[out] aUint     A reference to the integer to return the read value.
      *
+     * @retval kErrorNone    Successfully read the value and skipped over it.
+     * @retval kErrorParse   Not enough bytes remaining to read.
      */
-    Error ReadBigEndianUint16(uint16_t &aUint16);
-
-    /**
-     * Reads an `uint32_t` value assuming big endian encoding from the `FrameData`.
-     *
-     * If read successfully, the `FrameData` is updated to skip over the read content.
-     *
-     * @param[out] aUint32   A reference to an `uint32_t` to return the read value.
-     *
-     * @retval kErrorNone   Successfully read `uint32_t` value and skipped over it.
-     * @retval kErrorParse  Not enough bytes remaining to read.
-     *
-     */
-    Error ReadBigEndianUint32(uint32_t &aUint32);
-
-    /**
-     * Reads an `uint16_t` value assuming little endian encoding from the `FrameData`.
-     *
-     * If read successfully, the `FrameData` is updated to skip over the read content.
-     *
-     * @param[out] aUint16   A reference to an `uint16_t` to return the read value.
-     *
-     * @retval kErrorNone   Successfully read `uint16_t` value and skipped over it.
-     * @retval kErrorParse  Not enough bytes remaining to read.
-     *
-     */
-    Error ReadLittleEndianUint16(uint16_t &aUint16);
-
-    /**
-     * Reads an `uint32_t` value assuming little endian encoding from the `FrameData`.
-     *
-     * If read successfully, the `FrameData` is updated to skip over the read content.
-     *
-     * @param[out] aUint32   A reference to an `uint32_t` to return the read value.
-     *
-     * @retval kErrorNone   Successfully read `uint32_t` value and skipped over it.
-     * @retval kErrorParse  Not enough bytes remaining to read.
-     *
-     */
-    Error ReadLittleEndianUint32(uint32_t &aUint32);
+    template <Encoding kEncoding, typename UintType> Error ReadUint(UintType &aUint);
 
     /**
      * Reads a given number of bytes from the `FrameData`.
@@ -138,7 +102,6 @@ public:
      *
      * @retval kErrorNone   Successfully read @p aLength bytes into @p aBuffer and skipped over them.
      * @retval kErrorParse  Not enough bytes remaining to read @p aLength.
-     *
      */
     Error ReadBytes(void *aBuffer, uint16_t aLength);
 
@@ -151,7 +114,6 @@ public:
      *
      * @retval kErrorNone     Successfully read @p aObject and skipped over the read content.
      * @retval kErrorParse    Not enough bytes remaining to read the entire object.
-     *
      */
     template <typename ObjectType> Error Read(ObjectType &aObject)
     {
@@ -161,17 +123,44 @@ public:
     }
 
     /**
+     * Reads an object from the `FrameData` without copying.
+     *
+     * @tparam ObjectType   The object type to read from the `FrameData`.
+     *
+     * @returns A pointer to the object in the `FrameData` buffer and skips over it, or `nullptr` if not enough bytes
+     *          remain to read the entire object.
+     */
+    template <typename ObjectType> const ObjectType *Read(void) OT_LIFETIME_BOUND
+    {
+        static_assert(!TypeTraits::IsPointer<ObjectType>::kValue, "ObjectType must not be a pointer");
+
+        return static_cast<const ObjectType *>(ReadLength(sizeof(ObjectType)));
+    }
+
+    /**
      * Skips over a given number of bytes from `FrameData`.
      *
      * The caller MUST make sure that the @p aLength is smaller than current data length. Otherwise the behavior of
      * this method is undefined.
      *
      * @param[in] aLength   The length (number of bytes) to skip over.
-     *
      */
     void SkipOver(uint16_t aLength);
+
+    /**
+     * Removes a footer of a given length from the end of the `FrameData`.
+     *
+     * @param[in] aLength   The length of the footer (number of bytes) to remove.
+     *
+     * @retval kErrorNone   Successfully removed the footer.
+     * @retval kErrorParse  The current data length is smaller than @p aLength.
+     */
+    Error RemoveFooter(uint16_t aLength);
+
+private:
+    const void *ReadLength(uint16_t aLength) OT_LIFETIME_BOUND;
 };
 
 } // namespace ot
 
-#endif // FRAME_DATA_HPP_
+#endif // OT_CORE_COMMON_FRAME_DATA_HPP_

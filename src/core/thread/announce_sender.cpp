@@ -33,16 +33,7 @@
 
 #include "announce_sender.hpp"
 
-#include <openthread/platform/radio.h>
-
-#include "common/code_utils.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/random.hpp"
 #include "instance/instance.hpp"
-#include "meshcop/meshcop.hpp"
-#include "meshcop/meshcop_tlvs.hpp"
-#include "radio/radio.hpp"
 
 namespace ot {
 
@@ -77,7 +68,7 @@ void AnnounceSenderBase::SendAnnounce(uint8_t aCount)
     mCount   = aCount;
     mChannel = mStartingChannel;
 
-    mTimer.Start(Random::NonCrypto::GetUint32InRange(0, mJitter + 1));
+    mTimer.Start(Random::NonCrypto::GenerateUpToExcluding<uint32_t>(mJitter + 1));
 
 exit:
     return;
@@ -125,7 +116,7 @@ exit:
 
 void AnnounceSenderBase::HandleTimer(void)
 {
-    Get<Mle::MleRouter>().SendAnnounce(mChannel);
+    Get<Mle::Mle>().SendAnnounce(mChannel);
 
     // Go to the next channel in the mask. If we have reached the end
     // of the channel mask, we start over from the first channel in
@@ -215,7 +206,7 @@ void AnnounceSender::HandleRoleChanged(void)
 
     case Mle::kRoleChild:
 #if OPENTHREAD_FTD
-        if (Get<Mle::MleRouter>().IsRouterEligible() && Get<Mle::Mle>().IsRxOnWhenIdle())
+        if (Get<Mle::Mle>().IsRouterRoleAllowed() && Get<Mle::Mle>().IsRxOnWhenIdle())
         {
             break;
         }

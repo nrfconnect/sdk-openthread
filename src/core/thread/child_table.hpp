@@ -31,13 +31,14 @@
  *   This file includes definitions for Thread child table.
  */
 
-#ifndef CHILD_TABLE_HPP_
-#define CHILD_TABLE_HPP_
+#ifndef OT_CORE_THREAD_CHILD_TABLE_HPP_
+#define OT_CORE_THREAD_CHILD_TABLE_HPP_
 
 #include "openthread-core-config.h"
 
 #if OPENTHREAD_FTD
 
+#include "common/array.hpp"
 #include "common/const_cast.hpp"
 #include "common/iterator_utils.hpp"
 #include "common/locator.hpp"
@@ -48,7 +49,6 @@ namespace ot {
 
 /**
  * Represents the Thread child table.
- *
  */
 class ChildTable : public InstanceLocator, private NonCopyable
 {
@@ -58,7 +58,6 @@ class ChildTable : public InstanceLocator, private NonCopyable
 public:
     /**
      * Represents an iterator for iterating through the child entries in the child table.
-     *
      */
     class Iterator : public InstanceLocator, public ItemPtrIterator<Child, Iterator>
     {
@@ -71,13 +70,11 @@ public:
          *
          * @param[in] aInstance  A reference to the OpenThread instance.
          * @param[in] aFilter    A child state filter.
-         *
          */
         Iterator(Instance &aInstance, Child::StateFilter aFilter);
 
         /**
          * Resets the iterator to start over.
-         *
          */
         void Reset(void);
 
@@ -85,7 +82,6 @@ public:
          * Gets the `Child` entry to which the iterator is currently pointing.
          *
          * @returns A pointer to the `Child` entry, or `nullptr` if the iterator is done and/or empty.
-         *
          */
         Child *GetChild(void) { return mItem; }
 
@@ -105,13 +101,11 @@ public:
      * Initializes a `ChildTable` instance.
      *
      * @param[in]  aInstance     A reference to the OpenThread instance.
-     *
      */
     explicit ChildTable(Instance &aInstance);
 
     /**
      * Clears the child table.
-     *
      */
     void Clear(void);
 
@@ -121,9 +115,8 @@ public:
      * @param[in]  aChild  A reference to a `Child`
      *
      * @returns The index corresponding to @p aChild.
-     *
      */
-    uint16_t GetChildIndex(const Child &aChild) const { return static_cast<uint16_t>(&aChild - mChildren); }
+    uint16_t GetChildIndex(const Child &aChild) const { return mChildren.IndexOf(aChild); }
 
     /**
      * Returns a pointer to a `Child` entry at a given index, or `nullptr` if the index is out of bounds,
@@ -132,7 +125,6 @@ public:
      * @param[in]  aChildIndex  A child index.
      *
      * @returns A pointer to the `Child` corresponding to the given index, or `nullptr` if the index is out of bounds.
-     *
      */
     Child *GetChildAtIndex(uint16_t aChildIndex);
 
@@ -142,9 +134,15 @@ public:
      * @note The returned child entry will be cleared (`memset` to zero).
      *
      * @returns A pointer to a new `Child` entry, or `nullptr` if all `Child` entries are in use.
-     *
      */
     Child *GetNewChild(void);
+
+    /**
+     * Allocates a new child ID and returns the corresponding RLOC16.
+     *
+     * @returns The allocated child RLOC16.
+     */
+    uint16_t AllocateNewChildRloc16(void);
 
     /**
      * Searches the child table for a `Child` with a given RLOC16 also matching a given state filter.
@@ -153,7 +151,6 @@ public:
      * @param[in]  aFilter  A child state filter.
      *
      * @returns  A pointer to the `Child` entry if one is found, or `nullptr` otherwise.
-     *
      */
     Child *FindChild(uint16_t aRloc16, Child::StateFilter aFilter);
 
@@ -165,7 +162,6 @@ public:
      * @param[in]  aFilter     A child state filter.
      *
      * @returns  A pointer to the `Child` entry if one is found, or `nullptr` otherwise.
-     *
      */
     Child *FindChild(const Mac::ExtAddress &aExtAddress, Child::StateFilter aFilter);
 
@@ -176,7 +172,6 @@ public:
      * @param[in]  aFilter     A child state filter.
      *
      * @returns  A pointer to the `Child` entry if one is found, or `nullptr` otherwise.
-     *
      */
     Child *FindChild(const Mac::Address &aMacAddress, Child::StateFilter aFilter);
 
@@ -186,7 +181,6 @@ public:
      * @param[in]  aFilter  A child state filter.
      *
      * @returns  TRUE if the table contains at least one child table matching the given filter, FALSE otherwise.
-     *
      */
     bool HasChildren(Child::StateFilter aFilter) const;
 
@@ -196,7 +190,6 @@ public:
      * @param[in]  aFilter  A child state filter.
      *
      * @returns Number of children matching the given state filer.
-     *
      */
     uint16_t GetNumChildren(Child::StateFilter aFilter) const;
 
@@ -207,7 +200,6 @@ public:
      * children.
      *
      * @returns  The maximum number of children supported
-     *
      */
     uint16_t GetMaxChildren(void) const { return kMaxChildren; }
 
@@ -215,9 +207,8 @@ public:
      * Get the maximum number of children allowed.
      *
      * @returns  The maximum number of children allowed.
-     *
      */
-    uint16_t GetMaxChildrenAllowed(void) const { return mMaxChildrenAllowed; }
+    uint16_t GetMaxChildrenAllowed(void) const { return mChildren.GetLength(); }
 
     /**
      * Sets the maximum number of children allowed.
@@ -230,7 +221,6 @@ public:
      * @retval kErrorNone         The number of allowed children changed successfully.
      * @retval kErrorInvalidArgs  If @p aMaxChildren is not in the range [1, Max supported children].
      * @retval kErrorInvalidState The child table is not empty.
-     *
      */
     Error SetMaxChildrenAllowed(uint16_t aMaxChildren);
 
@@ -245,7 +235,6 @@ public:
      * @param[in] aFilter  A child state filter.
      *
      * @returns An IteratorBuilder instance.
-     *
      */
     IteratorBuilder Iterate(Child::StateFilter aFilter) { return IteratorBuilder(GetInstance(), aFilter); }
 
@@ -254,7 +243,6 @@ public:
      *
      * @param[in]   aChildId    The Child ID or RLOC16 for an attached child.
      * @param[out]  aChildInfo  A reference to a `Child::Info` to populate with the child information.
-     *
      */
     Error GetChildInfoById(uint16_t aChildId, Child::Info &aChildInfo);
 
@@ -263,13 +251,11 @@ public:
      *
      * @param[in]   aChildIndex  The table index.
      * @param[out]  aChildInfo   A reference to a `Child::Info` to populate with the child information.
-     *
      */
     Error GetChildInfoByIndex(uint16_t aChildIndex, Child::Info &aChildInfo);
 
     /**
      * Restores child table from non-volatile memory.
-     *
      */
     void Restore(void);
 
@@ -277,7 +263,6 @@ public:
      * Removes a stored child information from non-volatile memory.
      *
      * @param[in]  aChild     A reference to the child to remove from non-volatile memory.
-     *
      */
     void RemoveStoredChild(const Child &aChild);
 
@@ -288,7 +273,6 @@ public:
      *
      * @retval  kErrorNone     Successfully store child.
      * @retval  kErrorNoBufs   Insufficient available buffers to store child.
-     *
      */
     Error StoreChild(const Child &aChild);
 
@@ -301,7 +285,6 @@ public:
      *
      * @retval TRUE  If the child table contains an MTD child with @p aRloc16.
      * @retval FALSE If the child table does not contain an MTD child with @p aRloc16.
-     *
      */
     bool HasMinimalChild(uint16_t aRloc16) const;
 
@@ -313,7 +296,6 @@ public:
      *
      * @retval TRUE   If the child table contains any sleepy child with @p aIp6Address.
      * @retval FALSE  If the child table does not contain any sleepy child with @p aIp6Address.
-     *
      */
     bool HasSleepyChildWithAddress(const Ip6::Address &aIp6Address) const;
 
@@ -324,17 +306,47 @@ public:
      *
      * @retval TRUE  if @p aNeighbor is a `Child` in the child table.
      * @retval FALSE if @p aNeighbor is not a `Child` in the child table.
-     *
      */
-    bool Contains(const Neighbor &aNeighbor) const
-    {
-        const Child *child = static_cast<const Child *>(&aNeighbor);
+    bool Contains(const Neighbor &aNeighbor) const { return mChildren.IsInArrayBuffer(&aNeighbor); }
 
-        return (mChildren <= child) && (child < GetArrayEnd(mChildren));
+    /**
+     * Gets the maximum number of IP addresses that each MTD child may register with this device as parent.
+     *
+     * @returns The maximum number of IP addresses that each MTD child may register with this device as parent.
+     */
+    uint8_t GetMaxChildIpAddresses(void) const
+    {
+        return
+#if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
+            IsMaxChildIpAddressesOverridden() ? mMaxChildIpAddresses :
+#endif
+                                              kMaxChildIpAddresses;
     }
 
+#if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
+    /**
+     * Indicates whether the maximum number of IP addresses is overridden.
+     *
+     * @retval TRUE   If the maximum number of IP addresses is overridden.
+     * @retval FALSE  If the maximum number of IP addresses is not overridden.
+     */
+    bool IsMaxChildIpAddressesOverridden(void) const { return (mMaxChildIpAddresses != 0); }
+
+    /**
+     * Overrides the maximum number of IP addresses that each MTD child may register with this device as parent.
+     *
+     * @param[in]  aMaxIpAddresses  The maximum number of IP addresses that each MTD child may register with this
+     *                              device as parent. Zero to clear the setting and restore the default.
+     *
+     * @retval kErrorNone           Successfully set/cleared the number.
+     * @retval kErrorInvalidArgs    If exceeds the allowed maximum number.
+     */
+    Error OverrideMaxChildIpAddresses(uint8_t aMaxIpAddresses);
+#endif
+
 private:
-    static constexpr uint16_t kMaxChildren = OPENTHREAD_CONFIG_MLE_MAX_CHILDREN;
+    static constexpr uint16_t kMaxChildren         = OPENTHREAD_CONFIG_MLE_MAX_CHILDREN;
+    static constexpr uint8_t  kMaxChildIpAddresses = OPENTHREAD_CONFIG_MLE_IP_ADDRS_PER_CHILD;
 
     class IteratorBuilder : public InstanceLocator
     {
@@ -357,12 +369,15 @@ private:
     const Child *FindChild(const Child::AddressMatcher &aMatcher) const;
     void         RefreshStoredChildren(void);
 
-    uint16_t mMaxChildrenAllowed;
-    Child    mChildren[kMaxChildren];
+#if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
+    uint8_t mMaxChildIpAddresses;
+#endif
+    Array<Child, kMaxChildren, uint16_t> mChildren;
+    uint16_t                             mNextChildId;
 };
 
 } // namespace ot
 
 #endif // OPENTHREAD_FTD
 
-#endif // CHILD_TABLE_HPP_
+#endif // OT_CORE_THREAD_CHILD_TABLE_HPP_

@@ -33,16 +33,10 @@
 
 #include "openthread-core-config.h"
 
-#include <openthread/crypto.h>
-#include <openthread/error.h>
-
-#include "common/as_core_type.hpp"
-#include "common/code_utils.hpp"
-#include "common/debug.hpp"
-#include "common/locator_getters.hpp"
 #include "crypto/aes_ccm.hpp"
 #include "crypto/ecdsa.hpp"
 #include "crypto/hmac_sha256.hpp"
+#include "instance/instance.hpp"
 
 using namespace ot;
 using namespace ot::Crypto;
@@ -70,22 +64,11 @@ void otCryptoAesCcm(const otCryptoKey *aKey,
                     bool               aEncrypt,
                     void              *aTag)
 {
-    AesCcm aesCcm;
-
     AssertPointerIsNotNull(aNonce);
     AssertPointerIsNotNull(aPlainText);
     AssertPointerIsNotNull(aCipherText);
     AssertPointerIsNotNull(aTag);
 
-    aesCcm.SetKey(AsCoreType(aKey));
-    aesCcm.Init(aHeaderLength, aLength, aTagLength, aNonce, aNonceLength);
-
-    if (aHeaderLength != 0)
-    {
-        OT_ASSERT(aHeader != nullptr);
-        aesCcm.Header(aHeader, aHeaderLength);
-    }
-
-    aesCcm.Payload(aPlainText, aCipherText, aLength, aEncrypt ? AesCcm::kEncrypt : AesCcm::kDecrypt);
-    aesCcm.Finalize(aTag);
+    AesCcm::Perform(aEncrypt ? AesCcm::kEncrypt : AesCcm::kDecrypt, AsCoreType(aKey), aTagLength, aNonce, aNonceLength,
+                    aHeader, aHeaderLength, aPlainText, aCipherText, aLength, aTag);
 }

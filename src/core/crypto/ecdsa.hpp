@@ -31,8 +31,8 @@
  *   This file includes definitions for performing ECDSA signing.
  */
 
-#ifndef ECDSA_HPP_
-#define ECDSA_HPP_
+#ifndef OT_CORE_CRYPTO_ECDSA_HPP_
+#define OT_CORE_CRYPTO_ECDSA_HPP_
 
 #include "openthread-core-config.h"
 
@@ -56,14 +56,12 @@ namespace Ecdsa {
  * @addtogroup core-security
  *
  * @{
- *
  */
 
 /**
  * Implements ECDSA key-generation, signing, and verification for NIST P-256 curve using SHA-256 hash.
  *
  * NIST P-256 curve is also known as 256-bit Random ECP Group (RFC 5114 - 2.6), or secp256r1 (RFC 4492 - Appendix A).
- *
  */
 class P256
 {
@@ -72,7 +70,6 @@ public:
 
     /**
      * Max bytes in binary representation of an MPI (multi-precision int).
-     *
      */
     static constexpr uint8_t kMpiSize = kFieldBitLength / 8;
 
@@ -87,7 +84,6 @@ public:
      *
      * The signature is encoded as the concatenated binary representation of two MPIs `r` and `s` which are calculated
      * during signing (RFC 6605 - section 4).
-     *
      */
     OT_TOOL_PACKED_BEGIN
     class Signature : public otPlatCryptoEcdsaSignature
@@ -105,7 +101,6 @@ public:
          * Returns the signature as a byte array.
          *
          * @returns A pointer to the byte array containing the signature.
-         *
          */
         const uint8_t *GetBytes(void) const { return m8; }
     } OT_TOOL_PACKED_END;
@@ -114,20 +109,17 @@ public:
      * Represents a key pair (public and private keys).
      *
      * The key pair is stored using Distinguished Encoding Rules (DER) format (per RFC 5915).
-     *
      */
     class KeyPair : public otPlatCryptoEcdsaKeyPair
     {
     public:
         /**
          * Max buffer size (in bytes) for representing the key-pair in DER format.
-         *
          */
         static constexpr uint8_t kMaxDerSize = OT_CRYPTO_ECDSA_MAX_DER_SIZE;
 
         /**
          * Initializes a `KeyPair` as empty (no key).
-         *
          */
         KeyPair(void) { mDerLength = 0; }
 
@@ -138,7 +130,6 @@ public:
          * @retval kErrorNoBufs       Failed to allocate buffer for key generation.
          * @retval kErrorNotCapable   Feature not supported.
          * @retval kErrorFailed       Failed to generate key.
-         *
          */
         Error Generate(void) { return otPlatCryptoEcdsaGenerateKey(this); }
 
@@ -149,7 +140,6 @@ public:
          *
          * @retval kErrorNone      Public key was retrieved successfully, and @p aPublicKey is updated.
          * @retval kErrorParse     The key-pair DER format could not be parsed (invalid format).
-         *
          */
         Error GetPublicKey(PublicKey &aPublicKey) const { return otPlatCryptoEcdsaGetPublicKey(this, &aPublicKey); }
 
@@ -159,7 +149,6 @@ public:
          * The length (number of bytes) of DER format is given by `GetDerLength()`.
          *
          * @returns The pointer to the start of buffer containing the key-pair in DER format.
-         *
          */
         const uint8_t *GetDerBytes(void) const { return mDerBytes; }
 
@@ -167,7 +156,6 @@ public:
          * Gets the length of the byte sequence representation of the key-pair in DER format.
          *
          * @returns The length of byte sequence representation of the key-pair in DER format.
-         *
          */
         uint8_t GetDerLength(void) const { return mDerLength; }
 
@@ -176,10 +164,9 @@ public:
          *
          * Gives non-const pointer to the buffer and is intended for populating the buffer and setting
          * the key-pair (e.g., reading the key-pair from non-volatile settings). The buffer contains `kMaxDerSize`
-         * bytes. After populating the buffer, `SetDerLength()` can be used to set the the number of bytes written.
+         * bytes. After populating the buffer, `SetDerLength()` can be used to set the number of bytes written.
          *
          * @returns The pointer to the start of key-pair buffer in DER format.
-         *
          */
         uint8_t *GetDerBytes(void) { return mDerBytes; }
 
@@ -187,7 +174,6 @@ public:
          * Sets the length of the byte sequence representation of the key-pair in DER format.
          *
          * @param[in] aDerLength   The length (number of bytes).
-         *
          */
         void SetDerLength(uint8_t aDerLength) { mDerLength = aDerLength; }
 
@@ -203,7 +189,6 @@ public:
          * @retval kErrorParse          The key-pair DER format could not be parsed (invalid format).
          * @retval kErrorInvalidArgs    The @p aHash is invalid.
          * @retval kErrorNoBufs         Failed to allocate buffer for signature calculation.
-         *
          */
         Error Sign(const Sha256::Hash &aHash, Signature &aSignature) const
         {
@@ -213,8 +198,7 @@ public:
 
 #if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
     /**
-     * Represents a key pair (public and private keys) as a PSA KeyRef.
-     *
+     * Represents a key pair (public and private keys) as a `KeyRef`.
      */
     class KeyPairAsRef
     {
@@ -222,47 +206,43 @@ public:
         /**
          * Initializes a `KeyPairAsRef`.
          *
-         * @param[in] aKeyRef         PSA key reference to use while using the keypair.
+         * @param[in] aKeyRef         Key reference to use with the key pair.
          */
         explicit KeyPairAsRef(otCryptoKeyRef aKeyRef = 0) { mKeyRef = aKeyRef; }
 
         /**
-         * Generates a new keypair and imports it into PSA ITS.
+         * Generates a new key pair and saves it in secure storage.
          *
          * @retval kErrorNone         A new key pair was generated successfully.
          * @retval kErrorNoBufs       Failed to allocate buffer for key generation.
          * @retval kErrorNotCapable   Feature not supported.
          * @retval kErrorFailed       Failed to generate key.
-         *
          */
         Error Generate(void) const { return otPlatCryptoEcdsaGenerateAndImportKey(mKeyRef); }
 
         /**
-         * Imports a new keypair into PSA ITS.
+         * Saves a new key pair into secure storage.
          *
-         * @param[in] aKeyPair        KeyPair to be imported in DER format.
+         * @param[in] aKeyPair        The key pair to be saved in DER format.
          *
-         * @retval kErrorNone         A key pair was imported successfully.
+         * @retval kErrorNone         A key pair was saved successfully.
          * @retval kErrorNotCapable   Feature not supported.
-         * @retval kErrorFailed       Failed to import the key.
-         *
+         * @retval kErrorFailed       Failed to save the key.
          */
-        Error ImportKeyPair(const KeyPair &aKeyPair)
+        Error SaveKeyPair(const KeyPair &aKeyPair)
         {
-            return Crypto::Storage::ImportKey(mKeyRef, Storage::kKeyTypeEcdsa, Storage::kKeyAlgorithmEcdsa,
-                                              (Storage::kUsageSignHash | Storage::kUsageVerifyHash),
-                                              Storage::kTypePersistent, aKeyPair.GetDerBytes(),
-                                              aKeyPair.GetDerLength());
+            return Crypto::Storage::SaveKey(mKeyRef, Storage::kKeyTypeEcdsa, Storage::kKeyAlgorithmEcdsa,
+                                            (Storage::kUsageSignHash | Storage::kUsageVerifyHash),
+                                            Storage::kTypePersistent, aKeyPair.GetDerBytes(), aKeyPair.GetDerLength());
         }
 
         /**
-         * Gets the associated public key from the keypair referenced by mKeyRef.
+         * Gets the associated public key from the key pair referenced by mKeyRef.
          *
          * @param[out] aPublicKey     A reference to a `PublicKey` to output the value.
          *
          * @retval kErrorNone      Public key was retrieved successfully, and @p aPublicKey is updated.
-         * @retval kErrorFailed    There was a error exporting the public key from PSA.
-         *
+         * @retval kErrorFailed    Failed to retrieve the public key from secure storage.
          */
         Error GetPublicKey(PublicKey &aPublicKey) const
         {
@@ -270,7 +250,7 @@ public:
         }
 
         /**
-         * Calculates the ECDSA signature for a hashed message using the private key from keypair
+         * Calculates the ECDSA signature for a hashed message using the private key from key pair
          * referenced by mKeyRef.
          *
          * Uses the deterministic digital signature generation procedure from RFC 6979.
@@ -282,7 +262,6 @@ public:
          * @retval kErrorParse          The key-pair DER format could not be parsed (invalid format).
          * @retval kErrorInvalidArgs    The @p aHash is invalid.
          * @retval kErrorNoBufs         Failed to allocate buffer for signature calculation.
-         *
          */
         Error Sign(const Sha256::Hash &aHash, Signature &aSignature) const
         {
@@ -290,18 +269,16 @@ public:
         }
 
         /**
-         * Gets the Key reference for the keypair stored in the PSA.
+         * Gets the key reference for the key pair stored in secure storage.
          *
-         * @returns The PSA key ref.
-         *
+         * @returns The key reference.
          */
         otCryptoKeyRef GetKeyRef(void) const { return mKeyRef; }
 
         /**
-         * Sets the Key reference.
+         * Sets the key reference.
          *
-         * @param[in] aKeyRef         PSA key reference to use while using the keypair.
-         *
+         * @param[in] aKeyRef         Key reference to use with the key pair.
          */
         void SetKeyRef(otCryptoKeyRef aKeyRef) { mKeyRef = aKeyRef; }
 
@@ -314,7 +291,6 @@ public:
      * Represents a public key.
      *
      * The public key is stored as a byte sequence representation of an uncompressed curve point (RFC 6605 - sec 4).
-     *
      */
     OT_TOOL_PACKED_BEGIN
     class PublicKey : public otPlatCryptoEcdsaPublicKey, public Equatable<PublicKey>
@@ -331,7 +307,6 @@ public:
          * Gets the pointer to the buffer containing the public key (as an uncompressed curve point).
          *
          * @return The pointer to the buffer containing the public key (with `kSize` bytes).
-         *
          */
         const uint8_t *GetBytes(void) const { return m8; }
 
@@ -345,7 +320,6 @@ public:
          * @retval kErrorSecurity      The signature is invalid.
          * @retval kErrorInvalidArgs   The key or has is invalid.
          * @retval kErrorNoBufs        Failed to allocate buffer for signature verification
-         *
          */
         Error Verify(const Sha256::Hash &aHash, const Signature &aSignature) const
         {
@@ -357,7 +331,6 @@ public:
 
 /**
  * @}
- *
  */
 
 } // namespace Ecdsa
@@ -371,4 +344,4 @@ DefineCoreType(otPlatCryptoEcdsaPublicKey, Crypto::Ecdsa::P256::PublicKey);
 
 #endif // OPENTHREAD_CONFIG_ECDSA_ENABLE
 
-#endif // ECDSA_HPP_
+#endif // OT_CORE_CRYPTO_ECDSA_HPP_

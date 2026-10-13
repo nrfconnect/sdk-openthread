@@ -31,8 +31,8 @@
  *   This file includes definitions for a `Data` and `MutableData`.
  */
 
-#ifndef DATA_HPP_
-#define DATA_HPP_
+#ifndef OT_CORE_COMMON_DATA_HPP_
+#define OT_CORE_COMMON_DATA_HPP_
 
 #include "openthread-core-config.h"
 
@@ -52,7 +52,6 @@ namespace ot {
 /**
  * Type is used as the template parameter in `Data` and `MutableData` to indicate the `uint` type to
  * use for the data length.
- *
  */
 enum DataLengthType : uint8_t
 {
@@ -71,13 +70,11 @@ enum DataLengthType : uint8_t
  *
  * @retval TRUE  if @p aFirst matches @p aSecond.
  * @retval FALSE if @p aFirst does not match @p aSecond.
- *
  */
 typedef bool (*ByteMatcher)(uint8_t aFirst, uint8_t aSecond);
 
 /**
  * Implements common utility methods used by `Data` and `MutableData`.
- *
  */
 class DataUtils
 {
@@ -103,17 +100,17 @@ template <DataLengthType kDataLengthType> class MutableData;
  * instance (e.g., `GetBytes()` or `GetLength()`), otherwise the behavior is undefined.
  *
  * @tparam kDataLengthType   Determines the data length type (`uint8_t` or `uint16_t`).
- *
  */
 template <DataLengthType kDataLengthType>
-class Data : public Clearable<Data<kDataLengthType>>, public Unequatable<Data<kDataLengthType>>, private DataUtils
+class OT_GSL_POINTER Data : public Clearable<Data<kDataLengthType>>,
+                            public Unequatable<Data<kDataLengthType>>,
+                            private DataUtils
 {
     friend class MutableData<kDataLengthType>;
 
 public:
     /**
      * Represents the data length type (`uint8_t` or `uint16_t`).
-     *
      */
     using LengthType = typename TypeTraits::Conditional<kDataLengthType == kWithUint8Length, uint8_t, uint16_t>::Type;
 
@@ -122,7 +119,6 @@ public:
      *
      * @param[in] aBuffer   A pointer to a buffer containing the data.
      * @param[in] aLength   The data length (number of bytes in @p aBuffer)
-     *
      */
     void Init(const void *aBuffer, LengthType aLength)
     {
@@ -138,7 +134,6 @@ public:
      *
      * @param[in] aStart  Pointer to the start of the range.
      * @param[in] aEnd    Pointer to the end of the range.
-     *
      */
     void InitFromRange(const uint8_t *aStart, const uint8_t *aEnd)
     {
@@ -151,7 +146,6 @@ public:
      * @tparm ObjectType   The object type (MUST not be a pointer type).
      *
      * @param[in] aObject   The object to initialize the `Data` with.
-     *
      */
     template <typename ObjectType> void InitFrom(const ObjectType &aObject)
     {
@@ -163,15 +157,13 @@ public:
      * Returns a pointer to the data bytes buffer.
      *
      * @returns A pointer to the data bytes buffer (can be `nullptr` if `Data` is cleared).
-     *
      */
-    const uint8_t *GetBytes(void) const { return mBuffer; }
+    const uint8_t *GetBytes(void) const OT_LIFETIME_BOUND { return mBuffer; }
 
     /**
      * Returns the data length.
      *
      * @returns The data length (number of bytes).
-     *
      */
     LengthType GetLength(void) const { return mLength; }
 
@@ -179,9 +171,16 @@ public:
      * Sets the data length.
      *
      * @param[in] aLength   The data length (number of bytes).
-     *
      */
     void SetLength(LengthType aLength) { mLength = aLength; }
+
+    /**
+     * Indicates whether or not the `Data` is empty (length is zero).
+     *
+     * @retval TRUE   The `Data` is empty (length is zero).
+     * @retval FALSE  The `Data` is not empty (length is non-zero).
+     */
+    bool IsEmpty(void) const { return mLength == 0; }
 
     /**
      * Copies the `Data` bytes to a given buffer.
@@ -189,7 +188,6 @@ public:
      * It is up to the caller to ensure that @p aBuffer has enough space for the current data length.
      *
      * @param[out] aBuffer  The buffer to copy the bytes into.
-     *
      */
     void CopyBytesTo(void *aBuffer) const { memcpy(aBuffer, mBuffer, mLength); }
 
@@ -202,7 +200,6 @@ public:
      *
      * @retval TRUE   The `Data` content matches the bytes in @p aBuffer.
      * @retval FALSE  The `Data` content does not match the byes in @p aBuffer.
-     *
      */
     bool MatchesBytesIn(const void *aBuffer) const { return memcmp(mBuffer, aBuffer, mLength) == 0; }
 
@@ -216,7 +213,6 @@ public:
      *
      * @retval TRUE   The `Data` content matches the bytes in @p aBuffer.
      * @retval FALSE  The `Data` content does not match the byes in @p aBuffer.
-     *
      */
     bool MatchesBytesIn(const void *aBuffer, ByteMatcher aMatcher)
     {
@@ -230,7 +226,6 @@ public:
      *
      * @retval TRUE   The two `Data` instances have matching content (same length and same bytes).
      * @retval FALSE  The two `Data` instances do not have matching content.
-     *
      */
     bool operator==(const Data &aOtherData) const
     {
@@ -247,7 +242,6 @@ public:
      *
      * @retval TRUE   This `Data` starts with the same byte content as in @p aOtherData.
      * @retval FALSE  This `Data` does not start with the same byte content as in @p aOtherData.
-     *
      */
     bool StartsWith(const Data &aOtherData) const
     {
@@ -269,9 +263,8 @@ private:
  * A `MutableData` instance MUST be initialized (using any of the `Init()` methods) before calling any other methods
  * (e.g., `GetBytes()` or `GetLength()`), otherwise the behavior is undefined.
 
- *
  */
-template <DataLengthType kDataLengthType> class MutableData : public Data<kDataLengthType>
+template <DataLengthType kDataLengthType> class OT_GSL_POINTER MutableData : public Data<kDataLengthType>
 {
     using Base = Data<kDataLengthType>;
     using Base::mBuffer;
@@ -280,7 +273,6 @@ template <DataLengthType kDataLengthType> class MutableData : public Data<kDataL
 public:
     /**
      * Represents the data length type (`uint8_t` or `uint16_t`).
-     *
      */
     using LengthType = typename Base::LengthType;
 
@@ -289,7 +281,6 @@ public:
      *
      * @param[in] aBuffer   A pointer to a buffer containing the data.
      * @param[in] aLength   The data length (number of bytes in @p aBuffer)
-     *
      */
     void Init(void *aBuffer, LengthType aLength) { Base::Init(aBuffer, aLength); }
 
@@ -301,7 +292,6 @@ public:
      *
      * @param[in] aStart  Pointer to the start of the range.
      * @param[in] aEnd    Pointer to the end of the range.
-     *
      */
     void InitFormRange(uint8_t *aStart, uint8_t *aEnd) { Base::InitFormRange(aStart, aEnd); }
 
@@ -311,7 +301,6 @@ public:
      * @tparm ObjectType   The object type (MUST not be a pointer type).
      *
      * @param[in] aObject   The object to initialize the `MutableData` with.
-     *
      */
     template <typename ObjectType> void InitFrom(ObjectType &aObject)
     {
@@ -323,21 +312,18 @@ public:
      * Returns a pointer to the data bytes buffer.
      *
      * @returns A pointer to the data bytes buffer (can be `nullptr` if `Data` is empty or uninitialized).
-     *
      */
-    uint8_t *GetBytes(void) { return AsNonConst(Base::GetBytes()); }
+    uint8_t *GetBytes(void) OT_LIFETIME_BOUND { return AsNonConst(Base::GetBytes()); }
 
     /**
      * Returns a pointer to the data bytes buffer.
      *
      * @returns A pointer to the data bytes buffer (can be `nullptr` if `Data` is empty or uninitialized).
-     *
      */
-    const uint8_t *GetBytes(void) const { return Base::GetBytes(); }
+    const uint8_t *GetBytes(void) const OT_LIFETIME_BOUND { return Base::GetBytes(); }
 
     /**
      * Clears all the bytes (sets them to zero) in the buffer pointed by the `MutableData`.
-     *
      */
     void ClearBytes(void) { memset(GetBytes(), 0, mLength); }
 
@@ -355,7 +341,6 @@ public:
      *
      * @retval kErrorNone    Successfully copied the bytes into `MutableData` buffer and adjusted its length.
      * @retval kErrorNoBufs  `MutableData` buffer cannot fit the given @p aLength bytes.
-     *
      */
     Error CopyBytesFrom(const uint8_t *aBuffer, LengthType aLength)
     {
@@ -380,7 +365,6 @@ public:
      *
      * @retval kErrorNone    Successfully copied the bytes into `MutableData` buffer and adjusted its length.
      * @retval kErrorNoBufs  `MutableData` buffer cannot fit the given @p aData bytes.
-     *
      */
     Error CopyBytesFrom(const Data<kDataLengthType> &aData)
     {
@@ -390,4 +374,4 @@ public:
 
 } // namespace ot
 
-#endif // DATA_HPP_
+#endif // OT_CORE_COMMON_DATA_HPP_

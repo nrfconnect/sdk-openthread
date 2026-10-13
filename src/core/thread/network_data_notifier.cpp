@@ -35,14 +35,7 @@
 
 #if OPENTHREAD_FTD || OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE || OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
 
-#include "common/code_utils.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
 #include "instance/instance.hpp"
-#include "thread/network_data_leader.hpp"
-#include "thread/network_data_local.hpp"
-#include "thread/tmf.hpp"
-#include "thread/uri_paths.hpp"
 
 namespace ot {
 namespace NetworkData {
@@ -81,7 +74,7 @@ void Notifier::SynchronizeServerData(void)
 {
     Error error = kErrorNotFound;
 
-    VerifyOrExit(Get<Mle::MleRouter>().IsAttached() && !mWaitingForResponse);
+    VerifyOrExit(Get<Mle::Mle>().IsAttached() && !mWaitingForResponse);
 
     VerifyOrExit((mNextDelay == 0) || !mTimer.IsRunning());
 
@@ -108,7 +101,7 @@ exit:
         break;
 #if OPENTHREAD_FTD
     case kErrorInvalidState:
-        mTimer.Start(Time::SecToMsec(Get<Mle::MleRouter>().GetRouterRoleTransitionTimeout() + 1));
+        mTimer.Start(Time::SecToMsec(Get<Mle::Mle>().GetRouterRoleTransitionTimeout() + 1));
         break;
 #endif
     case kErrorNotFound:
@@ -132,7 +125,7 @@ Error Notifier::RemoveStaleChildEntries(void)
     Error error = kErrorNotFound;
     Rlocs rlocs;
 
-    VerifyOrExit(Get<Mle::MleRouter>().IsRouterOrLeader());
+    VerifyOrExit(Get<Mle::Mle>().IsRouterOrLeader());
 
     Get<Leader>().FindRlocs(kAnyBrOrServer, kAnyRole, rlocs);
 
@@ -155,13 +148,13 @@ exit:
 Error Notifier::UpdateInconsistentData(void)
 {
     Error    error      = kErrorNone;
-    uint16_t deviceRloc = Get<Mle::MleRouter>().GetRloc16();
+    uint16_t deviceRloc = Get<Mle::Mle>().GetRloc16();
 
 #if OPENTHREAD_FTD
     // Don't send this Server Data Notification if the device is going
     // to upgrade to Router.
 
-    if (Get<Mle::MleRouter>().IsExpectedToBecomeRouterSoon())
+    if (Get<Mle::Mle>().WillBecomeRouterSoon())
     {
         ExitNow(error = kErrorInvalidState);
     }
@@ -190,21 +183,16 @@ exit:
 
 Error Notifier::SendServerDataNotification(uint16_t aOldRloc16, const NetworkData *aNetworkData)
 {
-    Error            error = kErrorNone;
-    Coap::Message   *message;
-    Tmf::MessageInfo messageInfo(GetInstance());
+    Error          error = kErrorNone;
+    Coap::Message *message;
 
-    message = Get<Tmf::Agent>().NewPriorityConfirmablePostMessage(kUriServerData);
+    message = Get<Tmf::Agent>().AllocateAndInitPriorityConfirmablePostMessage(kUriServerData);
     VerifyOrExit(message != nullptr, error = kErrorNoBufs);
 
     if (aNetworkData != nullptr)
     {
-        ThreadTlv tlv;
-
-        tlv.SetType(ThreadTlv::kThreadNetworkData);
-        tlv.SetLength(aNetworkData->GetLength());
-        SuccessOrExit(error = message->Append(tlv));
-        SuccessOrExit(error = message->AppendBytes(aNetworkData->GetBytes(), aNetworkData->GetLength()));
+        SuccessOrExit(
+            error = Tlv::Append<ThreadNetworkDataTlv>(*message, aNetworkData->GetBytes(), aNetworkData->GetLength()));
 
 #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_BORDER_ROUTER_SIGNAL_NETWORK_DATA_FULL
         Get<Leader>().CheckForNetDataGettingFull(*aNetworkData, aOldRloc16);
@@ -216,8 +204,7 @@ Error Notifier::SendServerDataNotification(uint16_t aOldRloc16, const NetworkDat
         SuccessOrExit(error = Tlv::Append<ThreadRloc16Tlv>(*message, aOldRloc16));
     }
 
-    messageInfo.SetSockAddrToRlocPeerAddrToLeaderAloc();
-    SuccessOrExit(error = Get<Tmf::Agent>().SendMessage(*message, messageInfo, HandleCoapResponse, this));
+    SuccessOrExit(error = Get<Tmf::Agent>().SendMessageToLeaderAloc(*message, HandleCoapResponse, this));
 
     LogInfo("Sent %s", UriToString<kUriServerData>());
 
@@ -253,16 +240,10 @@ void Notifier::HandleNotifierEvents(Events aEvents)
 
 void Notifier::HandleTimer(void) { SynchronizeServerData(); }
 
-void Notifier::HandleCoapResponse(void *aContext, otMessage *aMessage, const otMessageInfo *aMessageInfo, Error aResult)
+void Notifier::HandleCoapResponse(Coap::Msg *aMsg, Error aResult)
 {
-    OT_UNUSED_VARIABLE(aMessage);
-    OT_UNUSED_VARIABLE(aMessageInfo);
+    OT_UNUSED_VARIABLE(aMsg);
 
-    static_cast<Notifier *>(aContext)->HandleCoapResponse(aResult);
-}
-
-void Notifier::HandleCoapResponse(Error aResult)
-{
     mWaitingForResponse = false;
 
     switch (aResult)
@@ -298,12 +279,12 @@ bool Notifier::IsEligibleForRouterRoleUpgradeAsBorderRouter(void) const
     uint16_t rloc16     = Get<Mle::Mle>().GetRloc16();
     uint8_t  activeRouterCount;
 
-    VerifyOrExit(Get<Mle::MleRouter>().IsRouterEligible());
+    VerifyOrExit(Get<Mle::Mle>().IsRouterRoleAllowed());
 
     // RouterUpgradeThreshold can be explicitly set to zero in some of
     // cert tests to disallow device to become router.
 
-    VerifyOrExit(Get<Mle::MleRouter>().GetRouterUpgradeThreshold() != 0);
+    VerifyOrExit(Get<Mle::Mle>().GetRouterUpgradeThreshold() != 0);
 
     // Check that we are a border router providing IP connectivity and already
     // in the leader's network data and therefore eligible to request router
@@ -313,7 +294,7 @@ bool Notifier::IsEligibleForRouterRoleUpgradeAsBorderRouter(void) const
                  Get<Leader>().ContainsBorderRouterWithRloc(rloc16));
 
     activeRouterCount = Get<RouterTable>().GetActiveRouterCount();
-    VerifyOrExit((activeRouterCount >= Get<Mle::MleRouter>().GetRouterUpgradeThreshold()) &&
+    VerifyOrExit((activeRouterCount >= Get<Mle::Mle>().GetRouterUpgradeThreshold()) &&
                  (activeRouterCount < Mle::kMaxRouters));
 
     VerifyOrExit(Get<Leader>().CountBorderRouters(kRouterRoleOnly) < Mle::kRouterUpgradeBorderRouterRequestThreshold);
@@ -337,10 +318,10 @@ void Notifier::ScheduleRouterRoleUpgradeIfEligible(void)
 
     VerifyOrExit(!mDidRequestRouterRoleUpgrade);
 
-    VerifyOrExit(Get<Mle::MleRouter>().IsChild());
+    VerifyOrExit(Get<Mle::Mle>().IsChild());
     VerifyOrExit(IsEligibleForRouterRoleUpgradeAsBorderRouter() && (mRouterRoleUpgradeTimeout == 0));
 
-    mRouterRoleUpgradeTimeout = Random::NonCrypto::GetUint8InRange(1, kRouterRoleUpgradeMaxTimeout + 1);
+    mRouterRoleUpgradeTimeout = Random::NonCrypto::GenerateInClosedRange<uint8_t>(1, kRouterRoleUpgradeMaxTimeout);
     Get<TimeTicker>().RegisterReceiver(TimeTicker::kNetworkDataNotifier);
 
 exit:
@@ -361,11 +342,11 @@ void Notifier::HandleTimeTick(void)
         // upgrade (note that state can change since the last time we
         // checked and registered to receive time ticks).
 
-        if (Get<Mle::MleRouter>().IsChild() && IsEligibleForRouterRoleUpgradeAsBorderRouter())
+        if (Get<Mle::Mle>().IsChild() && IsEligibleForRouterRoleUpgradeAsBorderRouter())
         {
             LogInfo("Requesting router role as BR");
             mDidRequestRouterRoleUpgrade = true;
-            IgnoreError(Get<Mle::MleRouter>().BecomeRouter(ThreadStatusTlv::kBorderRouterRequest));
+            IgnoreError(Get<Mle::Mle>().BecomeRouter(Mle::kReasonBorderRouterRequest));
         }
     }
 exit:

@@ -31,8 +31,8 @@
  *   This file includes definitions for performing HMAC SHA-256 computations.
  */
 
-#ifndef HMAC_SHA256_HPP_
-#define HMAC_SHA256_HPP_
+#ifndef OT_CORE_CRYPTO_HMAC_SHA256_HPP_
+#define OT_CORE_CRYPTO_HMAC_SHA256_HPP_
 
 #include "openthread-core-config.h"
 
@@ -55,31 +55,26 @@ namespace Crypto {
  * @addtogroup core-security
  *
  * @{
- *
  */
 
 /**
  * Implements HMAC SHA-256 computation.
- *
  */
 class HmacSha256
 {
 public:
     /**
      * Represents a HMAC SHA-256 hash.
-     *
      */
     typedef Sha256::Hash Hash;
 
     /**
      * Constructor for `HmacSha256`.
-     *
      */
     HmacSha256(void);
 
     /**
      * Destructor for `HmacSha256`.
-     *
      */
     ~HmacSha256(void);
 
@@ -87,7 +82,6 @@ public:
      * Sets the key and starts the HMAC computation.
      *
      * @param[in]  aKey      The key to use.
-     *
      */
     void Start(const Key &aKey);
 
@@ -96,7 +90,6 @@ public:
      *
      * @param[in]  aBuf        A pointer to the input buffer.
      * @param[in]  aBufLength  The length of @p aBuf in bytes.
-     *
      */
     void Update(const void *aBuf, uint16_t aBufLength);
 
@@ -106,7 +99,6 @@ public:
      * @tparam    ObjectType   The object type.
      *
      * @param[in] aObject      A reference to the object.
-     *
      */
     template <typename ObjectType> void Update(const ObjectType &aObject)
     {
@@ -120,7 +112,6 @@ public:
      * @param[in] aMessage    The message to read the data from.
      * @param[in] aOffset     The offset into @p aMessage to start to read.
      * @param[in] aLength     The number of bytes to read.
-     *
      */
     void Update(const Message &aMessage, uint16_t aOffset, uint16_t aLength);
 
@@ -128,21 +119,18 @@ public:
      * Finalizes the hash computation.
      *
      * @param[out]  aHash  A reference to a `Hash` to output the calculated hash.
-     *
      */
     void Finish(Hash &aHash);
 
 private:
-    otCryptoContext mContext;
-    OT_DEFINE_ALIGNED_VAR(mContextStorage, kHmacSha256ContextSize, uint64_t);
+    ContextWith<kHmacSha256ContextSize> mContext;
 };
 
 /**
  * @}
- *
  */
 
 } // namespace Crypto
 } // namespace ot
 
-#endif // HMAC_SHA256_HPP_
+#endif // OT_CORE_CRYPTO_HMAC_SHA256_HPP_

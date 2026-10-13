@@ -35,11 +35,7 @@
 
 #if OPENTHREAD_CONFIG_PING_SENDER_ENABLE
 
-#include "common/as_core_type.hpp"
-#include "common/encoding.hpp"
-#include "common/locator_getters.hpp"
-#include "common/num_utils.hpp"
-#include "common/random.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 namespace Utils {
@@ -189,15 +185,15 @@ void PingSender::HandleIcmpReceive(void                *aContext,
                                                                 AsCoreType(aIcmpHeader));
 }
 
-void PingSender::HandleIcmpReceive(const Message           &aMessage,
-                                   const Ip6::MessageInfo  &aMessageInfo,
-                                   const Ip6::Icmp::Header &aIcmpHeader)
+void PingSender::HandleIcmpReceive(const Message          &aMessage,
+                                   const Ip6::MessageInfo &aMessageInfo,
+                                   const Ip6::Icmp6Header &aIcmpHeader)
 {
     Reply    reply;
     uint32_t timestamp;
 
     VerifyOrExit(mTimer.IsRunning());
-    VerifyOrExit(aIcmpHeader.GetType() == Ip6::Icmp::Header::kTypeEchoReply);
+    VerifyOrExit(aIcmpHeader.GetType() == Ip6::Icmp6Header::kTypeEchoReply);
     VerifyOrExit(aIcmpHeader.GetId() == mIdentifier);
 
     SuccessOrExit(aMessage.Read(aMessage.GetOffset(), timestamp));

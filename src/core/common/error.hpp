@@ -31,8 +31,8 @@
  *   This file defines the errors used by OpenThread core.
  */
 
-#ifndef ERROR_HPP_
-#define ERROR_HPP_
+#ifndef OT_CORE_COMMON_ERROR_HPP_
+#define OT_CORE_COMMON_ERROR_HPP_
 
 #include "openthread-core-config.h"
 
@@ -44,14 +44,12 @@ namespace ot {
 
 /**
  * Represents error codes used by OpenThread core modules.
- *
  */
 typedef otError Error;
 
 /*
  * The `OT_ERROR_*` enumeration values are re-defined using `kError` style format.
  * See `openthread/error.h` for more details about each error.
- *
  */
 constexpr Error kErrorNone                       = OT_ERROR_NONE;
 constexpr Error kErrorFailed                     = OT_ERROR_FAILED;
@@ -99,10 +97,9 @@ constexpr uint8_t kNumErrors = OT_NUM_ERRORS;
  * @param[in]  aError     An error.
  *
  * @returns  A string representation of @p aError.
- *
  */
 const char *ErrorToString(Error aError);
 
 } // namespace ot
 
-#endif // ERROR_HPP_
+#endif // OT_CORE_COMMON_ERROR_HPP_

@@ -31,8 +31,8 @@
  *   This file includes definitions for a generic array.
  */
 
-#ifndef ARRAY_HPP_
-#define ARRAY_HPP_
+#ifndef OT_CORE_COMMON_ARRAY_HPP_
+#define OT_CORE_COMMON_ARRAY_HPP_
 
 #include "openthread-core-config.h"
 
@@ -55,7 +55,6 @@ namespace ot {
  * @tparam  kArrayLength  The array length.
  *
  * @returns The array length (number of elements in the array).
- *
  */
 template <typename Type, uint16_t kArrayLength> constexpr inline uint16_t GetArrayLength(const Type (&)[kArrayLength])
 {
@@ -74,7 +73,6 @@ template <typename Type, uint16_t kArrayLength> constexpr inline uint16_t GetArr
  * @param[in] aArray   A reference to the array.
  *
  * @returns Pointer to the past-the-end element.
- *
  */
 template <typename Type, uint16_t kArrayLength> inline Type *GetArrayEnd(Type (&aArray)[kArrayLength])
 {
@@ -93,11 +91,42 @@ template <typename Type, uint16_t kArrayLength> inline Type *GetArrayEnd(Type (&
  * @param[in] aArray   A reference to the array.
  *
  * @returns Pointer to the past-the-end element.
- *
  */
 template <typename Type, uint16_t kArrayLength> inline const Type *GetArrayEnd(const Type (&aArray)[kArrayLength])
 {
     return &aArray[kArrayLength];
+}
+
+/**
+ * Indicates whether a given array contains a match to a given item.
+ *
+ * The template arguments are expected to be deduced by the compiler allowing  callers to simply use
+ * `DoesArrayContain(aArray, aItem)`.
+ *
+ * @tparam  Type          The array element type.
+ * @tparam  kArrayLength  The array length.
+ *
+ * @param[in] aArray  A reference to the array to search in.
+ * @param[in] aItem   The item to search for.
+ *
+ * @retval TRUE   The array contains @p aItem.
+ * @retval FALSE  The array does not contain @p aItem.
+ */
+template <typename Type, uint16_t kArrayLength>
+inline bool DoesArrayContain(const Type (&aArray)[kArrayLength], const Type &aItem)
+{
+    bool contains = false;
+
+    for (const Type &entry : aArray)
+    {
+        if (entry == aItem)
+        {
+            contains = true;
+            break;
+        }
+    }
+
+    return contains;
 }
 
 /**
@@ -108,13 +137,12 @@ template <typename Type, uint16_t kArrayLength> inline const Type *GetArrayEnd(c
  * @tparam SizeType    The type to be used for array size, length, and index. If not specified, a default `uint` type
  *                     is determined based on `kMaxSize`, i.e., if `kMaxSize <= 255` then `uint8_t` will be used,
  *                     otherwise `uint16_t` will be used.
- *
  */
 template <typename Type,
           uint16_t kMaxSize,
           typename SizeType =
               typename TypeTraits::Conditional<kMaxSize <= NumericLimits<uint8_t>::kMax, uint8_t, uint16_t>::Type>
-class Array
+class OT_GSL_OWNER Array
 {
     static_assert(kMaxSize != 0, "Array `kMaxSize` cannot be zero");
 
@@ -123,13 +151,11 @@ public:
      * Represents the length or index in array.
      *
      * It is typically either `uint8_t` or `uint16_t` (determined based on the maximum array size (`kMaxSize`)).
-     *
      */
     typedef SizeType IndexType;
 
     /**
      * Initializes the array as empty.
-     *
      */
     Array(void)
         : mLength(0)
@@ -143,7 +169,6 @@ public:
      * the array.
      *
      * @param[in] aOtherArray  Another array to copy from.
-     *
      */
     Array(const Array &aOtherArray) { *this = aOtherArray; }
 
@@ -154,7 +179,6 @@ public:
      * Uses method `Init(Instance &aInstance)` on `Type`.
      *
      * @param[in] aInstance  The OpenThread instance.
-     *
      */
     explicit Array(Instance &aInstance)
         : mLength(0)
@@ -167,7 +191,6 @@ public:
 
     /**
      * Clears the array.
-     *
      */
     void Clear(void) { mLength = 0; }
 
@@ -176,7 +199,6 @@ public:
      *
      * @retval TRUE when array is empty.
      * @retval FALSE when array is not empty.
-     *
      */
     bool IsEmpty(void) const { return (mLength == 0); }
 
@@ -185,7 +207,6 @@ public:
      *
      * @retval TRUE when array is full.
      * @retval FALSE when array is not full.
-     *
      */
     bool IsFull(void) const { return (mLength == GetMaxSize()); }
 
@@ -193,7 +214,6 @@ public:
      * Returns the maximum array size (max number of elements).
      *
      * @returns The maximum array size (max number of elements that can be added to the array).
-     *
      */
     IndexType GetMaxSize(void) const { return static_cast<IndexType>(kMaxSize); }
 
@@ -201,7 +221,6 @@ public:
      * Returns the current length of array (number of elements).
      *
      * @returns The current array length.
-     *
      */
     IndexType GetLength(void) const { return mLength; }
 
@@ -209,7 +228,6 @@ public:
      * Sets the current length (number of elements) of the array.
      *
      * @param[in] aLength   The array length.
-     *
      */
     void SetLength(IndexType aLength) { mLength = aLength; }
 
@@ -217,17 +235,15 @@ public:
      * Returns the pointer to the start of underlying C array buffer serving as `Array` storage.
      *
      * @return The pointer to start of underlying C array buffer.
-     *
      */
-    Type *GetArrayBuffer(void) { return mElements; }
+    Type *GetArrayBuffer(void) OT_LIFETIME_BOUND { return mElements; }
 
     /**
      * Returns the pointer to the start of underlying C array buffer serving as `Array` storage.
      *
      * @return The pointer to start of underlying C array buffer.
-     *
      */
-    const Type *GetArrayBuffer(void) const { return mElements; }
+    const Type *GetArrayBuffer(void) const OT_LIFETIME_BOUND { return mElements; }
 
     /**
      * Overloads the `[]` operator to get the element at a given index.
@@ -237,9 +253,8 @@ public:
      * @param[in] aIndex  The index to get.
      *
      * @returns A reference to the element in array at @p aIndex.
-     *
      */
-    Type &operator[](IndexType aIndex) { return mElements[aIndex]; }
+    Type &operator[](IndexType aIndex) OT_LIFETIME_BOUND { return mElements[aIndex]; }
 
     /**
      * Overloads the `[]` operator to get the element at a given index.
@@ -249,9 +264,8 @@ public:
      * @param[in] aIndex  The index to get.
      *
      * @returns A reference to the element in array at @p aIndex.
-     *
      */
-    const Type &operator[](IndexType aIndex) const { return mElements[aIndex]; }
+    const Type &operator[](IndexType aIndex) const OT_LIFETIME_BOUND { return mElements[aIndex]; }
 
     /**
      * Gets a pointer to the element at a given index.
@@ -261,9 +275,8 @@ public:
      * @param[in] aIndex  The index to get.
      *
      * @returns A pointer to element in array at @p aIndex or `nullptr` if @p aIndex is not valid.
-     *
      */
-    Type *At(IndexType aIndex) { return (aIndex < mLength) ? &mElements[aIndex] : nullptr; }
+    Type *At(IndexType aIndex) OT_LIFETIME_BOUND { return (aIndex < mLength) ? &mElements[aIndex] : nullptr; }
 
     /**
      * Gets a pointer to the element at a given index.
@@ -273,41 +286,39 @@ public:
      * @param[in] aIndex  The index to get.
      *
      * @returns A pointer to element in array at @p aIndex or `nullptr` if @p aIndex is not valid.
-     *
      */
-    const Type *At(IndexType aIndex) const { return (aIndex < mLength) ? &mElements[aIndex] : nullptr; }
+    const Type *At(IndexType aIndex) const OT_LIFETIME_BOUND
+    {
+        return (aIndex < mLength) ? &mElements[aIndex] : nullptr;
+    }
 
     /**
      * Gets a pointer to the element at the front of the array (first element).
      *
      * @returns A pointer to the front element or `nullptr` if array is empty.
-     *
      */
-    Type *Front(void) { return At(0); }
+    Type *Front(void) OT_LIFETIME_BOUND { return At(0); }
 
     /**
      * Gets a pointer to the element at the front of the array (first element).
      *
      * @returns A pointer to the front element or `nullptr` if array is empty.
-     *
      */
-    const Type *Front(void) const { return At(0); }
+    const Type *Front(void) const OT_LIFETIME_BOUND { return At(0); }
 
     /**
      * Gets a pointer to the element at the back of the array (last element).
      *
      * @returns A pointer to the back element or `nullptr` if array is empty.
-     *
      */
-    Type *Back(void) { return At(mLength - 1); }
+    Type *Back(void) OT_LIFETIME_BOUND { return At(mLength - 1); }
 
     /**
      * Gets a pointer to the element at the back of the array (last element).
      *
      * @returns A pointer to the back element or `nullptr` if array is empty.
-     *
      */
-    const Type *Back(void) const { return At(mLength - 1); }
+    const Type *Back(void) const OT_LIFETIME_BOUND { return At(mLength - 1); }
 
     /**
      * Appends a new entry to the end of the array.
@@ -318,7 +329,6 @@ public:
      *
      * @retval kErrorNone    Successfully pushed back @p aEntry to the end of the array.
      * @retval kErrorNoBufs  Could not append the new element since array is full.
-     *
      */
     Error PushBack(const Type &aEntry) { return IsFull() ? kErrorNoBufs : (mElements[mLength++] = aEntry, kErrorNone); }
 
@@ -329,17 +339,64 @@ public:
      * initialize and use.
      *
      * @return A pointer to the newly appended element or `nullptr` if array is full.
-     *
      */
-    Type *PushBack(void) { return IsFull() ? nullptr : &mElements[mLength++]; }
+    Type *PushBack(void) OT_LIFETIME_BOUND { return IsFull() ? nullptr : &mElements[mLength++]; }
 
     /**
      * Removes the last element in the array.
      *
      * @returns A pointer to the removed element from the array, or `nullptr` if array is empty.
-     *
      */
-    Type *PopBack(void) { return IsEmpty() ? nullptr : &mElements[--mLength]; }
+    Type *PopBack(void) OT_LIFETIME_BOUND { return IsEmpty() ? nullptr : &mElements[--mLength]; }
+
+    /**
+     * Inserts a new entry at a given index in the array.
+     *
+     * The method uses assignment `=` operator on `Type` to copy @p aEntry into the inserted array element. Existing
+     * elements at and after @p aIndex are shifted right.
+     *
+     * The @p aEntry can be from the array itself. The method safely copies @p aEntry before shifting existing
+     * elements in the array.
+     *
+     * @param[in] aIndex          The index at which to insert the new element.
+     * @param[in] aEntry          The new entry to insert.
+     *
+     * @retval kErrorNone         Successfully inserted @p aEntry at @p aIndex in the array.
+     * @retval kErrorNoBufs       Could not insert the new element since array is full.
+     * @retval kErrorInvalidArgs  @p aIndex is invalid (`aIndex > GetLength()`).
+     */
+    Error InsertAt(IndexType aIndex, const Type &aEntry)
+    {
+        Error error;
+        Type  entry = aEntry;
+
+        SuccessOrExit(error = ShiftFrom(aIndex));
+        mElements[aIndex] = entry;
+
+    exit:
+        return error;
+    }
+
+    /**
+     * Inserts a new element at a given index in the array.
+     *
+     * On success, this method shifts existing elements to make room and returns a pointer to the inserted element
+     * in the array for the caller to initialize and use.
+     *
+     * @param[in] aIndex   The index at which to insert the new element.
+     *
+     * @returns A pointer to the newly inserted element, or `nullptr` if the array is full or @p aIndex is invalid.
+     */
+    Type *InsertAt(IndexType aIndex) OT_LIFETIME_BOUND
+    {
+        Type *entry = nullptr;
+
+        SuccessOrExit(ShiftFrom(aIndex));
+        entry = &mElements[aIndex];
+
+    exit:
+        return entry;
+    }
 
     /**
      * Returns the index of an element in the array.
@@ -349,7 +406,6 @@ public:
      * @param[in] aElement  A reference to an element in the array.
      *
      * @returns The index of @p aElement in the array.
-     *
      */
     IndexType IndexOf(const Type &aElement) const { return static_cast<IndexType>(&aElement - &mElements[0]); }
 
@@ -362,7 +418,6 @@ public:
      * change after a call to this method.
      *
      * The method uses assignment `=` operator on `Type` to copy the last element in place of @p aElement.
-     *
      */
     void Remove(Type &aElement)
     {
@@ -382,9 +437,8 @@ public:
      * @param[in] aEntry   The entry to search for within the array.
      *
      * @returns A pointer to matched array element, or `nullptr` if a match could not be found.
-     *
      */
-    Type *Find(const Type &aEntry) { return AsNonConst(AsConst(this)->Find(aEntry)); }
+    Type *Find(const Type &aEntry) OT_LIFETIME_BOUND { return AsNonConst(AsConst(this)->Find(aEntry)); }
 
     /**
      * Finds the first match of a given entry in the array.
@@ -394,9 +448,8 @@ public:
      * @param[in] aEntry   The entry to search for within the array.
      *
      * @returns A pointer to matched array element, or `nullptr` if a match could not be found.
-     *
      */
-    const Type *Find(const Type &aEntry) const
+    const Type *Find(const Type &aEntry) const OT_LIFETIME_BOUND
     {
         const Type *matched = nullptr;
 
@@ -421,7 +474,6 @@ public:
      *
      * @retval TRUE   The array contains a matching element with @p aEntry.
      * @retval FALSE  The array does not contain a matching element with @p aEntry.
-     *
      */
     bool Contains(const Type &aEntry) const { return Find(aEntry) != nullptr; }
 
@@ -437,9 +489,8 @@ public:
      * @param[in]  aIndicator  An indicator to match with elements in the array.
      *
      * @returns A pointer to the matched array element, or `nullptr` if a match could not be found.
-     *
      */
-    template <typename Indicator> Type *FindMatching(const Indicator &aIndicator)
+    template <typename Indicator> Type *FindMatching(const Indicator &aIndicator) OT_LIFETIME_BOUND
     {
         return AsNonConst(AsConst(this)->FindMatching(aIndicator));
     }
@@ -456,9 +507,8 @@ public:
      * @param[in]  aIndicator  An indicator to match with elements in the array.
      *
      * @returns A pointer to the matched array element, or `nullptr` if a match could not be found.
-     *
      */
-    template <typename Indicator> const Type *FindMatching(const Indicator &aIndicator) const
+    template <typename Indicator> const Type *FindMatching(const Indicator &aIndicator) const OT_LIFETIME_BOUND
     {
         const Type *matched = nullptr;
 
@@ -487,11 +537,38 @@ public:
      *
      * @retval TRUE   The array contains a matching element with @p aIndicator.
      * @retval FALSE  The array does not contain a matching element with @p aIndicator.
-     *
      */
     template <typename Indicator> bool ContainsMatching(const Indicator &aIndicator) const
     {
         return FindMatching(aIndicator) != nullptr;
+    }
+
+    /**
+     * Counts the number of elements in the array matching a given indicator.
+     *
+     * The template type `Indicator` specifies the type of @p aIndicator object which is used to match against elements
+     * in the array. To check that an element matches the given indicator, the `Matches()` method is invoked on each
+     * `Type` element in the array. The `Matches()` method should be provided by `Type` class accordingly:
+     *
+     *     bool Type::Matches(const Indicator &aIndicator) const
+     *
+     * @param[in]  aIndicator  An indicator to match with elements in the array.
+     *
+     * @returns The number of elements in the array matching @p aIndicator.
+     */
+    template <typename Indicator> SizeType CountMatching(const Indicator &aIndicator) const
+    {
+        SizeType count = 0;
+
+        for (const Type &element : *this)
+        {
+            if (element.Matches(aIndicator))
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     /**
@@ -508,7 +585,6 @@ public:
      *     bool Type::Matches(const Indicator &aIndicator) const
      *
      * @param[in]  aIndicator  An indicator to match with elements in the array.
-     *
      */
     template <typename Indicator> void RemoveMatching(const Indicator &aIndicator)
     {
@@ -533,7 +609,6 @@ public:
      *     bool Type::Matches(const Indicator &aIndicator) const
      *
      * @param[in]  aIndicator  An indicator to match with elements in the array.
-     *
      */
     template <typename Indicator> void RemoveAllMatching(const Indicator &aIndicator)
     {
@@ -563,7 +638,6 @@ public:
      * the array.
      *
      * @param[in] aOtherArray  Another array to copy from.
-     *
      */
     Array &operator=(const Array &aOtherArray)
     {
@@ -578,18 +652,17 @@ public:
     }
 
     /**
-     * Indicates whether a given entry pointer is from the array buffer.
+     * Indicates whether a given pointer is from the array buffer.
      *
      * Does not check the current length of array and only checks that @p aEntry is pointing to an address
      * contained within underlying C array buffer.
      *
-     * @param[in] aEntry   A pointer to an entry to check.
+     * @param[in] aEntry   A pointer to  check.
      *
      * @retval TRUE  The @p aEntry is from the array.
      * @retval FALSE The @p aEntry is not from the array.
-     *
      */
-    bool IsInArrayBuffer(const Type *aEntry) const
+    bool IsInArrayBuffer(const void *aEntry) const
     {
         return (&mElements[0] <= aEntry) && (aEntry < GetArrayEnd(mElements));
     }
@@ -598,16 +671,34 @@ public:
     // loop iteration over the array elements and should not be used
     // directly.
 
-    Type       *begin(void) { return &mElements[0]; }
-    Type       *end(void) { return &mElements[mLength]; }
-    const Type *begin(void) const { return &mElements[0]; }
-    const Type *end(void) const { return &mElements[mLength]; }
+    Type       *begin(void) OT_LIFETIME_BOUND { return &mElements[0]; }
+    Type       *end(void) OT_LIFETIME_BOUND { return &mElements[mLength]; }
+    const Type *begin(void) const OT_LIFETIME_BOUND { return &mElements[0]; }
+    const Type *end(void) const OT_LIFETIME_BOUND { return &mElements[mLength]; }
 
 private:
+    Error ShiftFrom(IndexType aIndex)
+    {
+        Error error = kErrorNone;
+
+        VerifyOrExit(!IsFull(), error = kErrorNoBufs);
+        VerifyOrExit(aIndex <= mLength, error = kErrorInvalidArgs);
+
+        for (IndexType index = mLength; index > aIndex; index--)
+        {
+            mElements[index] = mElements[index - 1];
+        }
+
+        mLength++;
+
+    exit:
+        return error;
+    }
+
     Type      mElements[kMaxSize];
     IndexType mLength;
 };
 
 } // namespace ot
 
-#endif // ARRAY_HPP_
+#endif // OT_CORE_COMMON_ARRAY_HPP_

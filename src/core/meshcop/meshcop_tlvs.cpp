@@ -33,12 +33,7 @@
 
 #include "meshcop_tlvs.hpp"
 
-#include "common/const_cast.hpp"
-#include "common/debug.hpp"
-#include "common/num_utils.hpp"
-#include "common/numeric_limits.hpp"
-#include "common/string.hpp"
-#include "meshcop/meshcop.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 namespace MeshCoP {
@@ -63,12 +58,41 @@ void NetworkNameTlv::SetNetworkName(const NameData &aNameData)
     SetLength(len);
 }
 
-bool NetworkNameTlv::IsValid(void) const { return IsValidUtf8String(mNetworkName, GetLength()); }
-
-void SteeringDataTlv::CopyTo(SteeringData &aSteeringData) const
+bool NetworkNameTlv::IsValid(void) const
 {
-    aSteeringData.Init(GetSteeringDataLength());
-    memcpy(aSteeringData.GetData(), mSteeringData, GetSteeringDataLength());
+    bool isValid = false;
+
+#if OPENTHREAD_CONFIG_ALLOW_EMPTY_NETWORK_NAME
+    if (GetLength() == 0)
+    {
+        ExitNow(isValid = true);
+    }
+#endif
+
+    VerifyOrExit(IsValueInRange<uint8_t>(GetLength(), 1, NetworkName::kMaxSize));
+    VerifyOrExit(IsValidUtf8String(mNetworkName, GetLength()));
+    isValid = true;
+
+exit:
+    return isValid;
+}
+
+Error SteeringDataTlv::CopyTo(SteeringData &aSteeringData) const
+{
+    return aSteeringData.Init(GetSteeringDataLength(), mSteeringData);
+}
+
+Error SteeringDataTlv::FindIn(const Message &aMessage, SteeringData &aSteeringData)
+{
+    Error       error;
+    OffsetRange offsetRange;
+
+    SuccessOrExit(error = Tlv::FindTlvValueOffsetRange(aMessage, Tlv::kSteeringData, offsetRange));
+    SuccessOrExit(error = aSteeringData.Init(ClampToUint8(offsetRange.GetLength())));
+    error = aMessage.Read(offsetRange, aSteeringData.GetData(), aSteeringData.GetLength());
+
+exit:
+    return error;
 }
 
 bool SecurityPolicyTlv::IsValid(void) const
@@ -145,18 +169,24 @@ Error ChannelMaskTlv::ReadChannelMask(uint32_t &aChannelMask) const
 Error ChannelMaskTlv::FindIn(const Message &aMessage, uint32_t &aChannelMask)
 {
     Error       error;
-    EntriesData entriesData;
     OffsetRange offsetRange;
 
-    entriesData.Clear();
-    entriesData.mMessage = &aMessage;
-
     SuccessOrExit(error = FindTlvValueOffsetRange(aMessage, Tlv::kChannelMask, offsetRange));
-    entriesData.mOffsetRange = offsetRange;
-    error                    = entriesData.Parse(aChannelMask);
+    error = ParseValue(aMessage, offsetRange, aChannelMask);
 
 exit:
     return error;
+}
+
+Error ChannelMaskTlv::ParseValue(const Message &aMessage, const OffsetRange &aOffsetRange, uint32_t &aChannelMask)
+{
+    EntriesData entriesData;
+
+    entriesData.Clear();
+    entriesData.mMessage     = &aMessage;
+    entriesData.mOffsetRange = aOffsetRange;
+
+    return entriesData.Parse(aChannelMask);
 }
 
 Error ChannelMaskTlv::EntriesData::Parse(uint32_t &aChannelMask)
@@ -222,7 +252,7 @@ exit:
     return error;
 }
 
-void ChannelMaskTlv::PrepareValue(Value &aValue, uint32_t aChannelMask)
+void ChannelMaskTlv::PrepareValue(Value &aValue, uint32_t aChannelMask, bool aIncludeZeroPageMasks)
 {
     Entry *entry = reinterpret_cast<Entry *>(aValue.mData);
 
@@ -232,7 +262,7 @@ void ChannelMaskTlv::PrepareValue(Value &aValue, uint32_t aChannelMask)
     {
         uint32_t mask = (Radio::ChannelMaskForPage(page) & aChannelMask);
 
-        if (mask != 0)
+        if ((mask != 0) || aIncludeZeroPageMasks)
         {
             entry->SetChannelPage(page);
             entry->SetMaskLength(kMaskLength);

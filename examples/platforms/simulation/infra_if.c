@@ -34,6 +34,7 @@
 #include <openthread/platform/infra_if.h>
 
 #include "simul_utils.h"
+#include "lib/platform/exit_code.h"
 #include "utils/code_utils.h"
 
 #if OPENTHREAD_SIMULATION_IMPLEMENT_INFRA_IF && OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
@@ -171,18 +172,22 @@ exit:
 //---------------------------------------------------------------------------------------------------------------------
 // otPlatInfraIf
 
-bool otPlatInfraIfHasAddress(uint32_t aInfraIfIndex, const otIp6Address *aAddress)
+bool otPlatInfraIfHasAddress(otInstance *aInstance, uint32_t aInfraIfIndex, const otIp6Address *aAddress)
 {
+    OT_UNUSED_VARIABLE(aInstance);
     OT_UNUSED_VARIABLE(aInfraIfIndex);
 
     return addressesMatch(aAddress, &sIp6Address);
 }
 
-otError otPlatInfraIfSendIcmp6Nd(uint32_t            aInfraIfIndex,
+otError otPlatInfraIfSendIcmp6Nd(otInstance         *aInstance,
+                                 uint32_t            aInfraIfIndex,
                                  const otIp6Address *aDestAddress,
                                  const uint8_t      *aBuffer,
                                  uint16_t            aBufferLength)
 {
+    OT_UNUSED_VARIABLE(aInstance);
+
     otError  error = OT_ERROR_FAILED;
     Message *message;
 
@@ -206,12 +211,35 @@ exit:
     return error;
 }
 
-otError otPlatInfraIfDiscoverNat64Prefix(uint32_t aInfraIfIndex)
+otError otPlatInfraIfDiscoverNat64Prefix(otInstance *aInstance, uint32_t aInfraIfIndex)
 {
+    OT_UNUSED_VARIABLE(aInstance);
     OT_UNUSED_VARIABLE(aInfraIfIndex);
 
     return OT_ERROR_NONE;
 }
+
+#if OPENTHREAD_CONFIG_BORDER_ROUTING_DHCP6_PD_ENABLE && OPENTHREAD_CONFIG_BORDER_ROUTING_DHCP6_PD_CLIENT_ENABLE
+
+void otPlatInfraIfDhcp6PdClientSetListeningEnabled(otInstance *aInstance, bool aEnable, uint32_t aInfraIfIndex)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aEnable);
+    OT_UNUSED_VARIABLE(aInfraIfIndex);
+}
+
+void otPlatInfraIfDhcp6PdClientSend(otInstance   *aInstance,
+                                    otMessage    *aMessage,
+                                    otIp6Address *aDestAddress,
+                                    uint32_t      aInfraIfIndex)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aDestAddress);
+    OT_UNUSED_VARIABLE(aInfraIfIndex);
+    otMessageFree(aMessage);
+}
+
+#endif // OPENTHREAD_CONFIG_BORDER_ROUTING_DHCP6_PD_ENABLE && OPENTHREAD_CONFIG_BORDER_ROUTING_DHCP6_PD_CLIENT_ENABLE
 
 //---------------------------------------------------------------------------------------------------------------------
 // platformInfraIf
@@ -252,7 +280,7 @@ void platformInfraIfInit(void)
         if (*endptr != '\0')
         {
             fprintf(stderr, "\r\nInvalid PORT_OFFSET: %s\r\n", str);
-            exit(EXIT_FAILURE);
+            DieNow(OT_EXIT_FAILURE);
         }
 
         sPortOffset *= (MAX_NETWORK_SIZE + 1);
@@ -332,7 +360,14 @@ OT_TOOL_WEAK void otPlatInfraIfRecvIcmp6Nd(otInstance         *aInstance,
     OT_UNUSED_VARIABLE(aBufferLength);
 
     fprintf(stderr, "\n\r Weak otPlatInfraIfRecvIcmp6Nd is being used\n\r");
-    exit(1);
+    DieNow(OT_EXIT_FAILURE);
+}
+
+OT_TOOL_WEAK void otMessageFree(otMessage *aMessage)
+{
+    OT_UNUSED_VARIABLE(aMessage);
+    fprintf(stderr, "\n\rWeak otMessageFree() is incorrectly used\n\r");
+    DieNow(OT_EXIT_FAILURE);
 }
 
 #endif // OPENTHREAD_SIMULATION_IMPLEMENT_INFRA_IF && OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE

@@ -341,7 +341,7 @@ Done
 
 ### active
 
-Usage: `dataset active [-x]`
+Usage: `dataset active [-x|-ns]`
 
 Print Active Operational Dataset in human-readable form.
 
@@ -360,11 +360,28 @@ Security Policy: 672 onrc 0
 Done
 ```
 
+Print Active Operational Dataset in human-readable form and redact the sensitive values.
+
+```bash
+> dataset active -ns
+Active Timestamp: 1
+Channel: 15
+Channel Mask: 0x07fff800
+Ext PAN ID: 39758ec8144b07fb
+Mesh Local Prefix: fdf1:f1ad:d079:7dc0::/64
+Network Key: [Redacted]
+Network Name: OpenThread-5938
+PAN ID: 0x5938
+PSKc: [Redacted]
+Security Policy: 672 onrc 0
+Done
+```
+
 Print Active Operational Dataset as hex-encoded TLVs.
 
 ```bash
 > dataset active -x
-0e080000000000010000000300000f35060004001fffe0020839758ec8144b07fb0708fdf1f1add0797dc00510f366cec7a446bab978d90d27abe38f23030f4f70656e5468726561642d353933380102593804103ca67c969efb0d0c74a4d8ee923b576c0c0402a0f7f8
+0e08000000000001000000030000164a0300001735060004001fffe00208b182e6a17996cecc0708fd3f363fa8f1b0bc0510ebb6f6a447c96e1542176df3a834ac0e030f4f70656e5468726561642d3663393901026c99041096e9cdfe1eb1363a3676e2b94df0271b0c0402a0f7f8
 Done
 ```
 
@@ -614,7 +631,7 @@ Done
 
 ### pending
 
-Usage: `dataset pending [-x]`
+Usage: `dataset pending [-x|-ns]`
 
 Print Pending Operational Dataset in human-readable form.
 
@@ -631,6 +648,25 @@ Network Key: ed916e454d96fd00184f10a6f5c9e1d3
 Network Name: OpenThread-bff8
 PAN ID: 0xbff8
 PSKc: 264f78414adc683191863d968f72d1b7
+Security Policy: 672 onrc 0
+Done
+```
+
+Print Pending Operational Dataset in human-readable form and redact the sensitive values.
+
+```bash
+> dataset pending -ns
+Pending Timestamp: 2
+Active Timestamp: 1
+Channel: 26
+Channel Mask: 0x07fff800
+Delay: 58706
+Ext PAN ID: a74182f4d3f4de41
+Mesh Local Prefix: fd46:c1b9:e159:5574::/64
+Network Key: [Redacted]
+Network Name: OpenThread-bff8
+PAN ID: 0xbff8
+PSKc: [Redacted]
 Security Policy: 672 onrc 0
 Done
 ```

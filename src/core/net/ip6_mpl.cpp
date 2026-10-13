@@ -33,14 +33,7 @@
 
 #include "ip6_mpl.hpp"
 
-#include "common/code_utils.hpp"
-#include "common/debug.hpp"
-#include "common/locator_getters.hpp"
-#include "common/message.hpp"
-#include "common/random.hpp"
-#include "common/serial_number.hpp"
 #include "instance/instance.hpp"
-#include "net/ip6.hpp"
 
 namespace ot {
 namespace Ip6 {
@@ -53,25 +46,6 @@ Mpl::Mpl(Instance &aInstance)
 #endif
 {
     ClearAllBytes(mSeedSet);
-}
-
-void MplOption::Init(SeedIdLength aSeedIdLength)
-{
-    SetType(kType);
-
-    switch (aSeedIdLength)
-    {
-    case kSeedIdLength0:
-        SetLength(sizeof(*this) - sizeof(Option) - sizeof(mSeedId));
-        break;
-    case kSeedIdLength2:
-        SetLength(sizeof(*this) - sizeof(Option));
-        break;
-    default:
-        OT_ASSERT(false);
-    }
-
-    mControl = aSeedIdLength;
 }
 
 void Mpl::InitOption(MplOption &aOption, const Address &aAddress)
@@ -90,25 +64,27 @@ void Mpl::InitOption(MplOption &aOption, const Address &aAddress)
     aOption.SetSequence(mSequence++);
 }
 
-Error Mpl::ProcessOption(Message &aMessage, const OffsetRange &aOffsetRange, const Address &aAddress, bool &aReceive)
+Error Mpl::ReadAndValidateOption(Message           &aMessage,
+                                 const OffsetRange &aOffsetRange,
+                                 const Address     &aAddress,
+                                 MplOption         &aOption)
 {
-    Error     error;
-    MplOption option;
+    Error error;
 
     // Read the min size bytes first, then check the expected
     // `SeedIdLength` and read the full `MplOption` if needed.
-    SuccessOrExit(error = aMessage.Read(aOffsetRange, &option, MplOption::kMinSize));
+    SuccessOrExit(error = aMessage.Read(aOffsetRange, &aOption, MplOption::kMinSize));
 
-    switch (option.GetSeedIdLength())
+    switch (aOption.GetSeedIdLength())
     {
     case MplOption::kSeedIdLength0:
         // Retrieve Seed ID from the IPv6 Source Address RLOC.
-        VerifyOrExit(aAddress.GetIid().IsLocator(), error = kErrorDrop);
-        option.SetSeedId(aAddress.GetIid().GetLocator());
+        VerifyOrExit(aAddress.GetIid().IsLocator(), error = kErrorParse);
+        aOption.SetSeedId(aAddress.GetIid().GetLocator());
         break;
 
     case MplOption::kSeedIdLength2:
-        SuccessOrExit(error = aMessage.Read(aOffsetRange, option));
+        SuccessOrExit(error = aMessage.Read(aOffsetRange, aOption));
         break;
 
     case MplOption::kSeedIdLength8:
@@ -116,21 +92,37 @@ Error Mpl::ProcessOption(Message &aMessage, const OffsetRange &aOffsetRange, con
         ExitNow(error = kErrorParse);
     }
 
+exit:
+    return error;
+}
+
+Error Mpl::ProcessOption(Message &aMessage, const MplOption &aOption, bool &aReceive)
+{
+    Error error = kErrorNone;
+
+    VerifyOrExit(Get<Mle::Mle>().IsRxOnWhenIdle());
+
     // Check if the MPL Data Message is new.
-    error = UpdateSeedSet(option.GetSeedId(), option.GetSequence());
+    error = UpdateSeedSet(aOption.GetSeedId(), aOption.GetSequence());
 
     if (error == kErrorNone)
     {
 #if OPENTHREAD_FTD
-        AddBufferedMessage(aMessage, option.GetSeedId(), option.GetSequence());
+        AddBufferedMessage(aMessage, aOption.GetSeedId(), aOption.GetSequence());
 #endif
     }
     else if (!aMessage.IsOriginThreadNetif())
     {
+        // If the MPL message is not new (already present in the seed
+        // set), avoid receiving it again. It should have been
+        // received and processed the first time the seed set was
+        // updated.
         aReceive = false;
-        // In case MPL Data Message is generated locally, ignore potential error of the MPL Seed Set
-        // to allow subsequent retransmissions with the same sequence number.
-        ExitNow(error = kErrorNone);
+
+        // In case MPL Data Message is generated locally, ignore
+        // potential error of the MPL Seed Set to allow subsequent
+        // retransmissions with the same sequence number.
+        error = kErrorNone;
     }
 
 exit:
@@ -350,7 +342,7 @@ void Mpl::AddBufferedMessage(Message &aMessage, uint16_t aSeedId, uint8_t aSeque
 #endif
 
     VerifyOrExit(DetermineMaxRetransmissions() > 0);
-    VerifyOrExit((messageCopy = aMessage.Clone()) != nullptr, error = kErrorNoBufs);
+    VerifyOrExit((messageCopy = aMessage.Clone<kSameReservedHeader>()) != nullptr, error = kErrorNoBufs);
 
     if (aMessage.IsOriginThreadNetif())
     {
@@ -421,7 +413,7 @@ void Mpl::HandleRetransmissionTimer(void)
 
             nextTime.UpdateIfEarlier(metadata.mTransmissionTime);
 
-            messageCopy = message.Clone();
+            messageCopy = message.Clone<kSameReservedHeader>();
         }
         else
         {
@@ -453,22 +445,10 @@ void Mpl::HandleRetransmissionTimer(void)
     mRetransmissionTimer.FireAt(nextTime);
 }
 
-void Mpl::Metadata::ReadFrom(const Message &aMessage)
-{
-    uint16_t length = aMessage.GetLength();
-
-    OT_ASSERT(length >= sizeof(*this));
-    IgnoreError(aMessage.Read(length - sizeof(*this), *this));
-}
-
-void Mpl::Metadata::RemoveFrom(Message &aMessage) const { aMessage.RemoveFooter(sizeof(*this)); }
-
-void Mpl::Metadata::UpdateIn(Message &aMessage) const { aMessage.Write(aMessage.GetLength() - sizeof(*this), *this); }
-
 void Mpl::Metadata::GenerateNextTransmissionTime(TimeMilli aCurrentTime, uint8_t aInterval)
 {
     // Emulate Trickle timer behavior and set up the next retransmission within [0,I) range.
-    uint8_t t = (aInterval == 0) ? aInterval : Random::NonCrypto::GetUint8InRange(0, aInterval);
+    uint8_t t = (aInterval == 0) ? aInterval : Random::NonCrypto::GenerateUpToExcluding(aInterval);
 
     // Set transmission time at the beginning of the next interval.
     mTransmissionTime = aCurrentTime + static_cast<uint32_t>(mIntervalOffset + t);

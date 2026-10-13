@@ -1,5 +1,5 @@
 """
-  Copyright (c) 2024, The OpenThread Authors.
+  Copyright (c) 2024-2025, The OpenThread Authors.
   All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
@@ -26,27 +26,38 @@
   POSSIBILITY OF SUCH DAMAGE.
 """
 
+from typing import Optional
+
 from bleak import BleakScanner
-from bbtc import BBTC_SERVICE_UUID
+from bleak.backends.device import BLEDevice
+from bleak.uuids import normalize_uuid_str
+
+from ble.ble_connection_constants import BBTC_SERVICE_UUID
+from ble.ble_advertisement_data import AdvertisedData
 
 
-async def find_first_by_name(name):
+async def find_first_by_name(name) -> BLEDevice:
     match_name = lambda dev, adv_data: name == dev.name
     device = await BleakScanner.find_device_by_filter(match_name)
     return device
 
 
-async def find_first_by_mac(mac):
+async def find_first_by_mac(mac) -> BLEDevice:
     match_mac = lambda dev, adv_data: mac.upper() == dev.address
     device = await BleakScanner.find_device_by_filter(match_mac)
     return device
 
 
-async def scan_tcat_devices():
+async def scan_tcat_devices(adapter: Optional[str] = None) -> list[tuple[BLEDevice, Optional[AdvertisedData]]]:
     scanner = BleakScanner()
-    tcat_devices = []
-    devices_dict = await scanner.discover(return_adv=True, service_uuids=[BBTC_SERVICE_UUID.lower()])
-    for _, (device, _) in devices_dict.items():
-        tcat_devices.append(device)
+    tcat_devices: list[tuple[BLEDevice, Optional[AdvertisedData]]] = []
+    service_uuids = [normalize_uuid_str(BBTC_SERVICE_UUID)]
+    discovered_devices = await scanner.discover(return_adv=True, service_uuids=service_uuids, adapter=adapter)
+    for _, (device, adv) in discovered_devices.items():
+        ad = None
+        for uuid, data in adv.service_data.items():
+            if BBTC_SERVICE_UUID.lower() in uuid:
+                ad = AdvertisedData.from_bytes(data)
+        tcat_devices.append((device, ad))
 
     return tcat_devices

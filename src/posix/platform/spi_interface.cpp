@@ -127,13 +127,9 @@ otError SpiInterface::Init(ReceiveFrameCallback aCallback, void *aCallbackContex
 
     spiGpioIntDevice   = mRadioUrl.GetValue("gpio-int-device");
     spiGpioResetDevice = mRadioUrl.GetValue("gpio-reset-device");
-    if (!spiGpioIntDevice || !spiGpioResetDevice)
-    {
-        DieNow(OT_EXIT_INVALID_ARGUMENTS);
-    }
 
+    VerifyOrDie(spiGpioIntDevice, OT_EXIT_INVALID_ARGUMENTS);
     SuccessOrDie(mRadioUrl.ParseUint8("gpio-int-line", spiGpioIntLine));
-    SuccessOrDie(mRadioUrl.ParseUint8("gpio-reset-line", spiGpioResetLine));
     VerifyOrDie(mRadioUrl.ParseUint8("spi-mode", spiMode) != OT_ERROR_INVALID_ARGS, OT_EXIT_INVALID_ARGUMENTS);
     VerifyOrDie(mRadioUrl.ParseUint32("spi-speed", spiSpeed) != OT_ERROR_INVALID_ARGS, OT_EXIT_INVALID_ARGUMENTS);
     VerifyOrDie(mRadioUrl.ParseUint32("spi-reset-delay", spiResetDelay) != OT_ERROR_INVALID_ARGS,
@@ -150,17 +146,21 @@ otError SpiInterface::Init(ReceiveFrameCallback aCallback, void *aCallbackContex
     mSpiSmallPacketSize = spiSmallPacketSize;
     mSpiAlignAllowance  = spiAlignAllowance;
 
-    if (spiGpioIntDevice != nullptr)
+    InitIntPin(spiGpioIntDevice, spiGpioIntLine);
+
+    if (spiGpioResetDevice)
     {
-        // If the interrupt pin is not set, SPI interface will use polling mode.
-        InitIntPin(spiGpioIntDevice, spiGpioIntLine);
+        SuccessOrDie(mRadioUrl.ParseUint8("gpio-reset-line", spiGpioResetLine));
+        InitResetPin(spiGpioResetDevice, spiGpioResetLine);
     }
     else
     {
-        LogNote("SPI interface enters polling mode.");
+        // For some products, gpio-reset-device is not needed in the radio URL as
+        // the reset may be managed by another component in the system (e.g., by the BT stack).
+        // In this case, gpio-reset-device in the radio URL should not be given, and this is expected.
+        LogInfo("gpio-reset-device is not given.");
     }
 
-    InitResetPin(spiGpioResetDevice, spiGpioResetLine);
     InitSpiDev(mRadioUrl.GetPath(), spiMode, spiSpeed);
 
     mReceiveFrameCallback = aCallback;
@@ -310,6 +310,8 @@ exit:
 
 void SpiInterface::TriggerReset(void)
 {
+    VerifyOrDie(mResetGpioValueFd >= 0, OT_EXIT_RCP_RESET_REQUIRED);
+
     // Set Reset pin to low level.
     SetGpioValue(mResetGpioValueFd, 0);
 
@@ -326,8 +328,7 @@ uint8_t *SpiInterface::GetRealRxFrameStart(uint8_t *aSpiRxFrameBuffer, uint8_t a
     uint8_t       *start = aSpiRxFrameBuffer;
     const uint8_t *end   = aSpiRxFrameBuffer + aAlignAllowance;
 
-    for (; start != end && ((start[0] == 0xff) || (start[0] == 0x00)); start++)
-        ;
+    for (; start != end && ((start[0] == 0xff) || (start[0] == 0x00)); start++);
 
     aSkipLength = static_cast<uint16_t>(start - aSpiRxFrameBuffer);
 
@@ -411,8 +412,9 @@ otError SpiInterface::PushPullSpi(void)
     txFrame.SetHeaderAcceptLen(0);
     txFrame.SetHeaderDataLen(0);
 
-    // Sanity check.
-    if (mSpiSlaveDataLen > kMaxFrameSize)
+    // Sanity check. The header `data_len` carries the payload length only
+    // (it excludes header size), so the largest valid value is the MTU.
+    if (mSpiSlaveDataLen > kMaxFrameSize - kSpiFrameHeaderSize)
     {
         mSpiSlaveDataLen = 0;
     }
@@ -516,7 +518,8 @@ otError SpiInterface::PushPullSpi(void)
         slaveAcceptLen   = rxFrame.GetHeaderAcceptLen();
         mSpiSlaveDataLen = rxFrame.GetHeaderDataLen();
 
-        if (!rxFrame.IsValid() || (slaveAcceptLen > kMaxFrameSize) || (mSpiSlaveDataLen > kMaxFrameSize))
+        if (!rxFrame.IsValid() || (slaveAcceptLen > kMaxFrameSize - kSpiFrameHeaderSize) ||
+            (mSpiSlaveDataLen > kMaxFrameSize - kSpiFrameHeaderSize))
         {
             mInterfaceMetrics.mTransferredGarbageFrameCount++;
             mSpiTxRefusedCount++;
@@ -606,16 +609,12 @@ exit:
     return error;
 }
 
-bool SpiInterface::CheckInterrupt(void)
-{
-    return (mIntGpioValueFd >= 0) ? (GetGpioValue(mIntGpioValueFd) == kGpioIntAssertState) : true;
-}
+bool SpiInterface::CheckInterrupt(void) { return (GetGpioValue(mIntGpioValueFd) == kGpioIntAssertState); }
 
 void SpiInterface::UpdateFdSet(void *aMainloopContext)
 {
-    struct timeval        timeout        = {kSecPerDay, 0};
-    struct timeval        pollingTimeout = {0, kSpiPollPeriodUs};
-    otSysMainloopContext *context        = reinterpret_cast<otSysMainloopContext *>(aMainloopContext);
+    struct timeval        timeout = {kSecPerDay, 0};
+    otSysMainloopContext *context = reinterpret_cast<otSysMainloopContext *>(aMainloopContext);
 
     assert(context != nullptr);
 
@@ -626,31 +625,23 @@ void SpiInterface::UpdateFdSet(void *aMainloopContext)
         timeout.tv_usec = 0;
     }
 
-    if (mIntGpioValueFd >= 0)
+    if (context->mMaxFd < mIntGpioValueFd)
     {
-        if (context->mMaxFd < mIntGpioValueFd)
-        {
-            context->mMaxFd = mIntGpioValueFd;
-        }
-
-        if (CheckInterrupt())
-        {
-            // Interrupt pin is asserted, set the timeout to be 0.
-            timeout.tv_sec  = 0;
-            timeout.tv_usec = 0;
-            LogDebg("UpdateFdSet(): Interrupt.");
-        }
-        else
-        {
-            // The interrupt pin was not asserted, so we wait for the interrupt pin to be asserted by adding it to the
-            // read set.
-            FD_SET(mIntGpioValueFd, &context->mReadFdSet);
-        }
+        context->mMaxFd = mIntGpioValueFd;
     }
-    else if (timercmp(&pollingTimeout, &timeout, <))
+
+    if (CheckInterrupt())
     {
-        // In this case we don't have an interrupt, so we revert to SPI polling.
-        timeout = pollingTimeout;
+        // Interrupt pin is asserted, set the timeout to be 0.
+        timeout.tv_sec  = 0;
+        timeout.tv_usec = 0;
+        LogDebg("UpdateFdSet(): Interrupt.");
+    }
+    else
+    {
+        // The interrupt pin was not asserted, so we wait for the interrupt pin to be asserted by adding it to the
+        // read set.
+        FD_SET(mIntGpioValueFd, &context->mReadFdSet);
     }
 
     if (mSpiTxRefusedCount)

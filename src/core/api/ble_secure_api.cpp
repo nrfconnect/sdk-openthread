@@ -40,7 +40,7 @@
 
 #include "common/as_core_type.hpp"
 #include "common/code_utils.hpp"
-#include "common/locator_getters.hpp"
+#include "instance/instance.hpp"
 #include "meshcop/tcat_agent.hpp"
 #include "radio/ble_secure.hpp"
 
@@ -57,7 +57,7 @@ otError otBleSecureStart(otInstance              *aInstance,
 
 otError otBleSecureSetTcatVendorInfo(otInstance *aInstance, const otTcatVendorInfo *aVendorInfo)
 {
-    return AsCoreType(aInstance).Get<Ble::BleSecure>().TcatSetVendorInfo(AsCoreType(aVendorInfo));
+    return AsCoreType(aInstance).Get<Ble::BleSecure>().SetTcatVendorInfo(AsCoreType(aVendorInfo));
 }
 
 otError otBleSecureTcatStart(otInstance *aInstance, otHandleTcatJoin aHandler)
@@ -66,6 +66,11 @@ otError otBleSecureTcatStart(otInstance *aInstance, otHandleTcatJoin aHandler)
 }
 
 void otBleSecureStop(otInstance *aInstance) { AsCoreType(aInstance).Get<Ble::BleSecure>().Stop(); }
+
+otError otBleSecureSetTcatAgentState(otInstance *aInstance, bool aActive, uint32_t aDelayMs, uint32_t aDurationMs)
+{
+    return AsCoreType(aInstance).Get<Ble::BleSecure>().TcatActive(aActive, aDelayMs, aDurationMs);
+}
 
 #ifdef MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
 void otBleSecureSetPsk(otInstance    *aInstance,
@@ -85,11 +90,27 @@ void otBleSecureSetPsk(otInstance    *aInstance,
 #if defined(MBEDTLS_BASE64_C) && defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
 otError otBleSecureGetPeerCertificateBase64(otInstance *aInstance, unsigned char *aPeerCert, size_t *aCertLength)
 {
-    return AsCoreType(aInstance).Get<Ble::BleSecure>().GetPeerCertificateBase64(aPeerCert, aCertLength);
+    Error error;
+
+    VerifyOrExit(aPeerCert != nullptr, error = kErrorInvalidArgs);
+    VerifyOrExit(aCertLength != nullptr, error = kErrorInvalidArgs);
+
+    error = AsCoreType(aInstance).Get<Ble::BleSecure>().GetPeerCertificateBase64(aPeerCert, aCertLength, *aCertLength);
+
+exit:
+    return error;
 }
-#endif // defined(MBEDTLS_BASE64_C) && defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
+#endif
 
 #if defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
+otError otBleSecureGetPeerCertificateDer(otInstance *aInstance, unsigned char *aPeerCert, size_t *aCertLength)
+{
+    AssertPointerIsNotNull(aPeerCert);
+    AssertPointerIsNotNull(aCertLength);
+
+    return AsCoreType(aInstance).Get<Ble::BleSecure>().GetPeerCertificateDer(aPeerCert, aCertLength, *aCertLength);
+}
+
 otError otBleSecureGetPeerSubjectAttributeByOid(otInstance *aInstance,
                                                 const char *aOid,
                                                 size_t      aOidLength,
@@ -158,9 +179,9 @@ bool otBleSecureIsConnectionActive(otInstance *aInstance)
 
 bool otBleSecureIsConnected(otInstance *aInstance) { return AsCoreType(aInstance).Get<Ble::BleSecure>().IsConnected(); }
 
-bool otBleSecureIsTcatEnabled(otInstance *aInstance)
+bool otBleSecureIsTcatAgentStarted(otInstance *aInstance)
 {
-    return AsCoreType(aInstance).Get<Ble::BleSecure>().IsTcatEnabled();
+    return AsCoreType(aInstance).Get<Ble::BleSecure>().IsTcatAgentStarted();
 }
 
 bool otBleSecureIsCommandClassAuthorized(otInstance *aInstance, otTcatCommandClass aCommandClass)
@@ -179,11 +200,19 @@ otError otBleSecureSend(otInstance *aInstance, uint8_t *aBuf, uint16_t aLength)
     return AsCoreType(aInstance).Get<Ble::BleSecure>().Send(aBuf, aLength);
 }
 
-otError otBleSecureSendApplicationTlv(otInstance *aInstance, uint8_t *aBuf, uint16_t aLength)
+otError otBleSecureSendApplicationTlv(otInstance               *aInstance,
+                                      otTcatApplicationProtocol aApplicationProtocol,
+                                      uint8_t                  *aBuf,
+                                      uint16_t                  aLength)
 {
-    return AsCoreType(aInstance).Get<Ble::BleSecure>().SendApplicationTlv(aBuf, aLength);
+    return AsCoreType(aInstance).Get<Ble::BleSecure>().SendApplicationTlv(MapEnum(aApplicationProtocol), aBuf, aLength);
 }
 
 otError otBleSecureFlush(otInstance *aInstance) { return AsCoreType(aInstance).Get<Ble::BleSecure>().Flush(); }
+
+bool otBleSecureGetInstallCodeVerifyStatus(otInstance *aInstance)
+{
+    return AsCoreType(aInstance).Get<Ble::BleSecure>().GetInstallCodeVerifyStatus();
+}
 
 #endif // OPENTHREAD_CONFIG_BLE_TCAT_ENABLE

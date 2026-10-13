@@ -133,6 +133,46 @@ void TestMessageQueue(void)
     messageQueue.Dequeue(*messages[0]);
     VerifyMessageQueueContent(messageQueue, 0);
 
+    // Enqueue 2 messages and remove them in the same order added.
+    messageQueue.Enqueue(*messages[0]);
+    VerifyMessageQueueContent(messageQueue, 1, messages[0]);
+    messageQueue.Enqueue(*messages[1]);
+    VerifyMessageQueueContent(messageQueue, 2, messages[0], messages[1]);
+    messageQueue.Dequeue(*messages[0]);
+    VerifyMessageQueueContent(messageQueue, 1, messages[1]);
+    messageQueue.Dequeue(*messages[1]);
+    VerifyMessageQueueContent(messageQueue, 0);
+
+    // Enqueue 2 messages and remove them in reverse order added.
+    messageQueue.Enqueue(*messages[0]);
+    VerifyMessageQueueContent(messageQueue, 1, messages[0]);
+    messageQueue.Enqueue(*messages[1]);
+    VerifyMessageQueueContent(messageQueue, 2, messages[0], messages[1]);
+    messageQueue.Dequeue(*messages[1]);
+    VerifyMessageQueueContent(messageQueue, 1, messages[0]);
+    messageQueue.Dequeue(*messages[0]);
+    VerifyMessageQueueContent(messageQueue, 0);
+
+    // Enqueue 2 messages at the head and remove them in the same order added.
+    messageQueue.Enqueue(*messages[0], MessageQueue::kQueuePositionHead);
+    VerifyMessageQueueContent(messageQueue, 1, messages[0]);
+    messageQueue.Enqueue(*messages[1], MessageQueue::kQueuePositionHead);
+    VerifyMessageQueueContent(messageQueue, 2, messages[1], messages[0]);
+    messageQueue.Dequeue(*messages[0]);
+    VerifyMessageQueueContent(messageQueue, 1, messages[1]);
+    messageQueue.Dequeue(*messages[1]);
+    VerifyMessageQueueContent(messageQueue, 0);
+
+    // Enqueue 2 messages at the head and remove them in the reverse order added.
+    messageQueue.Enqueue(*messages[0], MessageQueue::kQueuePositionHead);
+    VerifyMessageQueueContent(messageQueue, 1, messages[0]);
+    messageQueue.Enqueue(*messages[1], MessageQueue::kQueuePositionHead);
+    VerifyMessageQueueContent(messageQueue, 2, messages[1], messages[0]);
+    messageQueue.Dequeue(*messages[1]);
+    VerifyMessageQueueContent(messageQueue, 1, messages[0]);
+    messageQueue.Dequeue(*messages[0]);
+    VerifyMessageQueueContent(messageQueue, 0);
+
     // Enqueue 5 messages
     messageQueue.Enqueue(*messages[0]);
     VerifyMessageQueueContent(messageQueue, 1, messages[0]);
@@ -246,6 +286,59 @@ void TestMessageQueue(void)
     testFreeInstance(sInstance);
 }
 
+void TestMessageQueueEnqueueAllFrom(void)
+{
+    // Validates the behavior of `MessageQueue::EnqueueAllFrom()` method.
+
+    MessageQueue messageQueue1;
+    MessageQueue messageQueue2;
+    Message     *messages[kNumTestMessages];
+
+    sInstance = testInitInstance();
+    VerifyOrQuit(sInstance != nullptr);
+
+    sMessagePool = &sInstance->Get<MessagePool>();
+
+    for (Message *&msg : messages)
+    {
+        msg = sMessagePool->Allocate(Message::kTypeIp6);
+        VerifyOrQuit(msg != nullptr, "Message::Allocate() failed");
+    }
+
+    // Case 1: Both queues are empty
+    messageQueue1.EnqueueAllFrom(messageQueue2);
+    VerifyMessageQueueContent(messageQueue1, 0);
+    VerifyMessageQueueContent(messageQueue2, 0);
+
+    // Case 2: Target queue (Q1) is empty, input queue (Q2) is non-empty
+    messageQueue2.Enqueue(*messages[0]);
+    messageQueue2.Enqueue(*messages[1]);
+    VerifyMessageQueueContent(messageQueue2, 2, messages[0], messages[1]);
+    messageQueue1.EnqueueAllFrom(messageQueue2);
+    VerifyMessageQueueContent(messageQueue1, 2, messages[0], messages[1]);
+    VerifyMessageQueueContent(messageQueue2, 0);
+
+    // Case 3: Target queue (Q1) is non-empty, input queue (Q2) is empty
+    messageQueue1.EnqueueAllFrom(messageQueue2);
+    VerifyMessageQueueContent(messageQueue1, 2, messages[0], messages[1]);
+    VerifyMessageQueueContent(messageQueue2, 0);
+
+    // Case 4: Both queues are non-empty
+    messageQueue2.Enqueue(*messages[2]);
+    VerifyMessageQueueContent(messageQueue2, 1, messages[2]);
+    messageQueue1.EnqueueAllFrom(messageQueue2);
+    VerifyMessageQueueContent(messageQueue1, 3, messages[0], messages[1], messages[2]);
+    VerifyMessageQueueContent(messageQueue2, 0);
+
+    // Case 5: Using the same queue as both the target and input queues
+    messageQueue1.EnqueueAllFrom(messageQueue1);
+    VerifyMessageQueueContent(messageQueue1, 3, messages[0], messages[1], messages[2]);
+    messageQueue2.EnqueueAllFrom(messageQueue2);
+    VerifyMessageQueueContent(messageQueue2, 0);
+
+    testFreeInstance(sInstance);
+}
+
 // This function verifies the content of the message queue to match the passed in messages
 void VerifyMessageQueueContentUsingOtApi(otMessageQueue *aQueue, int aExpectedLength, ...)
 {
@@ -333,8 +426,6 @@ void TestMessageQueueOtApis(void)
 
     message = otMessageQueueGetNext(&queue2, messages[0]);
     VerifyOrQuit(message == messages[1], "otMessageQueueGetNext() failed");
-    message = otMessageQueueGetNext(&queue, messages[0]);
-    VerifyOrQuit(message == nullptr, "otMessageQueueGetNext() did not return nullptr for message not in  the queue.");
 
     // Remove all element and make sure queue is empty
     otMessageQueueDequeue(&queue, messages[2]);
@@ -348,6 +439,7 @@ void TestMessageQueueOtApis(void)
 int main(void)
 {
     ot::TestMessageQueue();
+    ot::TestMessageQueueEnqueueAllFrom();
     ot::TestMessageQueueOtApis();
     printf("All tests passed\n");
     return 0;
