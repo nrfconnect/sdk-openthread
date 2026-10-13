@@ -40,8 +40,6 @@ import otci
 from otci import OTCI
 from otci.types import Ip6Addr
 
-CP_CAPABILITY_VERSION = "0.1.0"
-
 logging.basicConfig(level=logging.WARNING)
 
 
@@ -625,18 +623,10 @@ def parse_arguments():
 
     parser.add_argument(
         '-v',
-        '--version',
+        '--verbose',
         action='store_true',
         default=False,
-        help='output version',
-    )
-
-    parser.add_argument(
-        '-D',
-        '--debug',
-        action='store_true',
-        default=False,
-        help='output debug information',
+        help='output verbose information',
     )
 
     return parser.parse_args()
@@ -645,26 +635,22 @@ def parse_arguments():
 def main():
     arguments = parse_arguments()
 
-    if arguments.version:
-        print(f'Version: {CP_CAPABILITY_VERSION}')
-        exit()
-
-    if arguments.debug:
+    if arguments.verbose is True:
         logger = logging.getLogger()
         logger.setLevel(logging.DEBUG)
 
     rcp_caps = RcpCaps()
 
-    if arguments.diag_commands:
+    if arguments.diag_commands is True:
         rcp_caps.test_diag_commands()
 
-    if arguments.csl:
+    if arguments.csl is True:
         rcp_caps.test_csl()
 
-    if arguments.data_poll:
+    if arguments.data_poll is True:
         rcp_caps.test_data_poll()
 
-    if arguments.link_metrics:
+    if arguments.link_metrics is True:
         rcp_caps.test_link_metrics()
 
     if arguments.throughput:

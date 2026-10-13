@@ -54,7 +54,7 @@ Show help info.
 
 ```bash
 $ python3 ./tools/cp-caps/rcp_caps_test.py -h
-usage: rcp_caps_test.py [-h] [-c] [-d] [-p] [-t] [-v] [-D]
+usage: rcp_caps_test.py [-h] [-c] [-d] [-p] [-t] [-v]
 
 This script is used for testing RCP capabilities.
 
@@ -65,8 +65,7 @@ options:
   -l, --link-metrics   test whether the RCP supports link metrics
   -p, --data-poll      test whether the RCP supports data poll
   -t, --throughput     test the Thread network 1-hop throughput
-  -v, --version        output version
-  -D, --debug          output debug information
+  -v, --verbose        output verbose information
 
 Device Interfaces:
   DUT_SSH=<device_ip>            Connect to the DUT via ssh
