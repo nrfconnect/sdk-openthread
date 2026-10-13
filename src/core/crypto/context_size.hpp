@@ -33,9 +33,7 @@
 #include "openthread/crypto.h"
 
 #if OPENTHREAD_CONFIG_CRYPTO_LIB == OPENTHREAD_CONFIG_CRYPTO_LIB_MBEDTLS
-#include <mbedtls/aes.h>
 #include <mbedtls/md.h>
-#include <mbedtls/sha256.h>
 #elif OPENTHREAD_CONFIG_CRYPTO_LIB == OPENTHREAD_CONFIG_CRYPTO_LIB_PSA
 #include <psa/crypto.h>
 #endif // OPENTHREAD_CONFIG_CRYPTO_LIB == OPENTHREAD_CONFIG_CRYPTO_LIB_MBEDTLS
