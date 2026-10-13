@@ -796,8 +796,6 @@ Mac::TxFrame *MeshForwarder::HandleFrameRequest(Mac::TxFrames &aTxFrames)
 
     mSendBusy = true;
 
-    frame->SetTxTimestampEnabled(mSendMessage->IsTxTimestampEnabled());
-
     switch (mSendMessage->GetType())
     {
     case Message::kTypeIp6:
