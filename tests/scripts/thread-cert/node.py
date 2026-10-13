@@ -936,7 +936,7 @@ class NodeImpl:
         cmd = cmd.strip()
         while True:
             line = self.__readline()
-            if line.strip() == cmd:
+            if line == cmd:
                 break
 
             logging.warning("expecting echo %r, but read %r", cmd, line)
