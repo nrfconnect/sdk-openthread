@@ -469,7 +469,7 @@ Error Diags::ProcessSend(uint8_t aArgsLength, char *aArgs[])
     VerifyOrExit(txLength >= OT_RADIO_FRAME_MIN_SIZE, error = kErrorInvalidArgs);
     mTxLen = txLength;
 
-    SuccessOrExit(error = TransmitPacket());
+    TransmitPacket();
 
     if (!mIsAsyncSend)
     {
@@ -512,14 +512,12 @@ void Diags::OutputStats(void)
            "sent success packets: %lu\r\n"
            "sent error cca packets: %lu\r\n"
            "sent error abort packets: %lu\r\n"
-           "sent error invalid state packets: %lu\r\n"
            "sent error others packets: %lu\r\n"
            "first received packet: rssi=%d, lqi=%u\r\n"
            "last received packet: rssi=%d, lqi=%u\r\n",
            ToUlong(mStats.mReceivedPackets), ToUlong(mStats.mSentSuccessPackets), ToUlong(mStats.mSentErrorCcaPackets),
-           ToUlong(mStats.mSentErrorAbortPackets), ToUlong(mStats.mSentErrorInvalidStatePackets),
-           ToUlong(mStats.mSentErrorOthersPackets), mStats.mFirstRssi, mStats.mFirstLqi, mStats.mLastRssi,
-           mStats.mLastLqi);
+           ToUlong(mStats.mSentErrorAbortPackets), ToUlong(mStats.mSentErrorOthersPackets), mStats.mFirstRssi,
+           mStats.mFirstLqi, mStats.mLastRssi, mStats.mLastLqi);
 }
 
 Error Diags::ProcessStats(uint8_t aArgsLength, char *aArgs[])
@@ -552,9 +550,8 @@ Error Diags::ProcessStop(uint8_t aArgsLength, char *aArgs[])
     return kErrorNone;
 }
 
-Error Diags::TransmitPacket(void)
+void Diags::TransmitPacket(void)
 {
-    Error error         = kErrorNone;
     mTxPacket->mChannel = mChannel;
 
     if (mIsTxPacketSet)
@@ -575,14 +572,7 @@ Error Diags::TransmitPacket(void)
     }
 
     mDiagSendOn = true;
-    error       = Get<Radio>().Transmit(*static_cast<Mac::TxFrame *>(mTxPacket));
-
-    if (error == kErrorInvalidState)
-    {
-        mStats.mSentErrorInvalidStatePackets++;
-    }
-
-    return error;
+    IgnoreError(Get<Radio>().Transmit(*static_cast<Mac::TxFrame *>(mTxPacket)));
 }
 
 Error Diags::ParseReceiveConfigFormat(const char *aFormat, ReceiveConfig &aConfig)
@@ -779,7 +769,7 @@ void Diags::AlarmFired(void)
     {
         uint32_t now = otPlatAlarmMilliGetNow();
 
-        IgnoreError(TransmitPacket());
+        TransmitPacket();
         otPlatAlarmMilliStartAt(&GetInstance(), now, mTxPeriod);
     }
     else
@@ -889,7 +879,7 @@ void Diags::TransmitDone(Error aError)
     if (mTxPackets > 1)
     {
         mTxPackets--;
-        IgnoreError(TransmitPacket());
+        TransmitPacket();
     }
     else
     {
