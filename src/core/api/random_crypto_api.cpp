@@ -33,6 +33,8 @@
 
 #include <openthread/random_crypto.h>
 
+#include <mbedtls/ctr_drbg.h>
+
 #include "common/random.hpp"
 
 using namespace ot;
