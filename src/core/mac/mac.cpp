@@ -1180,9 +1180,13 @@ void Mac::RecordFrameTransmitStatus(const TxFrame &aFrame, Error aError, uint8_t
         }
     }
 
-    // Log frame transmission failure.
+    // Log frame transmission success/failure.
 
-    if (aError != kErrorNone)
+    if (aError == kErrorNone)
+    {
+        LogFrameTxSuccess(aFrame, aRetryCount);
+    }
+    else
     {
         LogFrameTxFailure(aFrame, aError, aRetryCount, aWillRetx);
         DumpDebg("TX ERR", aFrame.GetHeader(), 16);
@@ -2312,6 +2316,79 @@ void Mac::LogFrameRxFailure(const RxFrame *aFrame, Error aError) const
     }
 }
 
+void Mac::LogFrameTxSuccess(const TxFrame &aFrame, uint8_t aRetryCount) const
+{
+#if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
+#if OPENTHREAD_CONFIG_MULTI_RADIO
+    if (aFrame.GetRadioType() == kRadioTypeIeee802154)
+#endif
+    {
+        String<32> typeString;
+        uint8_t    type = aFrame.GetType();
+        uint8_t    commandId;
+        Address    dst;
+        uint32_t   frameCounter = 0;
+        uint32_t   ccaFailureRate;
+
+        switch (type)
+        {
+        case Frame::kTypeBeacon:
+            typeString.Append("Beacon");
+            break;
+
+        case Frame::kTypeData:
+            typeString.Append("Data");
+            break;
+
+        case Frame::kTypeAck:
+            typeString.Append("Ack");
+            break;
+
+        case Frame::kTypeMacCmd:
+            if (aFrame.GetCommandId(commandId) != kErrorNone)
+            {
+                commandId = 0xff;
+            }
+
+            switch (commandId)
+            {
+            case Frame::kMacCmdDataRequest:
+                typeString.Append("Cmd(DataReq)");
+                break;
+
+            case Frame::kMacCmdBeaconRequest:
+                typeString.Append("Cmd(BeaconReq)");
+                break;
+
+            default:
+                typeString.Append("Cmd(%d)", commandId);
+                break;
+            }
+
+            break;
+
+        default:
+            typeString.Append("%d", type);
+            break;
+        }
+
+        IgnoreError(aFrame.GetDstAddr(dst));
+        IgnoreError(aFrame.GetFrameCounter(frameCounter));
+
+        ccaFailureRate = (static_cast<uint32_t>(GetCcaFailureRate()) * 10000) / 0xffff;
+
+        LogInfo("Frame tx ch:%u pwr:%d rC:%u len:%u type:%s dst:%s ar:%s fp:%s fc:%lu ccaFR:%u.%02u%%",
+                aFrame.GetChannel(), aFrame.GetTxPower(), aRetryCount, aFrame.GetLength(), typeString.AsCString(),
+                dst.ToString().AsCString(), ToYesNo(aFrame.GetAckRequest()), ToYesNo(aFrame.GetFramePending()),
+                ToUlong(frameCounter), static_cast<uint16_t>(ccaFailureRate / 100),
+                static_cast<uint16_t>(ccaFailureRate % 100));
+    }
+#else
+    OT_UNUSED_VARIABLE(aFrame);
+    OT_UNUSED_VARIABLE(aRetryCount);
+#endif
+}
+
 void Mac::LogFrameTxFailure(const TxFrame &aFrame, Error aError, uint8_t aRetryCount, bool aWillRetx) const
 {
 #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
@@ -2322,8 +2399,8 @@ void Mac::LogFrameTxFailure(const TxFrame &aFrame, Error aError, uint8_t aRetryC
         uint8_t maxAttempts = aFrame.GetMaxFrameRetries() + 1;
         uint8_t curAttempt  = aWillRetx ? (aRetryCount + 1) : maxAttempts;
 
-        LogInfo("Frame tx attempt %u/%u failed, error:%s, %s", curAttempt, maxAttempts, ErrorToString(aError),
-                aFrame.ToInfoString().AsCString());
+        LogInfo("Frame tx attempt %u/%u failed, pwr:%d, error:%s, %s", curAttempt, maxAttempts, aFrame.GetTxPower(),
+                ErrorToString(aError), aFrame.ToInfoString().AsCString());
     }
 #else
     OT_UNUSED_VARIABLE(aRetryCount);
@@ -2350,6 +2427,8 @@ void Mac::LogBeacon(const char *aActionText) const { LogInfo("%s Beacon", aActio
 void Mac::LogFrameRxFailure(const RxFrame *, Error) const {}
 
 void Mac::LogBeacon(const char *) const {}
+
+void Mac::LogFrameTxSuccess(const TxFrame &, uint8_t) const {}
 
 void Mac::LogFrameTxFailure(const TxFrame &, Error, uint8_t, bool) const {}
 

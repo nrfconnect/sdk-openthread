@@ -850,6 +850,7 @@ private:
     void  ReportEnergyScanResult(int8_t aRssi);
 
     void LogFrameRxFailure(const RxFrame *aFrame, Error aError) const;
+    void LogFrameTxSuccess(const TxFrame &aFrame, uint8_t aRetryCount) const;
     void LogFrameTxFailure(const TxFrame &aFrame, Error aError, uint8_t aRetryCount, bool aWillRetx) const;
     void LogBeacon(const char *aActionText) const;
 

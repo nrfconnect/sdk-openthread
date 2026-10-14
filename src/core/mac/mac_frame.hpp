@@ -956,6 +956,14 @@ public:
     }
 
     /**
+     * Gets TX power used for transmission of the frame.
+     *
+     * @returns The tx power used for transmission.
+     *
+     */
+    int8_t GetTxPower(void) const { return mInfo.mTxInfo.mTxPower; }
+
+    /**
      * Sets TX power to send the frame.
      *
      * @param[in]  aTxPower  The tx power used for transmission.
