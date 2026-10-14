@@ -194,7 +194,7 @@
  * The maximum log string size (number of chars).
  */
 #ifndef OPENTHREAD_CONFIG_LOG_MAX_SIZE
-#define OPENTHREAD_CONFIG_LOG_MAX_SIZE 150
+#define OPENTHREAD_CONFIG_LOG_MAX_SIZE 200
 #endif
 
 /**
