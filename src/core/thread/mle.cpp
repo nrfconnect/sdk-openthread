@@ -337,7 +337,7 @@ void Mle::SetRole(DeviceRole aRole)
     }
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-    Get<Mac::Mac>().SetCslCapable(IsCslSupported() && !IsRxOnWhenIdle());
+    UpdateCslState();
 #endif
 
 exit:
@@ -751,6 +751,9 @@ Error Mle::SetDeviceMode(DeviceMode aDeviceMode)
     else if (IsChild())
     {
         SetStateChild(GetRloc16());
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+        UpdateCslState();
+#endif
         IgnoreError(SendChildUpdateRequestToParent());
     }
 
@@ -970,6 +973,8 @@ exit:
 }
 
 bool Mle::IsCslSupported(void) const { return IsChild() && GetParent().IsThreadVersion1p2OrHigher(); }
+
+void Mle::UpdateCslState(void) { Get<Mac::Mac>().SetCslCapable(IsCslSupported() && !IsRxOnWhenIdle()); }
 
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
