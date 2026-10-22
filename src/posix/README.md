@@ -24,6 +24,20 @@ The figure below shows the architecture of OpenThread running in transceiver mod
 
 If built successfully, the binary should be found at: `build/posix/src/posix/ot-cli`.
 
+## Package version (`OT_PACKAGE_VERSION`)
+
+`ot-cli`, `ot-daemon`, and related apps embed `PACKAGE_VERSION` from CMake. By default it comes from `git describe --dirty --always` (annotated tags only). OpenThread release tags on GitHub are lightweight; on integrated trees that also carry older annotated tags, enable lightweight tags:
+
+```sh
+./script/cmake-build posix -DOT_GIT_DESCRIBE_LIGHTWEIGHT_TAGS=ON
+```
+
+To set an explicit version string:
+
+```sh
+./script/cmake-build posix -DOT_PACKAGE_VERSION=v2026.10.0
+```
+
 ## Transceivers on different platforms
 
 ### Simulation

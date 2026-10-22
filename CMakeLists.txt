@@ -107,6 +107,9 @@ set(OT_PACKAGE_NAME "OPENTHREAD" CACHE STRING "OpenThread Package Name")
 target_compile_definitions(ot-config INTERFACE "PACKAGE_NAME=\"${OT_PACKAGE_NAME}\"")
 message(STATUS "Package Name: ${OT_PACKAGE_NAME}")
 
+option(OT_GIT_DESCRIBE_LIGHTWEIGHT_TAGS
+    "Use 'git describe --tags' for OT_PACKAGE_VERSION (include lightweight release tags)"
+    OFF)
 set(OT_PACKAGE_VERSION "" CACHE STRING "OpenThread Package Version")
 if(OT_PACKAGE_VERSION STREQUAL "")
     ot_git_version(OT_PACKAGE_VERSION)
