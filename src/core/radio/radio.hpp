@@ -31,37 +31,28 @@
  *   This file includes definitions for OpenThread radio abstraction.
  */
 
-#ifndef RADIO_HPP_
-#define RADIO_HPP_
+#ifndef OT_CORE_RADIO_RADIO_HPP_
+#define OT_CORE_RADIO_RADIO_HPP_
 
 #include "openthread-core-config.h"
 
 #include <openthread/radio_stats.h>
 #include <openthread/platform/crypto.h>
+#include <openthread/platform/diag.h>
 #include <openthread/platform/radio.h>
 
 #include "common/locator.hpp"
 #include "common/non_copyable.hpp"
+#include "common/num_utils.hpp"
 #include "common/numeric_limits.hpp"
 #include "common/time.hpp"
 #include "mac/mac_frame.hpp"
+#include "mac/mac_types.hpp"
+#include "radio/radio_frame.hpp"
+#include "radio/radio_types.hpp"
 
 namespace ot {
-
-static constexpr uint32_t kUsPerTenSymbols = OT_US_PER_TEN_SYMBOLS; ///< Time for 10 symbols in units of microseconds
-static constexpr uint32_t kRadioHeaderShrDuration = 160;            ///< Duration of SHR in us
-static constexpr uint32_t kRadioHeaderPhrDuration = 32;             ///< Duration of PHR in us
-
-static constexpr int8_t kRadioPowerInvalid = OT_RADIO_POWER_INVALID; ///< Invalid TX power value
-
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-/**
- * Minimum CSL period supported in units of 10 symbols.
- *
- */
-static constexpr uint64_t kMinCslPeriod  = OPENTHREAD_CONFIG_MAC_CSL_MIN_PERIOD * 1000 / kUsPerTenSymbols;
-static constexpr uint64_t kMaxCslTimeout = OPENTHREAD_CONFIG_MAC_CSL_MAX_TIMEOUT;
-#endif
+namespace Radio {
 
 /**
  * @addtogroup core-radio
@@ -70,38 +61,263 @@ static constexpr uint64_t kMaxCslTimeout = OPENTHREAD_CONFIG_MAC_CSL_MAX_TIMEOUT
  *   This module includes definitions for OpenThread radio abstraction.
  *
  * @{
- *
  */
+
+constexpr uint8_t kPreambleSize  = 4;                                   ///< Preamble size in bytes.
+constexpr uint8_t kSfdSize       = 1;                                   ///< SFD size in bytes.
+constexpr uint8_t kPhrSize       = 1;                                   ///< PHY Header (PHR) size in bytes.
+constexpr uint8_t kPhyHeaderSize = kPreambleSize + kSfdSize + kPhrSize; ///< Total PHY header size in bytes.
+
+constexpr uint32_t kHeaderShrDuration = 160; ///< Duration of SHR in us
+constexpr uint32_t kHeaderPhrDuration = 32;  ///< Duration of PHR in us
+constexpr uint32_t kOctetDuration     = 32;  ///< Duration of one octet in us
+
+#if OPENTHREAD_CONFIG_RADIO_STATS_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD) && \
+    !OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE
+#error "OPENTHREAD_CONFIG_RADIO_STATS_ENABLE requires OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE".
+#endif
+
+constexpr uint32_t kSymbolTime      = OT_RADIO_SYMBOL_TIME;
+constexpr uint8_t  kSymbolsPerOctet = OT_RADIO_SYMBOLS_PER_OCTET;
+constexpr uint32_t kPhyUsPerByte    = kSymbolsPerOctet * kSymbolTime;
+constexpr uint8_t  kChannelPage0    = OT_RADIO_CHANNEL_PAGE_0;
+constexpr uint8_t  kChannelPage2    = OT_RADIO_CHANNEL_PAGE_2;
+#if (OPENTHREAD_CONFIG_RADIO_2P4GHZ_OQPSK_SUPPORT && OPENTHREAD_CONFIG_RADIO_915MHZ_OQPSK_SUPPORT)
+constexpr uint16_t kNumChannelPages   = 2;
+constexpr uint32_t kSupportedChannels = OT_RADIO_915MHZ_OQPSK_CHANNEL_MASK | OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MASK;
+constexpr uint8_t  kChannelMin        = OT_RADIO_915MHZ_OQPSK_CHANNEL_MIN;
+constexpr uint8_t  kChannelMax        = OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MAX;
+#elif OPENTHREAD_CONFIG_RADIO_915MHZ_OQPSK_SUPPORT
+constexpr uint16_t kNumChannelPages   = 1;
+constexpr uint32_t kSupportedChannels = OT_RADIO_915MHZ_OQPSK_CHANNEL_MASK;
+constexpr uint8_t  kChannelMin        = OT_RADIO_915MHZ_OQPSK_CHANNEL_MIN;
+constexpr uint8_t  kChannelMax        = OT_RADIO_915MHZ_OQPSK_CHANNEL_MAX;
+#elif OPENTHREAD_CONFIG_RADIO_2P4GHZ_OQPSK_SUPPORT
+constexpr uint16_t kNumChannelPages   = 1;
+constexpr uint32_t kSupportedChannels = OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MASK;
+constexpr uint8_t  kChannelMin        = OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MIN;
+constexpr uint8_t  kChannelMax        = OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MAX;
+#elif OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_SUPPORT
+constexpr uint16_t kNumChannelPages   = 1;
+constexpr uint32_t kSupportedChannels = OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_CHANNEL_MASK;
+constexpr uint8_t  kChannelMin        = OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_CHANNEL_MIN;
+constexpr uint8_t  kChannelMax        = OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_CHANNEL_MAX;
+#endif
+
+constexpr uint8_t kFrameMinSize = OT_RADIO_FRAME_MIN_SIZE;
+constexpr uint8_t kFrameMaxSize = OT_RADIO_FRAME_MAX_SIZE;
+
+extern const uint8_t kSupportedChannelPages[kNumChannelPages];
+
+constexpr int8_t kInvalidRssi = OT_RADIO_RSSI_INVALID; ///< Invalid RSSI value.
+
+constexpr int8_t kDefaultReceiveSensitivity = -110; ///< Default receive sensitivity (in dBm).
+
+constexpr int8_t kInvalidPower = OT_RADIO_POWER_INVALID; ///< Invalid TX power value
+
+static_assert((OPENTHREAD_CONFIG_RADIO_2P4GHZ_OQPSK_SUPPORT || OPENTHREAD_CONFIG_RADIO_915MHZ_OQPSK_SUPPORT ||
+               OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_SUPPORT),
+              "OPENTHREAD_CONFIG_RADIO_2P4GHZ_OQPSK_SUPPORT "
+              "or OPENTHREAD_CONFIG_RADIO_915MHZ_OQPSK_SUPPORT "
+              "or OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_SUPPORT "
+              "must be set to 1 to specify the radio mode");
+
+/**
+ * Represents a radio capability.
+ */
+enum Capability : uint16_t
+{
+    kCapAckTimeout         = OT_RADIO_CAPS_ACK_TIMEOUT,          ///< Supports ack timeout event.
+    kCapEnergyScan         = OT_RADIO_CAPS_ENERGY_SCAN,          ///< Supports energy scan.
+    kCapTransmitRetries    = OT_RADIO_CAPS_TRANSMIT_RETRIES,     ///< Supports tx retry logic (and CSMA).
+    kCapCsmaBackoff        = OT_RADIO_CAPS_CSMA_BACKOFF,         ///< Supports CSMA backoff for frame tx (but no retry).
+    kCapSleepToTx          = OT_RADIO_CAPS_SLEEP_TO_TX,          ///< Supports transition from sleep to TX.
+    kCapTransmitSec        = OT_RADIO_CAPS_TRANSMIT_SEC,         ///< Supports tx security.
+    kCapTransmitTiming     = OT_RADIO_CAPS_TRANSMIT_TIMING,      ///< Supports tx at specific time.
+    kCapReceiveTiming      = OT_RADIO_CAPS_RECEIVE_TIMING,       ///< Supports rx at specific time.
+    kCapRxOnWhenIdle       = OT_RADIO_CAPS_RX_ON_WHEN_IDLE,      ///< Supports RxOnWhenIdle handling.
+    kCapTransmitFramePower = OT_RADIO_CAPS_TRANSMIT_FRAME_POWER, ///< Supports setting per-frame transmit power.
+    kCapAltShortAddr       = OT_RADIO_CAPS_ALT_SHORT_ADDR,       ///< Supports setting alternate short address.
+};
+
+/**
+ * Represents a bit vector of radio capabilities (`Capability`).
+ */
+typedef otRadioCaps Capabilities;
+
+/**
+ * Indicates whether a given channel page is supported based on the current configurations.
+ *
+ * @param[in] aChannelPage The channel page to check.
+ *
+ * @retval TRUE    The @p aChannelPage is supported by radio.
+ * @retval FALSE   The @p aChannelPage is not supported by radio.
+ */
+constexpr bool SupportsChannelPage(uint8_t aChannelPage)
+{
+#if OPENTHREAD_CONFIG_RADIO_2P4GHZ_OQPSK_SUPPORT && OPENTHREAD_CONFIG_RADIO_915MHZ_OQPSK_SUPPORT
+    return (aChannelPage == kChannelPage0) || (aChannelPage == kChannelPage2);
+#elif OPENTHREAD_CONFIG_RADIO_2P4GHZ_OQPSK_SUPPORT
+    return (aChannelPage == kChannelPage0);
+#elif OPENTHREAD_CONFIG_RADIO_915MHZ_OQPSK_SUPPORT
+    return (aChannelPage == kChannelPage2);
+#elif OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_SUPPORT
+    return (aChannelPage == OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_CHANNEL_PAGE);
+#endif
+}
+
+/**
+ * Returns the channel mask for a given channel page if supported by the radio.
+ *
+ * @param[in] aChannelPage   The channel page.
+ *
+ * @returns The channel mask for @p aChannelPage if page is supported by the radio, otherwise zero.
+ */
+uint32_t ChannelMaskForPage(uint8_t aChannelPage);
+
+/**
+ * Checks if a given channel is a valid channel number (within `[kChannelMin, kChannelMax]`).
+ *
+ * @param[in] aChannel  The channel number to check.
+ *
+ * @retval TRUE   The channel is within `[kChannelMin, kChannelMax]`.
+ * @retval FALSE  The channel is outside `[kChannelMin, kChannelMax]`.
+ */
+constexpr bool IsChannelValid(uint16_t aChannel)
+{
+    return IsValueInRange<uint16_t>(aChannel, kChannelMin, kChannelMax);
+}
+
+class Radio;
+
+/**
+ * Defines the Radio callbacks.
+ */
+class Callbacks : public InstanceLocator
+{
+    friend class Radio;
+
+public:
+    /**
+     * This callback method handles a "Receive Done" event from radio platform.
+     *
+     * @param[in]  aFrame    A pointer to the received frame or `nullptr` if the receive operation failed.
+     * @param[in]  aError    kErrorNone when successfully received a frame,
+     *                       kErrorAbort when reception was aborted and a frame was not received,
+     *                       kErrorNoBufs when a frame could not be received due to lack of rx buffer space.
+     */
+    void HandleReceiveDone(Mac::RxFrame *aFrame, Error aError);
+
+    /**
+     * This callback method handles a "Transmit Started" event from radio platform.
+     *
+     * @param[in]  aFrame     The frame that is being transmitted.
+     */
+    void HandleTransmitStarted(Mac::TxFrame &aFrame);
+
+    /**
+     * This callback method handles a "Transmit Done" event from radio platform.
+     *
+     * @param[in]  aFrame     The frame that was transmitted.
+     * @param[in]  aAckFrame  A pointer to the ACK frame, `nullptr` if no ACK was received.
+     * @param[in]  aError     kErrorNone when the frame was transmitted,
+     *                        kErrorNoAck when the frame was transmitted but no ACK was received,
+     *                        kErrorChannelAccessFailure tx could not take place due to activity on the
+     *                        channel, kErrorAbort when transmission was aborted for other reasons.
+     */
+    void HandleTransmitDone(Mac::TxFrame &aFrame, Mac::RxFrame *aAckFrame, Error aError);
+
+    /**
+     * This callback method handles "Energy Scan Done" event from radio platform.
+     *
+     * Is used when radio provides the `kCapEnergyScan` capability. It is called from `otPlatRadioEnergyScanDone()`.
+     *
+     * @param[in]  aMaxRssi  The maximum RSSI encountered on the scanned channel.
+     */
+    void HandleEnergyScanDone(int8_t aMaxRssi);
+
+    /**
+     * This callback method handles "Bus Latency Changed" event from radio platform.
+     */
+    void HandleBusLatencyChanged(void);
+
+#if OPENTHREAD_CONFIG_DIAG_ENABLE
+    /**
+     * This callback method handles a "Receive Done" event from radio platform when diagnostics mode is enabled.
+     *
+     * @param[in]  aFrame    A pointer to the received frame or `nullptr` if the receive operation failed.
+     * @param[in]  aError    kErrorNone when successfully received a frame,
+     *                       kErrorAbort when reception was aborted and a frame was not received,
+     *                       kErrorNoBufs when a frame could not be received due to lack of rx buffer space.
+     */
+    void HandleDiagsReceiveDone(Mac::RxFrame *aFrame, Error aError);
+
+    /**
+     * This callback method handles a "Transmit Done" event from radio platform when diagnostics mode is enabled.
+     *
+     * @param[in]  aFrame     The frame that was transmitted.
+     * @param[in]  aError     kErrorNone when the frame was transmitted,
+     *                        kErrorNoAck when the frame was transmitted but no ACK was received,
+     *                        kErrorChannelAccessFailure tx could not take place due to activity on the
+     *                        channel, kErrorAbort when transmission was aborted for other reasons.
+     */
+    void HandleDiagsTransmitDone(Mac::TxFrame &aFrame, Error aError);
+#endif
+
+private:
+    explicit Callbacks(Instance &aInstance)
+        : InstanceLocator(aInstance)
+    {
+    }
+};
+
+#if OPENTHREAD_CONFIG_RADIO_STATS_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
 
 /**
  * Implements the radio statistics logic.
  *
  * The radio statistics are the time when the radio in TX/RX/radio state.
- * Since this class collects these statistics from pure software level and no platform API is involved, a simplified
- * model is used to calculate the time of different radio states. The data may not be very accurate, but it's
- * sufficient to provide a general understanding of the proportion of time a device is in different radio states.
+ * Since this class collects these statistics from pure software level
+ * and no platform API is involved, a simplified model is used to
+ * calculate the time of different radio states. The data may not be very
+ * accurate, but it's sufficient to provide a general understanding of
+ * the proportion of time a device is in different radio states.
  *
  * The simplified model is:
- * - The RadioStats is only aware of 2 states: RX and sleep.
- * - Each time `Radio::Receive` or `Radio::Sleep` is called, it will check the current state and add the time since
- *   last time the methods were called. For example, `Sleep` is first called and `Receive` is called after 1 second,
- *   then 1 second will be added to SleepTime and the current state switches to `Receive`.
- * - The time of TX will be calculated from the callback of TransmitDone. If TX returns OT_ERROR_NONE or
- *   OT_ERROR_NO_ACK, the tx time will be added according to the number of bytes sent. And the SleepTime or RxTime
+ * - The radio statistics is only aware of 2 states: RX and sleep.
+ * - Each time `Radio::Receive` or `Radio::Sleep` is called, it will check
+ *   the current state and add the time since last time the methods were
+ *   called. For example, `Sleep` is first called and `Receive` is called
+ *   after 1 second, then 1 second will be added to SleepTime and the
+ *   current state switches to `Receive`.
+ * - The time of TX will be calculated from the callback of TransmitDone.
+ *   If TX returns kErrorNone or kErrorNoAck, the tx time will be added
+ *   according to the number of bytes sent. And the SleepTime or RxTime
  *   will be reduced accordingly.
- * - When `GetStats` is called, an operation will be executed to calcute the time for the last state. And the result
- *   will be returned.
- *
+ * - When `GetStats` is called, an operation will be executed to calculate
+ *   the time for the last state. And the result will be returned.
  */
-#if OPENTHREAD_CONFIG_RADIO_STATS_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
-
-#if !OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE
-#error "OPENTHREAD_CONFIG_RADIO_STATS_ENABLE requires OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE".
-#endif
-
-class RadioStatistics
+class Statistics : private NonCopyable
 {
+    friend class Radio;
+    friend class Callbacks;
+
 public:
+    using TimeStats = otRadioTimeStats; ///< Radio statistics (time spend in each state).
+
+    /**
+     * Retrieves the current radio statistics.
+     *
+     * @return The current time statistics.
+     */
+    const TimeStats &GetStats(void);
+
+    /**
+     * Resets the radio statistics.
+     */
+    void ResetTime(void);
+
+private:
     enum Status : uint8_t
     {
         kDisabled,
@@ -109,169 +325,32 @@ public:
         kReceive,
     };
 
-    explicit RadioStatistics(void);
-
-    void                    RecordStateChange(Status aStatus);
-    void                    HandleReceiveAt(uint32_t aDurationUs);
-    void                    RecordTxDone(otError aError, uint16_t aPsduLength);
-    void                    RecordRxDone(otError aError);
-    const otRadioTimeStats &GetStats(void);
-    void                    ResetTime(void);
-
-private:
+    Statistics(void);
+    void RecordStateChange(Status aStatus);
+    void HandleReceiveAt(uint32_t aDurationUs);
+    void RecordTxDone(Error aError, uint16_t aPsduLength);
+    void RecordRxDone(Error aError);
     void UpdateTime(void);
 
-    Status           mStatus;
-    otRadioTimeStats mTimeStats;
-    TimeMicro        mLastUpdateTime;
+    Status    mStatus;
+    TimeStats mTimeStats;
+    TimeMicro mLastUpdateTime;
 };
+
 #endif // OPENTHREAD_CONFIG_RADIO_STATS_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
 
 /**
  * Represents an OpenThread radio abstraction.
- *
  */
 class Radio : public InstanceLocator, private NonCopyable
 {
-    friend class Instance;
+    friend class ot::Instance;
 
 public:
-    static constexpr uint32_t kSymbolTime      = OT_RADIO_SYMBOL_TIME;
-    static constexpr uint8_t  kSymbolsPerOctet = OT_RADIO_SYMBOLS_PER_OCTET;
-    static constexpr uint32_t kPhyUsPerByte    = kSymbolsPerOctet * kSymbolTime;
-    static constexpr uint8_t  kChannelPage0    = OT_RADIO_CHANNEL_PAGE_0;
-    static constexpr uint8_t  kChannelPage2    = OT_RADIO_CHANNEL_PAGE_2;
-#if (OPENTHREAD_CONFIG_RADIO_2P4GHZ_OQPSK_SUPPORT && OPENTHREAD_CONFIG_RADIO_915MHZ_OQPSK_SUPPORT)
-    static constexpr uint16_t kNumChannelPages = 2;
-    static constexpr uint32_t kSupportedChannels =
-        OT_RADIO_915MHZ_OQPSK_CHANNEL_MASK | OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MASK;
-    static constexpr uint8_t kChannelMin = OT_RADIO_915MHZ_OQPSK_CHANNEL_MIN;
-    static constexpr uint8_t kChannelMax = OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MAX;
-#elif OPENTHREAD_CONFIG_RADIO_915MHZ_OQPSK_SUPPORT
-    static constexpr uint16_t kNumChannelPages   = 1;
-    static constexpr uint32_t kSupportedChannels = OT_RADIO_915MHZ_OQPSK_CHANNEL_MASK;
-    static constexpr uint8_t  kChannelMin        = OT_RADIO_915MHZ_OQPSK_CHANNEL_MIN;
-    static constexpr uint8_t  kChannelMax        = OT_RADIO_915MHZ_OQPSK_CHANNEL_MAX;
-#elif OPENTHREAD_CONFIG_RADIO_2P4GHZ_OQPSK_SUPPORT
-    static constexpr uint16_t kNumChannelPages   = 1;
-    static constexpr uint32_t kSupportedChannels = OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MASK;
-    static constexpr uint8_t  kChannelMin        = OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MIN;
-    static constexpr uint8_t  kChannelMax        = OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MAX;
-#elif OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_SUPPORT
-    static constexpr uint16_t kNumChannelPages   = 1;
-    static constexpr uint32_t kSupportedChannels = OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_CHANNEL_MASK;
-    static constexpr uint8_t  kChannelMin        = OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_CHANNEL_MIN;
-    static constexpr uint8_t  kChannelMax        = OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_CHANNEL_MAX;
-#endif
-
-    static const uint8_t kSupportedChannelPages[kNumChannelPages];
-
-    static constexpr int8_t kInvalidRssi = OT_RADIO_RSSI_INVALID; ///< Invalid RSSI value.
-
-    static constexpr int8_t kDefaultReceiveSensitivity = -110; ///< Default receive sensitivity (in dBm).
-
-    static_assert((OPENTHREAD_CONFIG_RADIO_2P4GHZ_OQPSK_SUPPORT || OPENTHREAD_CONFIG_RADIO_915MHZ_OQPSK_SUPPORT ||
-                   OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_SUPPORT),
-                  "OPENTHREAD_CONFIG_RADIO_2P4GHZ_OQPSK_SUPPORT "
-                  "or OPENTHREAD_CONFIG_RADIO_915MHZ_OQPSK_SUPPORT "
-                  "or OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_SUPPORT "
-                  "must be set to 1 to specify the radio mode");
-
-    /**
-     * Defines the callbacks from `Radio`.
-     *
-     */
-    class Callbacks : public InstanceLocator
-    {
-        friend class Radio;
-
-    public:
-        /**
-         * This callback method handles a "Receive Done" event from radio platform.
-         *
-         * @param[in]  aFrame    A pointer to the received frame or `nullptr` if the receive operation failed.
-         * @param[in]  aError    kErrorNone when successfully received a frame,
-         *                       kErrorAbort when reception was aborted and a frame was not received,
-         *                       kErrorNoBufs when a frame could not be received due to lack of rx buffer space.
-         *
-         */
-        void HandleReceiveDone(Mac::RxFrame *aFrame, Error aError);
-
-        /**
-         * This callback method handles a "Transmit Started" event from radio platform.
-         *
-         * @param[in]  aFrame     The frame that is being transmitted.
-         *
-         */
-        void HandleTransmitStarted(Mac::TxFrame &aFrame);
-
-        /**
-         * This callback method handles a "Transmit Done" event from radio platform.
-         *
-         * @param[in]  aFrame     The frame that was transmitted.
-         * @param[in]  aAckFrame  A pointer to the ACK frame, `nullptr` if no ACK was received.
-         * @param[in]  aError     kErrorNone when the frame was transmitted,
-         *                        kErrorNoAck when the frame was transmitted but no ACK was received,
-         *                        kErrorChannelAccessFailure tx could not take place due to activity on the
-         *                        channel, kErrorAbort when transmission was aborted for other reasons.
-         *
-         */
-        void HandleTransmitDone(Mac::TxFrame &aFrame, Mac::RxFrame *aAckFrame, Error aError);
-
-        /**
-         * This callback method handles "Energy Scan Done" event from radio platform.
-         *
-         * Is used when radio provides OT_RADIO_CAPS_ENERGY_SCAN capability. It is called from
-         * `otPlatRadioEnergyScanDone()`.
-         *
-         * @param[in]  aMaxRssi  The maximum RSSI encountered on the scanned channel.
-         *
-         */
-        void HandleEnergyScanDone(int8_t aMaxRssi);
-
-        /**
-         * This callback method handles "Bus Latency Changed" event from radio platform.
-         *
-         */
-        void HandleBusLatencyChanged(void);
-
-#if OPENTHREAD_CONFIG_DIAG_ENABLE
-        /**
-         * This callback method handles a "Receive Done" event from radio platform when diagnostics mode is enabled.
-         *
-         * @param[in]  aFrame    A pointer to the received frame or `nullptr` if the receive operation failed.
-         * @param[in]  aError    kErrorNone when successfully received a frame,
-         *                       kErrorAbort when reception was aborted and a frame was not received,
-         *                       kErrorNoBufs when a frame could not be received due to lack of rx buffer space.
-         *
-         */
-        void HandleDiagsReceiveDone(Mac::RxFrame *aFrame, Error aError);
-
-        /**
-         * This callback method handles a "Transmit Done" event from radio platform when diagnostics mode is enabled.
-         *
-         * @param[in]  aFrame     The frame that was transmitted.
-         * @param[in]  aError     kErrorNone when the frame was transmitted,
-         *                        kErrorNoAck when the frame was transmitted but no ACK was received,
-         *                        kErrorChannelAccessFailure tx could not take place due to activity on the
-         *                        channel, kErrorAbort when transmission was aborted for other reasons.
-         *
-         */
-        void HandleDiagsTransmitDone(Mac::TxFrame &aFrame, Error aError);
-#endif
-
-    private:
-        explicit Callbacks(Instance &aInstance)
-            : InstanceLocator(aInstance)
-        {
-        }
-    };
-
     /**
      * Initializes the `Radio` object.
      *
      * @param[in]  aInstance  A reference to the OpenThread instance.
-     *
      */
     explicit Radio(Instance &aInstance)
         : InstanceLocator(aInstance)
@@ -283,7 +362,6 @@ public:
      * Gets the radio version string.
      *
      * @returns A pointer to the OpenThread radio version.
-     *
      */
     const char *GetVersionString(void);
 
@@ -291,30 +369,26 @@ public:
      * Gets the factory-assigned IEEE EUI-64 for the device.
      *
      * @param[out] aIeeeEui64  A reference to `Mac::ExtAddress` to place the factory-assigned IEEE EUI-64.
-     *
      */
     void GetIeeeEui64(Mac::ExtAddress &aIeeeEui64);
 
     /**
      * Gets the radio capabilities.
      *
-     * @returns The radio capability bit vector (see `OT_RADIO_CAP_*` definitions).
-     *
+     * @returns The radio capability bit vector (see `Capability` definitions).
      */
-    otRadioCaps GetCaps(void);
+    Capabilities GetCaps(void);
 
     /**
      * Gets the radio receive sensitivity value.
      *
      * @returns The radio receive sensitivity value in dBm.
-     *
      */
     int8_t GetReceiveSensitivity(void) const;
 
 #if OPENTHREAD_RADIO
     /**
      * Initializes the states of the Thread radio.
-     *
      */
     void Init(void);
 #endif
@@ -323,15 +397,13 @@ public:
      * Sets the PAN ID for address filtering.
      *
      * @param[in] aPanId     The IEEE 802.15.4 PAN ID.
-     *
      */
     void SetPanId(Mac::PanId aPanId);
 
     /**
      * Sets the Extended Address for address filtering.
      *
-     * @param[in] aExtAddress  The IEEE 802.15.4 Extended Address stored in little-endian byte order.
-     *
+     * @param[in] aExtAddress  The IEEE 802.15.4 Extended Address stored in big-endian byte order.
      */
     void SetExtendedAddress(const Mac::ExtAddress &aExtAddress);
 
@@ -339,31 +411,27 @@ public:
      * Sets the Short Address for address filtering.
      *
      * @param[in] aShortAddress  The IEEE 802.15.4 Short Address.
-     *
      */
     void SetShortAddress(Mac::ShortAddress aShortAddress);
 
     /**
-     * Sets MAC key and key ID.
+     * Set the alternate short address.
      *
-     * @param[in] aKeyIdMode  MAC key ID mode.
-     * @param[in] aKeyId      Current MAC key index.
-     * @param[in] aPrevKey    The previous MAC key.
-     * @param[in] aCurrKey    The current MAC key.
-     * @param[in] aNextKey    The next MAC key.
-     *
+     * @param[in] aShortAddress  The alternate short address.
      */
-    void SetMacKey(uint8_t                 aKeyIdMode,
-                   uint8_t                 aKeyId,
-                   const Mac::KeyMaterial &aPrevKey,
-                   const Mac::KeyMaterial &aCurrKey,
-                   const Mac::KeyMaterial &aNextKey);
+    void SetAlternateShortAddress(Mac::ShortAddress aShortAddress);
+
+    /**
+     * Sets MAC keys and key index for Key ID Mode 1.
+     *
+     * @param[in] aKeyTrio  The `KeyTrio` set (prev, cur, next) along with the key index.
+     */
+    void SetMode1MacKeys(const Mac::KeyTrio &aKeyTrio);
 
     /**
      * Sets the current MAC Frame Counter value.
      *
      * @param[in] aMacFrameCounter  The MAC Frame Counter value.
-     *
      */
     void SetMacFrameCounter(uint32_t aMacFrameCounter)
     {
@@ -375,7 +443,6 @@ public:
      * value.
      *
      * @param[in] aMacFrameCounter  The MAC Frame Counter value.
-     *
      */
     void SetMacFrameCounterIfLarger(uint32_t aMacFrameCounter)
     {
@@ -389,7 +456,6 @@ public:
      *
      * @retval kErrorNone             Successfully retrieved the transmit power.
      * @retval kErrorNotImplemented   Transmit power configuration via dBm is not implemented.
-     *
      */
     Error GetTransmitPower(int8_t &aPower);
 
@@ -400,7 +466,6 @@ public:
      *
      * @retval kErrorNone             Successfully set the transmit power.
      * @retval kErrorNotImplemented   Transmit power configuration via dBm is not implemented.
-     *
      */
     Error SetTransmitPower(int8_t aPower);
 
@@ -411,7 +476,6 @@ public:
      *
      * @retval kErrorNone             A reference to output the CCA ED threshold in dBm.
      * @retval kErrorNotImplemented   CCA ED threshold configuration via dBm is not implemented.
-     *
      */
     Error GetCcaEnergyDetectThreshold(int8_t &aThreshold);
 
@@ -422,7 +486,6 @@ public:
      *
      * @retval kErrorNone             Successfully set the CCA ED threshold.
      * @retval kErrorNotImplemented   CCA ED threshold configuration via dBm is not implemented.
-     *
      */
     Error SetCcaEnergyDetectThreshold(int8_t aThreshold);
 
@@ -431,7 +494,6 @@ public:
      *
      * @retval TRUE   Promiscuous mode is enabled.
      * @retval FALSE  Promiscuous mode is disabled.
-     *
      */
     bool GetPromiscuous(void);
 
@@ -439,7 +501,6 @@ public:
      * Enables or disables promiscuous mode.
      *
      * @param[in]  aEnable   TRUE to enable or FALSE to disable promiscuous mode.
-     *
      */
     void SetPromiscuous(bool aEnable);
 
@@ -447,7 +508,6 @@ public:
      * Indicates whether radio should stay in Receive or Sleep during idle periods.
      *
      * @param[in]  aEnable   TRUE to keep radio in Receive, FALSE to put to Sleep during idle periods.
-     *
      */
     void SetRxOnWhenIdle(bool aEnable);
 
@@ -459,7 +519,6 @@ public:
      * @note This function may be not implemented. In this case it always returns OT_RADIO_STATE_INVALID state.
      *
      * @return  Current state of the radio.
-     *
      */
     otRadioState GetState(void);
 
@@ -468,7 +527,6 @@ public:
      *
      * @retval kErrorNone     Successfully enabled.
      * @retval kErrorFailed   The radio could not be enabled.
-     *
      */
     Error Enable(void);
 
@@ -477,7 +535,6 @@ public:
      *
      * @retval kErrorNone           Successfully transitioned to Disabled.
      * @retval kErrorInvalidState   The radio was not in sleep state.
-     *
      */
     Error Disable(void);
 
@@ -485,7 +542,6 @@ public:
      * Indicates whether radio is enabled or not.
      *
      * @returns TRUE if the radio is enabled, FALSE otherwise.
-     *
      */
     bool IsEnabled(void);
 
@@ -495,7 +551,6 @@ public:
      * @retval kErrorNone          Successfully transitioned to Sleep.
      * @retval kErrorBusy          The radio was transmitting.
      * @retval kErrorInvalidState  The radio was disabled.
-     *
      */
     Error Sleep(void);
 
@@ -506,18 +561,8 @@ public:
      *
      * @retval kErrorNone          Successfully transitioned to Receive.
      * @retval kErrorInvalidState  The radio was disabled or transmitting.
-     *
      */
     Error Receive(uint8_t aChannel);
-
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-    /**
-     * Updates the CSL sample time in radio.
-     *
-     * @param[in]  aCslSampleTime  The CSL sample time.
-     *
-     */
-    void UpdateCslSampleTime(uint32_t aCslSampleTime);
 
     /**
      * Schedules a radio reception window at a specific time and duration.
@@ -528,9 +573,16 @@ public:
      *
      * @retval kErrorNone    Successfully scheduled receive window.
      * @retval kErrorFailed  The receive window could not be scheduled.
-     *
      */
-    Error ReceiveAt(uint8_t aChannel, uint32_t aStart, uint32_t aDuration);
+    Error ReceiveAt(uint8_t aChannel, Time32 aStart, uint32_t aDuration);
+
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+    /**
+     * Updates the CSL sample time in radio.
+     *
+     * @param[in]  aCslSampleTime  The CSL sample time.
+     */
+    void UpdateCslSampleTime(Time32 aCslSampleTime);
 
     /**
      * Enables CSL sampling in radio.
@@ -544,9 +596,8 @@ public:
      * @retval  kErrorNotImplemented Radio driver doesn't support CSL.
      * @retval  kErrorFailed         Other platform specific errors.
      * @retval  kErrorNone           Successfully enabled or disabled CSL.
-     *
      */
-    Error EnableCsl(uint32_t aCslPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr);
+    Error EnableCsl(uint32_t aCslPeriod, Mac::ShortAddress aShortAddr, const Mac::ExtAddress &aExtAddr);
 
     /**
      * Resets CSL receiver in radio.
@@ -554,30 +605,42 @@ public:
      * @retval  kErrorNotImplemented Radio driver doesn't support CSL.
      * @retval  kErrorFailed         Other platform specific errors.
      * @retval  kErrorNone           Successfully disabled CSL.
-     *
      */
     Error ResetCsl(void);
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if OT_CONFIG_RADIO_TIME_ENABLE
+    /**
+     * Get the current radio time in microseconds referenced to a continuous monotonic local radio clock (64 bits
+     * width).
+     *
+     * @returns The current radio clock time.
+     */
+    Time64 GetNow(void);
+
+    /**
+     * Get the current radio time in microseconds as a 32-bit value (lower 32 bits of the full radio time).
+     *
+     * @returns The current radio clock time as a `Time32`.
+     */
+    Time32 GetNowAsTime32(void) { return ConvertTime64To32(GetNow()); }
+
     /**
      * Get the current accuracy, in units of ± ppm, of the clock used for scheduling CSL operations.
      *
      * @note Platforms may optimize this value based on operational conditions (i.e.: temperature).
      *
      * @returns The current CSL rx/tx scheduling drift, in units of ± ppm.
-     *
      */
     uint8_t GetCslAccuracy(void);
 
     /**
      * Get the fixed uncertainty of the Device for scheduling CSL operations in units of 10 microseconds.
      *
-     * @returns The CSL Uncertainty in units of 10 us.
-     *
+     * @returns The CSL Uncertainty in units of 10 microseconds (`kUncertaintyUnit`).
      */
     uint8_t GetCslUncertainty(void);
-#endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#endif // OT_CONFIG_RADIO_TIME_ENABLE
 
     /**
      * Gets the radio transmit frame buffer.
@@ -585,7 +648,6 @@ public:
      * OpenThread forms the IEEE 802.15.4 frame in this buffer then calls `Transmit()` to request transmission.
      *
      * @returns A reference to the transmit frame buffer.
-     *
      */
     Mac::TxFrame &GetTransmitBuffer(void);
 
@@ -599,7 +661,6 @@ public:
      *
      * @retval kErrorNone          Successfully transitioned to Transmit.
      * @retval kErrorInvalidState  The radio was not in the Receive state.
-     *
      */
     Error Transmit(Mac::TxFrame &aFrame);
 
@@ -607,14 +668,13 @@ public:
      * Gets the most recent RSSI measurement.
      *
      * @returns The RSSI in dBm when it is valid.  127 when RSSI is invalid.
-     *
      */
     int8_t GetRssi(void);
 
     /**
      * Begins the energy scan sequence on the radio.
      *
-     * Is used when radio provides OT_RADIO_CAPS_ENERGY_SCAN capability.
+     * Is used when radio provides the `kCapEnergyScan` capability.
      *
      * @param[in] aScanChannel   The channel to perform the energy scan on.
      * @param[in] aScanDuration  The duration, in milliseconds, for the channel to be scanned.
@@ -622,7 +682,6 @@ public:
      * @retval kErrorNone            Successfully started scanning the channel.
      * @retval kErrorBusy            The radio is performing energy scanning.
      * @retval kErrorNotImplemented  The radio doesn't support energy scanning.
-     *
      */
     Error EnergyScan(uint8_t aScanChannel, uint16_t aScanDuration);
 
@@ -641,7 +700,6 @@ public:
      * address or an extended/long address can be added to the source address match table.
      *
      * @param[in]  aEnable     Enable/disable source address match feature.
-     *
      */
     void EnableSrcMatch(bool aEnable);
 
@@ -652,18 +710,16 @@ public:
      *
      * @retval kErrorNone     Successfully added short address to the source match table.
      * @retval kErrorNoBufs   No available entry in the source match table.
-     *
      */
     Error AddSrcMatchShortEntry(Mac::ShortAddress aShortAddress);
 
     /**
      * Adds an extended address to the source address match table.
      *
-     * @param[in]  aExtAddress  The extended address to be added stored in little-endian byte order.
+     * @param[in]  aExtAddress  The extended address to be added stored in big-endian byte order.
      *
      * @retval kErrorNone     Successfully added extended address to the source match table.
      * @retval kErrorNoBufs   No available entry in the source match table.
-     *
      */
     Error AddSrcMatchExtEntry(const Mac::ExtAddress &aExtAddress);
 
@@ -674,30 +730,26 @@ public:
      *
      * @retval kErrorNone       Successfully removed short address from the source match table.
      * @retval kErrorNoAddress  The short address is not in source address match table.
-     *
      */
     Error ClearSrcMatchShortEntry(Mac::ShortAddress aShortAddress);
 
     /**
      * Removes an extended address from the source address match table.
      *
-     * @param[in]  aExtAddress  The extended address to be removed stored in little-endian byte order.
+     * @param[in]  aExtAddress  The extended address to be removed stored in big-endian byte order.
      *
      * @retval kErrorNone       Successfully removed the extended address from the source match table.
      * @retval kErrorNoAddress  The extended address is not in source address match table.
-     *
      */
     Error ClearSrcMatchExtEntry(const Mac::ExtAddress &aExtAddress);
 
     /**
      * Clears all short addresses from the source address match table.
-     *
      */
     void ClearSrcMatchShortEntries(void);
 
     /**
      * Clears all the extended/long addresses from source address match table.
-     *
      */
     void ClearSrcMatchExtEntries(void);
 
@@ -705,7 +757,6 @@ public:
      * Gets the radio supported channel mask that the device is allowed to be on.
      *
      * @returns The radio supported channel mask.
-     *
      */
     uint32_t GetSupportedChannelMask(void);
 
@@ -713,7 +764,6 @@ public:
      * Gets the radio preferred channel mask that the device prefers to form on.
      *
      * @returns The radio preferred channel mask.
-     *
      */
     uint32_t GetPreferredChannelMask(void);
 
@@ -729,7 +779,7 @@ public:
      * @param[in]  aLinkMetrics  This parameter specifies what metrics to query. Per spec 4.11.3.4.4.6, at most 2
      *                           metrics can be specified. The probing would be disabled if @p `aLinkMetrics` is
      *                           bitwise 0.
-     * @param[in]  aShortAddress The short address of the the probing Initiator.
+     * @param[in]  aShortAddress The short address of the probing Initiator.
      * @param[in]  aExtAddress   The extended source address of the probing Initiator.
      *
      * @retval kErrorNone            Successfully enable/disable or update Enhanced-ACK Based Probing for a specific
@@ -738,7 +788,6 @@ public:
      * @retval kErrorNotFound        The Initiator indicated by @p aShortAddress is not found when trying to clear.
      * @retval kErrorNoBufs          No more Initiator can be supported.
      * @retval kErrorNotImplemented  Radio driver doesn't support Enhanced-ACK Probing.
-     *
      */
     Error ConfigureEnhAckProbing(otLinkMetrics            aLinkMetrics,
                                  const Mac::ShortAddress &aShortAddress,
@@ -747,19 +796,6 @@ public:
         return otPlatRadioConfigureEnhAckProbing(GetInstancePtr(), aLinkMetrics, aShortAddress, &aExtAddress);
     }
 #endif // OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
-
-    /**
-     * Checks if a given channel is valid as a CSL channel.
-     *
-     * @retval true   The channel is valid.
-     * @retval false  The channel is invalid.
-     *
-     */
-    static bool IsCslChannelValid(uint8_t aCslChannel)
-    {
-        return ((aCslChannel == 0) ||
-                ((kChannelMin == aCslChannel) || ((kChannelMin < aCslChannel) && (aCslChannel <= kChannelMax))));
-    }
 
     /**
      * Sets the region code.
@@ -772,7 +808,6 @@ public:
      * @retval  kErrorFailed          Other platform specific errors.
      * @retval  kErrorNone            Successfully set region code.
      * @retval  kErrorNotImplemented  The feature is not implemented.
-     *
      */
     Error SetRegion(uint16_t aRegionCode) { return otPlatRadioSetRegion(GetInstancePtr(), aRegionCode); }
 
@@ -787,73 +822,57 @@ public:
      * @retval  kErrorFailed          Other platform specific errors.
      * @retval  kErrorNone            Successfully set region code.
      * @retval  kErrorNotImplemented  The feature is not implemented.
-     *
      */
     Error GetRegion(uint16_t &aRegionCode) const { return otPlatRadioGetRegion(GetInstancePtr(), &aRegionCode); }
 
     /**
-     * Indicates whether a given channel page is supported based on the current configurations.
+     * Get the bus speed in bits/second between the host and the radio chip.
      *
-     * @param[in] aChannelPage The channel page to check.
-     *
-     * @retval TRUE    The @p aChannelPage is supported by radio.
-     * @retval FALASE  The @p aChannelPage is not supported by radio.
-     *
+     * @returns The bus speed in bits/second between the host and the radio chip.
+     *          Return 0 when the MAC and above layer and Radio layer resides on the same chip.
      */
-    static constexpr bool SupportsChannelPage(uint8_t aChannelPage)
-    {
-#if OPENTHREAD_CONFIG_RADIO_2P4GHZ_OQPSK_SUPPORT && OPENTHREAD_CONFIG_RADIO_915MHZ_OQPSK_SUPPORT
-        return (aChannelPage == kChannelPage0) || (aChannelPage == kChannelPage2);
-#elif OPENTHREAD_CONFIG_RADIO_2P4GHZ_OQPSK_SUPPORT
-        return (aChannelPage == kChannelPage0);
-#elif OPENTHREAD_CONFIG_RADIO_915MHZ_OQPSK_SUPPORT
-        return (aChannelPage == kChannelPage2);
-#elif OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_SUPPORT
-        return (aChannelPage == OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_CHANNEL_PAGE);
-#endif
-    }
+    uint32_t GetBusSpeed(void) const;
 
     /**
-     * Returns the channel mask for a given channel page if supported by the radio.
+     * Get the bus latency in microseconds between the host and the radio chip.
      *
-     * @param[in] aChannelPage   The channel page.
-     *
-     * @returns The channel mask for @p aChannelPage if page is supported by the radio, otherwise zero.
-     *
+     * @returns The bus latency in microseconds between the host and the radio chip.
+     *          Return 0 when the MAC and above layer and Radio layer resides on the same chip.
      */
-    static uint32_t ChannelMaskForPage(uint8_t aChannelPage)
-    {
-        uint32_t mask = 0;
+    uint32_t GetBusLatency(void) const;
 
-#if OPENTHREAD_CONFIG_RADIO_2P4GHZ_OQPSK_SUPPORT
-        if (aChannelPage == kChannelPage0)
-        {
-            mask = OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MASK;
-        }
-#endif
+    /**
+     * Calculates the radio bus transfer time (in microseconds) for a given frame size based on `GetBusSpeed()` and
+     * `GetBusLatency()`.
+     *
+     * @param[in] aFrameSize   The frame size to calculate for, in bytes.
+     *
+     * @returns The calculated radio bus transfer time in microseconds.
+     */
+    uint32_t CalculateBusTransferTime(uint16_t aFrameSize) const;
 
-#if OPENTHREAD_CONFIG_RADIO_915MHZ_OQPSK_SUPPORT
-        if (aChannelPage == kChannelPage1)
-        {
-            mask = OT_RADIO_915MHZ_OQPSK_CHANNEL_MASK;
-        }
-#endif
+#if OPENTHREAD_CONFIG_DIAG_ENABLE
+    /**
+     * Enables/disables the factory diagnostics mode.
+     *
+     * @param[in]  aMode  TRUE to enable diagnostics mode, FALSE otherwise.
+     */
+    void SetDiagMode(bool aMode);
 
-#if OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_SUPPORT
-        if (aChannelPage == OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_CHANNEL_PAGE)
-        {
-            mask = OPENTHREAD_CONFIG_PLATFORM_RADIO_PROPRIETARY_CHANNEL_MASK;
-        }
+    /**
+     * Gets the current diagnostic mode of the radio.
+     *
+     * @returns TRUE if factory diagnostics mode is enabled, FALSE otherwise.
+     */
+    bool GetDiagMode(void);
 #endif
-        return mask;
-    }
 
 private:
     otInstance *GetInstancePtr(void) const { return reinterpret_cast<otInstance *>(&InstanceLocator::GetInstance()); }
 
     Callbacks mCallbacks;
 #if OPENTHREAD_CONFIG_RADIO_STATS_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
-    RadioStatistics mRadioStatistics;
+    Statistics mStatistics;
 #endif
 };
 
@@ -877,27 +896,30 @@ inline uint32_t Radio::GetPreferredChannelMask(void) { return otPlatRadioGetPref
 
 #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
 
-inline otRadioCaps Radio::GetCaps(void) { return otPlatRadioGetCaps(GetInstancePtr()); }
+inline Capabilities Radio::GetCaps(void) { return otPlatRadioGetCaps(GetInstancePtr()); }
 
 inline int8_t Radio::GetReceiveSensitivity(void) const { return otPlatRadioGetReceiveSensitivity(GetInstancePtr()); }
 
 inline void Radio::SetPanId(Mac::PanId aPanId) { otPlatRadioSetPanId(GetInstancePtr(), aPanId); }
 
-inline void Radio::SetMacKey(uint8_t                 aKeyIdMode,
-                             uint8_t                 aKeyId,
-                             const Mac::KeyMaterial &aPrevKey,
-                             const Mac::KeyMaterial &aCurrKey,
-                             const Mac::KeyMaterial &aNextKey)
+inline void Radio::SetAlternateShortAddress(Mac::ShortAddress aShortAddress)
 {
-    otRadioKeyType aKeyType;
+    otPlatRadioSetAlternateShortAddress(GetInstancePtr(), aShortAddress);
+}
+
+inline void Radio::SetMode1MacKeys(const Mac::KeyTrio &aKeyTrio)
+{
+    otRadioKeyType keyType;
 
 #if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
-    aKeyType = OT_KEY_TYPE_KEY_REF;
+    keyType = OT_KEY_TYPE_KEY_REF;
 #else
-    aKeyType = OT_KEY_TYPE_LITERAL_KEY;
+    keyType = OT_KEY_TYPE_LITERAL_KEY;
 #endif
 
-    otPlatRadioSetMacKey(GetInstancePtr(), aKeyIdMode, aKeyId, &aPrevKey, &aCurrKey, &aNextKey, aKeyType);
+    otPlatRadioSetMacKey(GetInstancePtr(), Mac::Frame::kKeyIdMode1, aKeyTrio.GetKeyIndex(),
+                         &aKeyTrio.GetKey(Mac::KeyTrio::kPrev), &aKeyTrio.GetKey(Mac::KeyTrio::kCur),
+                         &aKeyTrio.GetKey(Mac::KeyTrio::kNext), keyType);
 }
 
 inline Error Radio::GetTransmitPower(int8_t &aPower) { return otPlatRadioGetTransmitPower(GetInstancePtr(), &aPower); }
@@ -925,7 +947,7 @@ inline otRadioState Radio::GetState(void) { return otPlatRadioGetState(GetInstan
 inline Error Radio::Enable(void)
 {
 #if OPENTHREAD_CONFIG_RADIO_STATS_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
-    mRadioStatistics.RecordStateChange(RadioStatistics::kSleep);
+    mStatistics.RecordStateChange(Statistics::kSleep);
 #endif
     return otPlatRadioEnable(GetInstancePtr());
 }
@@ -933,7 +955,7 @@ inline Error Radio::Enable(void)
 inline Error Radio::Disable(void)
 {
 #if OPENTHREAD_CONFIG_RADIO_STATS_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
-    mRadioStatistics.RecordStateChange(RadioStatistics::kDisabled);
+    mStatistics.RecordStateChange(Statistics::kDisabled);
 #endif
     return otPlatRadioDisable(GetInstancePtr());
 }
@@ -943,7 +965,7 @@ inline bool Radio::IsEnabled(void) { return otPlatRadioIsEnabled(GetInstancePtr(
 inline Error Radio::Sleep(void)
 {
 #if OPENTHREAD_CONFIG_RADIO_STATS_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
-    mRadioStatistics.RecordStateChange(RadioStatistics::kSleep);
+    mStatistics.RecordStateChange(Statistics::kSleep);
 #endif
     return otPlatRadioSleep(GetInstancePtr());
 }
@@ -951,42 +973,42 @@ inline Error Radio::Sleep(void)
 inline Error Radio::Receive(uint8_t aChannel)
 {
 #if OPENTHREAD_CONFIG_RADIO_STATS_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
-    mRadioStatistics.RecordStateChange(RadioStatistics::kReceive);
+    mStatistics.RecordStateChange(Statistics::kReceive);
 #endif
     return otPlatRadioReceive(GetInstancePtr(), aChannel);
 }
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-inline void Radio::UpdateCslSampleTime(uint32_t aCslSampleTime)
-{
-    otPlatRadioUpdateCslSampleTime(GetInstancePtr(), aCslSampleTime);
-}
-
-inline Error Radio::ReceiveAt(uint8_t aChannel, uint32_t aStart, uint32_t aDuration)
+inline Error Radio::ReceiveAt(uint8_t aChannel, Time32 aStart, uint32_t aDuration)
 {
     Error error = otPlatRadioReceiveAt(GetInstancePtr(), aChannel, aStart, aDuration);
 #if OPENTHREAD_CONFIG_RADIO_STATS_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
     if (error == kErrorNone)
     {
-        mRadioStatistics.HandleReceiveAt(aDuration);
+        mStatistics.HandleReceiveAt(aDuration);
     }
 #endif
     return error;
 }
 
-inline Error Radio::EnableCsl(uint32_t aCslPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr)
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+inline void Radio::UpdateCslSampleTime(Time32 aCslSampleTime)
 {
-    return otPlatRadioEnableCsl(GetInstancePtr(), aCslPeriod, aShortAddr, aExtAddr);
+    otPlatRadioUpdateCslSampleTime(GetInstancePtr(), aCslSampleTime);
+}
+
+inline Error Radio::EnableCsl(uint32_t aCslPeriod, Mac::ShortAddress aShortAddr, const Mac::ExtAddress &aExtAddr)
+{
+    return otPlatRadioEnableCsl(GetInstancePtr(), aCslPeriod, aShortAddr, &aExtAddr);
 }
 
 inline Error Radio::ResetCsl(void) { return otPlatRadioResetCsl(GetInstancePtr()); }
 #endif
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
-inline uint8_t Radio::GetCslAccuracy(void) { return otPlatRadioGetCslAccuracy(GetInstancePtr()); }
-#endif
+#if OT_CONFIG_RADIO_TIME_ENABLE
+inline Time64 Radio::GetNow(void) { return otPlatRadioGetNow(GetInstancePtr()); }
 
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+inline uint8_t Radio::GetCslAccuracy(void) { return otPlatRadioGetCslAccuracy(GetInstancePtr()); }
+
 inline uint8_t Radio::GetCslUncertainty(void) { return otPlatRadioGetCslUncertainty(GetInstancePtr()); }
 #endif
 
@@ -1009,31 +1031,26 @@ inline Error Radio::AddSrcMatchShortEntry(Mac::ShortAddress aShortAddress)
     return otPlatRadioAddSrcMatchShortEntry(GetInstancePtr(), aShortAddress);
 }
 
-inline Error Radio::AddSrcMatchExtEntry(const Mac::ExtAddress &aExtAddress)
-{
-    return otPlatRadioAddSrcMatchExtEntry(GetInstancePtr(), &aExtAddress);
-}
-
 inline Error Radio::ClearSrcMatchShortEntry(Mac::ShortAddress aShortAddress)
 {
     return otPlatRadioClearSrcMatchShortEntry(GetInstancePtr(), aShortAddress);
-}
-
-inline Error Radio::ClearSrcMatchExtEntry(const Mac::ExtAddress &aExtAddress)
-{
-    return otPlatRadioClearSrcMatchExtEntry(GetInstancePtr(), &aExtAddress);
 }
 
 inline void Radio::ClearSrcMatchShortEntries(void) { otPlatRadioClearSrcMatchShortEntries(GetInstancePtr()); }
 
 inline void Radio::ClearSrcMatchExtEntries(void) { otPlatRadioClearSrcMatchExtEntries(GetInstancePtr()); }
 
+inline uint32_t Radio::GetBusSpeed(void) const { return otPlatRadioGetBusSpeed(GetInstancePtr()); }
+
+inline uint32_t Radio::GetBusLatency(void) const { return otPlatRadioGetBusLatency(GetInstancePtr()); }
+
+#if OPENTHREAD_CONFIG_DIAG_ENABLE
+inline void Radio::SetDiagMode(bool aMode) { otPlatDiagModeSet(aMode); }
+inline bool Radio::GetDiagMode(void) { return otPlatDiagModeGet(); }
+#endif
 #else //----------------------------------------------------------------------------------------------------------------
 
-inline otRadioCaps Radio::GetCaps(void)
-{
-    return OT_RADIO_CAPS_ACK_TIMEOUT | OT_RADIO_CAPS_CSMA_BACKOFF | OT_RADIO_CAPS_TRANSMIT_RETRIES;
-}
+inline Capabilities Radio::GetCaps(void) { return kCapAckTimeout | kCapCsmaBackoff | kCapTransmitRetries; }
 
 inline int8_t Radio::GetReceiveSensitivity(void) const { return kDefaultReceiveSensitivity; }
 
@@ -1043,13 +1060,9 @@ inline void Radio::SetExtendedAddress(const Mac::ExtAddress &) {}
 
 inline void Radio::SetShortAddress(Mac::ShortAddress) {}
 
-inline void Radio::SetMacKey(uint8_t,
-                             uint8_t,
-                             const Mac::KeyMaterial &,
-                             const Mac::KeyMaterial &,
-                             const Mac::KeyMaterial &)
-{
-}
+inline void Radio::SetAlternateShortAddress(Mac::ShortAddress) {}
+
+inline void Radio::SetMode1MacKeys(const Mac::KeyTrio &) {}
 
 inline Error Radio::GetTransmitPower(int8_t &) { return kErrorNotImplemented; }
 
@@ -1077,20 +1090,19 @@ inline Error Radio::Sleep(void) { return kErrorNone; }
 
 inline Error Radio::Receive(uint8_t) { return kErrorNone; }
 
+inline Error Radio::ReceiveAt(uint8_t, uint32_t, uint32_t) { return kErrorNotImplemented; }
+
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-inline void Radio::UpdateCslSampleTime(uint32_t) {}
+inline void Radio::UpdateCslSampleTime(Time32) {}
 
-inline Error Radio::ReceiveAt(uint8_t, uint32_t, uint32_t) { return kErrorNone; }
-
-inline Error Radio::EnableCsl(uint32_t, otShortAddress aShortAddr, const otExtAddress *)
-{
-    return kErrorNotImplemented;
-}
+inline Error Radio::EnableCsl(uint32_t, Mac::ShortAddress, const Mac::ExtAddress &) { return kErrorNotImplemented; }
 
 inline Error Radio::ResetCsl(void) { return kErrorNotImplemented; }
 #endif
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if OT_CONFIG_RADIO_TIME_ENABLE
+inline Time64 Radio::GetNow(void) { return NumericLimits<uint64_t>::kMax; }
+
 inline uint8_t Radio::GetCslAccuracy(void) { return NumericLimits<uint8_t>::kMax; }
 
 inline uint8_t Radio::GetCslUncertainty(void) { return NumericLimits<uint8_t>::kMax; }
@@ -1121,8 +1133,17 @@ inline void Radio::ClearSrcMatchShortEntries(void) {}
 
 inline void Radio::ClearSrcMatchExtEntries(void) {}
 
+inline uint32_t Radio::GetBusSpeed(void) const { return 0; }
+
+inline uint32_t Radio::GetBusLatency(void) const { return 0; }
+
+#if OPENTHREAD_CONFIG_DIAG_ENABLE
+inline void Radio::SetDiagMode(bool) {}
+inline bool Radio::GetDiagMode(void) { return false; }
+#endif
 #endif // #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
 
+} // namespace Radio
 } // namespace ot
 
-#endif // RADIO_HPP_
+#endif // OT_CORE_RADIO_RADIO_HPP_

@@ -33,16 +33,9 @@
 
 #include "key_manager.hpp"
 
-#include "common/code_utils.hpp"
-#include "common/encoding.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/timer.hpp"
 #include "crypto/hkdf_sha256.hpp"
 #include "crypto/storage.hpp"
 #include "instance/instance.hpp"
-#include "thread/mle_router.hpp"
-#include "thread/thread_netif.hpp"
 
 namespace ot {
 
@@ -182,25 +175,29 @@ KeyManager::KeyManager(Instance &aInstance)
     , mKeyRotationTimer(aInstance)
     , mKekFrameCounter(0)
     , mIsPskcSet(false)
+    , mIsKekSet(false)
 {
     otPlatCryptoInit();
 
 #if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
-    {
-        NetworkKey networkKey;
-
-        mNetworkKeyRef = Crypto::Storage::kInvalidKeyRef;
-        mPskcRef       = Crypto::Storage::kInvalidKeyRef;
-
-        IgnoreError(networkKey.GenerateRandom());
-        StoreNetworkKey(networkKey, /* aOverWriteExisting */ false);
-    }
+    mNetworkKeyRef = Crypto::Storage::kInvalidKeyRef;
+    mPskcRef       = Crypto::Storage::kInvalidKeyRef;
 #else
     IgnoreError(mNetworkKey.GenerateRandom());
     mPskc.Clear();
 #endif
 
     mMacFrameCounters.Reset();
+}
+
+void KeyManager::Init(void)
+{
+#if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
+    NetworkKey networkKey;
+
+    IgnoreError(networkKey.GenerateRandom());
+    StoreNetworkKey(networkKey, /* aOverWriteExisting */ false);
+#endif
 }
 
 void KeyManager::Start(void)
@@ -237,7 +234,7 @@ void KeyManager::ResetFrameCounters(void)
     Router *parent;
 
     // reset parent frame counters
-    parent = &Get<Mle::MleRouter>().GetParent();
+    parent = &Get<Mle::Mle>().GetParent();
     parent->SetKeySequence(0);
     parent->GetLinkFrameCounters().Reset();
     parent->SetLinkAckFrameCounter(0);
@@ -343,19 +340,14 @@ void KeyManager::UpdateKeyMaterial(void)
 
 #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
     {
-        Mac::KeyMaterial curKey;
-        Mac::KeyMaterial prevKey;
-        Mac::KeyMaterial nextKey;
+        HashKeys prevHashKeys;
+        HashKeys nextHashKeys;
 
-        curKey.SetFrom(hashKeys.GetMacKey(), kExportableMacKeys);
+        ComputeKeys(mKeySequence - 1, prevHashKeys);
+        ComputeKeys(mKeySequence + 1, nextHashKeys);
 
-        ComputeKeys(mKeySequence - 1, hashKeys);
-        prevKey.SetFrom(hashKeys.GetMacKey(), kExportableMacKeys);
-
-        ComputeKeys(mKeySequence + 1, hashKeys);
-        nextKey.SetFrom(hashKeys.GetMacKey(), kExportableMacKeys);
-
-        Get<Mac::SubMac>().SetMacKey(Mac::Frame::kKeyIdMode1, (mKeySequence & 0x7f) + 1, prevKey, curKey, nextKey);
+        Get<Mac::SubMac>().SetMode1MacKeys(Mac::DetermineKeyIndexFor(mKeySequence), prevHashKeys.GetMacKey(),
+                                           hashKeys.GetMacKey(), nextHashKeys.GetMacKey());
     }
 #endif
 
@@ -378,11 +370,36 @@ void KeyManager::SetCurrentKeySequence(uint32_t aKeySequence, KeySeqUpdateFlags 
         VerifyOrExit(mKeySwitchGuardTimer == 0);
     }
 
-    mKeySequence = aKeySequence;
-    UpdateKeyMaterial();
+    // MAC frame counters are reset before updating keys. This order
+    // safeguards against issues that can arise when the radio
+    // platform handles TX security and counter assignment.  The
+    // radio platform might prepare an enhanced ACK to a received
+    // frame from an parallel (e.g., ISR) context, which consumes
+    // a MAC frame counter value.
+    //
+    // Ideally, a call to `otPlatRadioSetMacKey()`, which sets the MAC
+    // keys on the radio, should also reset the frame counter tracked
+    // by the radio. However, if this is not implemented by the radio
+    // platform, resetting the counter first ensures new keys always
+    // start with a zero counter and avoids potential issue below.
+    //
+    // If the MAC key is updated before the frame counter is cleared,
+    // the radio could receive and send an enhanced ACK between these
+    // two actions, possibly using the new MAC key with a larger
+    // (current) frame counter value. This could then prevent the
+    // receiver from accepting subsequent transmissions after the
+    // frame counter reset for a long time.
+    //
+    // While resetting counters first might briefly cause an enhanced
+    // ACK to be sent with the old key and a zero counter (which might
+    // be rejected by the receiver), this is a transient issue that
+    // quickly resolves itself.
 
     SetAllMacFrameCounters(0, /* aSetIfLarger */ false);
     mMleFrameCounter = 0;
+
+    mKeySequence = aKeySequence;
+    UpdateKeyMaterial();
 
     ResetKeyRotationTimer();
 
@@ -443,7 +460,7 @@ void KeyManager::MacFrameCounterUsed(uint32_t aMacFrameCounter)
 
     if (mMacFrameCounters.Get154() >= mStoredMacFrameCounter)
     {
-        IgnoreError(Get<Mle::MleRouter>().Store());
+        Get<Mle::Mle>().Store();
     }
 
 exit:
@@ -460,7 +477,7 @@ void KeyManager::IncrementTrelMacFrameCounter(void)
 
     if (mMacFrameCounters.GetTrel() >= mStoredMacFrameCounter)
     {
-        IgnoreError(Get<Mle::MleRouter>().Store());
+        Get<Mle::Mle>().Store();
     }
 }
 #endif
@@ -471,7 +488,7 @@ void KeyManager::IncrementMleFrameCounter(void)
 
     if (mMleFrameCounter >= mStoredMleFrameCounter)
     {
-        IgnoreError(Get<Mle::MleRouter>().Store());
+        Get<Mle::Mle>().Store();
     }
 }
 
@@ -479,6 +496,13 @@ void KeyManager::SetKek(const Kek &aKek)
 {
     mKek.SetFrom(aKek, /* aIsExportable */ true);
     mKekFrameCounter = 0;
+    mIsKekSet        = true;
+}
+
+void KeyManager::ClearKek(void)
+{
+    mKek.Clear();
+    mIsKekSet = false;
 }
 
 void KeyManager::SetSecurityPolicy(const SecurityPolicy &aSecurityPolicy)
@@ -544,7 +568,7 @@ void KeyManager::GetNetworkKey(NetworkKey &aNetworkKey) const
     {
         size_t keyLen;
 
-        SuccessOrAssert(Crypto::Storage::ExportKey(mNetworkKeyRef, aNetworkKey.m8, NetworkKey::kSize, keyLen));
+        SuccessOrAssert(Crypto::Storage::ReadKey(mNetworkKeyRef, aNetworkKey.m8, NetworkKey::kSize, keyLen));
         OT_ASSERT(keyLen == NetworkKey::kSize);
     }
     else
@@ -563,7 +587,7 @@ void KeyManager::GetPskc(Pskc &aPskc) const
     {
         size_t keyLen;
 
-        SuccessOrAssert(Crypto::Storage::ExportKey(mPskcRef, aPskc.m8, Pskc::kSize, keyLen));
+        SuccessOrAssert(Crypto::Storage::ReadKey(mPskcRef, aPskc.m8, Pskc::kSize, keyLen));
         OT_ASSERT(keyLen == Pskc::kSize);
     }
     else
@@ -581,13 +605,14 @@ void KeyManager::StoreNetworkKey(const NetworkKey &aNetworkKey, bool aOverWriteE
 {
     NetworkKeyRef keyRef;
 
-    keyRef = Crypto::Storage::kNetworkKeyRef;
+    keyRef = Get<Crypto::Storage::KeyRefManager>().KeyRefFor(Crypto::Storage::KeyRefManager::kNetworkKey);
 
     if (!aOverWriteExisting)
     {
-        // Check if there is already a network key stored in ITS. If
-        // stored, and we are not overwriting the existing key,
-        // return without doing anything.
+        // Check if there is already a network key stored in secure
+        // storage. If stored, and we are not overwriting the existing
+        // key, return without doing anything.
+
         if (Crypto::Storage::HasKey(keyRef))
         {
             ExitNow();
@@ -596,10 +621,10 @@ void KeyManager::StoreNetworkKey(const NetworkKey &aNetworkKey, bool aOverWriteE
 
     Crypto::Storage::DestroyKey(keyRef);
 
-    SuccessOrAssert(Crypto::Storage::ImportKey(keyRef, Crypto::Storage::kKeyTypeHmac,
-                                               Crypto::Storage::kKeyAlgorithmHmacSha256,
-                                               Crypto::Storage::kUsageSignHash | Crypto::Storage::kUsageExport,
-                                               Crypto::Storage::kTypePersistent, aNetworkKey.m8, NetworkKey::kSize));
+    SuccessOrAssert(Crypto::Storage::SaveKey(keyRef, Crypto::Storage::kKeyTypeHmac,
+                                             Crypto::Storage::kKeyAlgorithmHmacSha256,
+                                             Crypto::Storage::kUsageSignHash | Crypto::Storage::kUsageExport,
+                                             Crypto::Storage::kTypePersistent, aNetworkKey.m8, NetworkKey::kSize));
 
 exit:
     if (mNetworkKeyRef != keyRef)
@@ -612,13 +637,13 @@ exit:
 
 void KeyManager::StorePskc(const Pskc &aPskc)
 {
-    PskcRef keyRef = Crypto::Storage::kPskcRef;
+    PskcRef keyRef = Get<Crypto::Storage::KeyRefManager>().KeyRefFor(Crypto::Storage::KeyRefManager::kPskc);
 
     Crypto::Storage::DestroyKey(keyRef);
 
-    SuccessOrAssert(Crypto::Storage::ImportKey(keyRef, Crypto::Storage::kKeyTypeRaw,
-                                               Crypto::Storage::kKeyAlgorithmVendor, Crypto::Storage::kUsageExport,
-                                               Crypto::Storage::kTypePersistent, aPskc.m8, Pskc::kSize));
+    SuccessOrAssert(Crypto::Storage::SaveKey(keyRef, Crypto::Storage::kKeyTypeRaw, Crypto::Storage::kKeyAlgorithmVendor,
+                                             Crypto::Storage::kUsageExport, Crypto::Storage::kTypePersistent, aPskc.m8,
+                                             Pskc::kSize));
 
     if (mPskcRef != keyRef)
     {
@@ -662,11 +687,12 @@ void KeyManager::DestroyTemporaryKeys(void)
 {
     mMleKey.Clear();
     mKek.Clear();
+    mIsKekSet = false;
     Get<Mac::SubMac>().ClearMacKeys();
-    Get<Mac::Mac>().ClearMode2Key();
 }
 
-void KeyManager::DestroyPersistentKeys(void) { Crypto::Storage::DestroyPersistentKeys(); }
+void KeyManager::DestroyPersistentKeys(void) { Get<Crypto::Storage::KeyRefManager>().DestroyPersistentKeys(); }
+
 #endif // OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
 
 } // namespace ot

@@ -39,16 +39,12 @@ namespace ot {
 
 static Instance *sInstance;
 
-enum
-{
-    kMaxChildIp6Addresses = OPENTHREAD_CONFIG_MLE_IP_ADDRS_PER_CHILD,
-};
+constexpr uint16_t kMaxChildIp6Addresses = OPENTHREAD_CONFIG_MLE_IP_ADDRS_PER_CHILD;
 
 void VerifyChildIp6Addresses(const Child &aChild, uint8_t aAddressListLength, const Ip6::Address aAddressList[])
 {
-    Ip6::Address::TypeFilter filters[] = {Ip6::Address::kTypeUnicast, Ip6::Address::kTypeMulticast};
-    bool                     addressObserved[kMaxChildIp6Addresses];
-    bool                     hasMeshLocal = false;
+    bool addressObserved[kMaxChildIp6Addresses];
+    bool hasMeshLocal = false;
 
     for (uint8_t index = 0; index < aAddressListLength; index++)
     {
@@ -78,7 +74,7 @@ void VerifyChildIp6Addresses(const Child &aChild, uint8_t aAddressListLength, co
     {
         Ip6::Address address;
 
-        if (sInstance->Get<Mle::MleRouter>().IsMeshLocalAddress(aAddressList[index]))
+        if (sInstance->Get<Mle::Mle>().IsMeshLocalAddress(aAddressList[index]))
         {
             SuccessOrQuit(aChild.GetMeshLocalIp6Address(address));
             VerifyOrQuit(address == aAddressList[index], "GetMeshLocalIp6Address() did not return expected address");
@@ -105,15 +101,15 @@ void TestChildIp6Address(void)
     Ip6::Address addresses[kMaxChildIp6Addresses];
     uint8_t      numAddresses;
     const char  *ip6Addresses[] = {
-         "fd00:1234::1234",
-         "ff6b:e251:52fb:0:12e6:b94c:1c28:c56a",
-         "fd00:1234::204c:3d7c:98f6:9a1b",
+        "fd00:1234::1234",
+        "ff6b:e251:52fb:0:12e6:b94c:1c28:c56a",
+        "fd00:1234::204c:3d7c:98f6:9a1b",
     };
 
     const uint8_t            meshLocalIidArray[] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
     Ip6::InterfaceIdentifier meshLocalIid;
 
-    meshLocalIid.SetBytes(meshLocalIidArray);
+    meshLocalIid.InitFrom(meshLocalIidArray);
 
     sInstance = testInitInstance();
     VerifyOrQuit(sInstance != nullptr);
@@ -127,9 +123,7 @@ void TestChildIp6Address(void)
     numAddresses = 0;
 
     // First addresses uses the mesh local prefix (mesh-local address).
-    addresses[numAddresses] = sInstance->Get<Mle::MleRouter>().GetMeshLocalEid();
-    addresses[numAddresses].SetIid(meshLocalIid);
-
+    sInstance->Get<Mle::Mle>().ComposeMeshLocalAddress(meshLocalIid, addresses[numAddresses]);
     numAddresses++;
 
     for (const char *ip6Address : ip6Addresses)

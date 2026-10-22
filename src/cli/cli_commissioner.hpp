@@ -31,8 +31,8 @@
  *   This file contains definitions for a simple CLI to control the Commissioner role.
  */
 
-#ifndef CLI_COMMISSIONER_HPP_
-#define CLI_COMMISSIONER_HPP_
+#ifndef OT_CLI_CLI_COMMISSIONER_HPP_
+#define OT_CLI_CLI_COMMISSIONER_HPP_
 
 #include "openthread-core-config.h"
 
@@ -47,7 +47,6 @@ namespace Cli {
 
 /**
  * Implements the Commissioner CLI interpreter.
- *
  */
 class Commissioner : private Utils
 {
@@ -57,7 +56,6 @@ public:
      *
      * @param[in]  aInstance            The OpenThread Instance.
      * @param[in]  aOutputImplementer   An `OutputImplementer`.
-     *
      */
     Commissioner(otInstance *aInstance, OutputImplementer &aOutputImplementer)
         : Utils(aInstance, aOutputImplementer)
@@ -74,7 +72,6 @@ public:
      * @retval OT_ERROR_INVALID_COMMAND   Invalid or unknown CLI command.
      * @retval OT_ERROR_INVALID_ARGS      Invalid arguments.
      * @retval ...                        Error during execution of the CLI command.
-     *
      */
     otError Process(Arg aArgs[]);
 
@@ -113,4 +110,4 @@ private:
 
 #endif // OPENTHREAD_CONFIG_COMMISSIONER_ENABLE && OPENTHREAD_FTD
 
-#endif // CLI_COMMISSIONER_HPP_
+#endif // OT_CLI_CLI_COMMISSIONER_HPP_

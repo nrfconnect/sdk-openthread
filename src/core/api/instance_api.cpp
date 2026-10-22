@@ -36,10 +36,8 @@
 #include <openthread/instance.h>
 #include <openthread/platform/misc.h>
 
-#include "common/as_core_type.hpp"
-#include "common/locator_getters.hpp"
 #include "common/new.hpp"
-#include "radio/radio.hpp"
+#include "instance/instance.hpp"
 
 #if !defined(OPENTHREAD_BUILD_DATETIME)
 #ifdef __ANDROID__
@@ -67,6 +65,13 @@ otInstance *otInstanceInitMultiple(uint8_t aIdx)
 
     return instance;
 }
+
+otInstance *otInstanceGetInstance(uint8_t aIdx)
+{
+    return (aIdx >= OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_NUM) ? nullptr : &Instance::Get(aIdx);
+}
+
+uint8_t otInstanceGetIndex(otInstance *aInstance) { return Instance::GetIdx(AsCoreTypePtr(aInstance)); }
 #endif // OPENTHREAD_CONFIG_MULTIPLE_STATIC_INSTANCE_ENABLE
 otInstance *otInstanceInit(void *aInstanceBuffer, size_t *aInstanceBufferSize)
 {
@@ -78,6 +83,7 @@ otInstance *otInstanceInit(void *aInstanceBuffer, size_t *aInstanceBufferSize)
 }
 #else
 otInstance *otInstanceInitSingle(void) { return &Instance::InitSingle(); }
+otInstance *otInstanceGetSingle(void) { return &Instance::Get(); }
 #endif // #if OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_ENABLE
 
 uint32_t otInstanceGetId(otInstance *aInstance) { return AsCoreType(aInstance).GetId(); }
@@ -101,13 +107,17 @@ otError otInstanceResetToBootloader(otInstance *aInstance) { return AsCoreType(a
 #endif
 
 #if OPENTHREAD_CONFIG_UPTIME_ENABLE
-uint64_t otInstanceGetUptime(otInstance *aInstance) { return AsCoreType(aInstance).Get<Uptime>().GetUptime(); }
+uint64_t otInstanceGetUptime(otInstance *aInstance) { return AsCoreType(aInstance).Get<UptimeTracker>().GetUptime(); }
 
 void otInstanceGetUptimeAsString(otInstance *aInstance, char *aBuffer, uint16_t aSize)
 {
     AssertPointerIsNotNull(aBuffer);
 
-    AsCoreType(aInstance).Get<Uptime>().GetUptime(aBuffer, aSize);
+    {
+        StringWriter writer(aBuffer, aSize);
+
+        UptimeToString(AsCoreType(aInstance).Get<UptimeTracker>().GetUptime(), writer, kUptimeStringIncludeMsec);
+    }
 }
 #endif
 
@@ -188,5 +198,5 @@ const char *otGetVersionString(void)
 
 const char *otGetRadioVersionString(otInstance *aInstance)
 {
-    return AsCoreType(aInstance).Get<Radio>().GetVersionString();
+    return AsCoreType(aInstance).Get<Radio::Radio>().GetVersionString();
 }

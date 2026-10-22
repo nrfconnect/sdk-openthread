@@ -29,7 +29,6 @@
 /**
  * @file
  *   This file implements Channel Manager.
- *
  */
 
 #include "channel_manager.hpp"
@@ -37,14 +36,7 @@
 #if OPENTHREAD_CONFIG_CHANNEL_MANAGER_ENABLE
 #if (OPENTHREAD_FTD || OPENTHREAD_CONFIG_CHANNEL_MANAGER_CSL_CHANNEL_SELECT_ENABLE)
 
-#include "common/code_utils.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/random.hpp"
-#include "common/string.hpp"
 #include "instance/instance.hpp"
-#include "meshcop/dataset_updater.hpp"
-#include "radio/radio.hpp"
 
 namespace ot {
 namespace Utils {
@@ -108,7 +100,7 @@ void ChannelManager::RequestNetworkChannelChange(uint8_t aChannel)
     mState   = kStateChangeRequested;
     mChannel = aChannel;
 
-    mTimer.Start(1 + Random::NonCrypto::GetUint32InRange(0, kRequestStartJitterInterval));
+    mTimer.Start(1 + Random::NonCrypto::GenerateUpToExcluding(kRequestStartJitterInterval));
 
     Get<Notifier>().Signal(kEventChannelManagerNewChannelChanged);
 
@@ -120,7 +112,7 @@ exit:
 #if OPENTHREAD_CONFIG_CHANNEL_MANAGER_CSL_CHANNEL_SELECT_ENABLE
 void ChannelManager::ChangeCslChannel(uint8_t aChannel)
 {
-    if (!(!Get<Mle::Mle>().IsRxOnWhenIdle() && Get<Mac::Mac>().IsCslEnabled()))
+    if (Get<Mle::Mle>().IsRxOnWhenIdle() || !Get<Mac::Mac>().IsCslEnabled())
     {
         // cannot select or use other channel
         ExitNow();
@@ -132,7 +124,10 @@ void ChannelManager::ChangeCslChannel(uint8_t aChannel)
         ExitNow();
     }
 
-    VerifyOrExit(Radio::IsCslChannelValid(aChannel));
+    if (aChannel != 0)
+    {
+        VerifyOrExit(Radio::IsChannelValid(aChannel));
+    }
 
     LogInfo("Change to Csl channel %d now.", aChannel);
 
@@ -188,7 +183,7 @@ void ChannelManager::StartDatasetUpdate(void)
     }
 }
 
-void ChannelManager::HandleDatasetUpdateDone(Error aError, void *aContext)
+void ChannelManager::HandleDatasetUpdateDone(otError aError, void *aContext)
 {
     static_cast<ChannelManager *>(aContext)->HandleDatasetUpdateDone(aError);
 }

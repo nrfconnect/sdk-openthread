@@ -31,8 +31,8 @@
  *   This file contains definitions for the CLI interpreter for Link Metrics function.
  */
 
-#ifndef CLI_LINK_METRICS_HPP_
-#define CLI_LINK_METRICS_HPP_
+#ifndef OT_CLI_CLI_LINK_METRICS_HPP_
+#define OT_CLI_CLI_LINK_METRICS_HPP_
 
 #include "openthread-core-config.h"
 
@@ -47,7 +47,6 @@ namespace Cli {
 
 /**
  * Implements the Link Metrics CLI interpreter.
- *
  */
 
 class LinkMetrics : private Utils
@@ -58,7 +57,6 @@ public:
      *
      * @param[in]  aInstance            The OpenThread Instance.
      * @param[in]  aOutputImplementer   An `OutputImplementer`.
-     *
      */
     LinkMetrics(otInstance *aInstance, OutputImplementer &aOutputImplementer);
 
@@ -72,7 +70,6 @@ public:
      * @retval OT_ERROR_INVALID_COMMAND   Invalid or unknown CLI command.
      * @retval OT_ERROR_INVALID_ARGS      Invalid arguments.
      * @retval ...                        Error during execution of the CLI command.
-     *
      */
     otError Process(Arg aArgs[]);
 
@@ -107,6 +104,7 @@ private:
     void HandleLinkMetricsConfigEnhAckProbingMgmtResponse(const otIp6Address *aAddress, otLinkMetricsStatus aStatus);
     void HandleLinkMetricsMgmtResponse(const otIp6Address *aAddress, otLinkMetricsStatus aStatus);
 
+#if OPENTHREAD_CONFIG_CLI_LINK_METRICS_ENH_ACK_VERBOSE_ENABLE
     static void HandleLinkMetricsEnhAckProbingIe(otShortAddress             aShortAddress,
                                                  const otExtAddress        *aExtAddress,
                                                  const otLinkMetricsValues *aMetricsValues,
@@ -115,10 +113,9 @@ private:
     void HandleLinkMetricsEnhAckProbingIe(otShortAddress             aShortAddress,
                                           const otExtAddress        *aExtAddress,
                                           const otLinkMetricsValues *aMetricsValues);
+#endif
 
     const char *LinkMetricsStatusToStr(otLinkMetricsStatus aStatus);
-
-    void OutputResult(otError aError);
 
     bool mQuerySync : 1;
     bool mConfigForwardTrackingSeriesSync : 1;
@@ -130,4 +127,4 @@ private:
 
 #endif // OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE
 
-#endif // CLI_LINK_METRICS_HPP_
+#endif // OT_CLI_CLI_LINK_METRICS_HPP_

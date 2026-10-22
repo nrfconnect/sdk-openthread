@@ -31,8 +31,8 @@
  *   This file includes definitions for endianness utility functions.
  */
 
-#ifndef LIB_UTILS_ENDIAN_HPP_
-#define LIB_UTILS_ENDIAN_HPP_
+#ifndef OT_LIB_UTILS_ENDIAN_HPP_
+#define OT_LIB_UTILS_ENDIAN_HPP_
 
 #include <stdint.h>
 
@@ -47,7 +47,6 @@ namespace LittleEndian {
  * @param[in] aBuffer   Pointer to buffer to read from.
  *
  * @returns The `uint16_t` value read from buffer.
- *
  */
 inline uint16_t ReadUint16(const uint8_t *aBuffer) { return static_cast<uint16_t>(aBuffer[0] | (aBuffer[1] << 8)); }
 
@@ -56,7 +55,6 @@ inline uint16_t ReadUint16(const uint8_t *aBuffer) { return static_cast<uint16_t
  *
  * @param[in]  aValue    The value to write to buffer.
  * @param[out] aBuffer   Pointer to buffer where the value will be written.
- *
  */
 inline void WriteUint16(uint16_t aValue, uint8_t *aBuffer)
 {
@@ -69,4 +67,4 @@ inline void WriteUint16(uint16_t aValue, uint8_t *aBuffer)
 } // namespace Lib
 } // namespace ot
 
-#endif // LIB_UTILS_ENDIAN_HPP_
+#endif // OT_LIB_UTILS_ENDIAN_HPP_

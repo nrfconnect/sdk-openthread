@@ -31,8 +31,8 @@
  *   This file contains definitions for CLI to backbone router.
  */
 
-#ifndef CLI_BBR_HPP_
-#define CLI_BBR_HPP_
+#ifndef OT_CLI_CLI_BBR_HPP_
+#define OT_CLI_CLI_BBR_HPP_
 
 #include "openthread-core-config.h"
 
@@ -49,7 +49,6 @@ namespace Cli {
 
 /**
  * Implements the BBR CLI interpreter.
- *
  */
 class Bbr : private Utils
 {
@@ -59,7 +58,6 @@ public:
      *
      * @param[in]  aInstance            The OpenThread Instance.
      * @param[in]  aOutputImplementer   An `OutputImplementer`.
-     *
      */
     Bbr(otInstance *aInstance, OutputImplementer &aOutputImplementer)
         : Utils(aInstance, aOutputImplementer)
@@ -76,7 +74,6 @@ public:
      * @retval OT_ERROR_INVALID_COMMAND   Invalid or unknown CLI command.
      * @retval OT_ERROR_INVALID_ARGS      Invalid arguments.
      * @retval ...                        Error during execution of the CLI command.
-     *
      */
     otError Process(Arg aArgs[]);
 
@@ -93,4 +90,4 @@ private:
 
 #endif //  (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
 
-#endif // CLI_BBR_HPP_
+#endif // OT_CLI_CLI_BBR_HPP_

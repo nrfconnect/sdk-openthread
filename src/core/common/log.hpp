@@ -31,8 +31,8 @@
  *   This file includes logging related  definitions.
  */
 
-#ifndef LOG_HPP_
-#define LOG_HPP_
+#ifndef OT_CORE_COMMON_LOG_HPP_
+#define OT_CORE_COMMON_LOG_HPP_
 
 #include "openthread-core-config.h"
 
@@ -40,6 +40,7 @@
 #include <openthread/platform/logging.h>
 #include <openthread/platform/toolchain.h>
 
+#include "common/as_core_type.hpp"
 #include "common/error.hpp"
 
 namespace ot {
@@ -48,7 +49,6 @@ namespace ot {
  * @def OT_SHOULD_LOG
  *
  * This definition indicates whether or not logging is enabled.
- *
  */
 #define OT_SHOULD_LOG (OPENTHREAD_CONFIG_LOG_OUTPUT != OPENTHREAD_CONFIG_LOG_OUTPUT_NONE)
 
@@ -58,13 +58,11 @@ namespace ot {
  * @param[in] aLevel   The log level to check.
  *
  * @returns TRUE if logging is enabled at @p aLevel, FALSE otherwise.
- *
  */
 #define OT_SHOULD_LOG_AT(aLevel) (OT_SHOULD_LOG && (OPENTHREAD_CONFIG_LOG_LEVEL >= (aLevel)))
 
 /**
  * Represents the log level.
- *
  */
 enum LogLevel : uint8_t
 {
@@ -78,7 +76,9 @@ enum LogLevel : uint8_t
 
 constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
 
-#if OT_SHOULD_LOG && (OPENTHREAD_CONFIG_LOG_LEVEL != OT_LOG_LEVEL_NONE)
+constexpr uint16_t kMaxLogStringSize = OPENTHREAD_CONFIG_LOG_MAX_SIZE; ///< Max size of log string
+
+#if OT_SHOULD_LOG
 /**
  * Registers log module name.
  *
@@ -86,7 +86,6 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * functions or macros (e.g., `LogInfo()` or `DumpInfo()`, ...) in the file.
  *
  * @param[in] aName  The log module name string (MUST be shorter than `kMaxLogModuleNameLength`).
- *
  */
 #define RegisterLogModule(aName)                                     \
     constexpr char kLogModuleName[] = aName;                         \
@@ -107,11 +106,22 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * Emits a log message at critical log level.
  *
  * @param[in]  ...   Arguments for the format specification.
- *
  */
 #define LogCrit(...) Logger::LogAtLevel<kLogLevelCrit>(kLogModuleName, __VA_ARGS__)
+
+/**
+ * Emits an error log message at critical log level if there is an error.
+ *
+ * The emitted log will use the following format "Failed to {aFormattedText} - {ErrorToString(aError)}", and will
+ * be emitted only if there is an error, i.e., @p aError is not `kErrorNone`.
+ *
+ * @param[in] aError       The error to check and log.
+ * @param[in] ...          Arguments for the format specification.
+ */
+#define LogCritOnError(aError, ...) Logger::LogOnError<kLogLevelCrit>(kLogModuleName, aError, __VA_ARGS__)
 #else
 #define LogCrit(...)
+#define LogCritOnError(aError, ...) OT_UNUSED_VARIABLE(aError)
 #endif
 
 #if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_WARN)
@@ -119,11 +129,23 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * Emits a log message at warning log level.
  *
  * @param[in]  ...   Arguments for the format specification.
- *
  */
 #define LogWarn(...) Logger::LogAtLevel<kLogLevelWarn>(kLogModuleName, __VA_ARGS__)
+
+/**
+ * Emits an error log message at warning log level if there is an error.
+ *
+ * The emitted log will use the following format "Failed to {aFormattedText} - {ErrorToString(aError)}", and will
+ * be emitted only if there is an error, i.e., @p aError is not `kErrorNone`.
+ *
+ * @param[in] aError       The error to check and log.
+ * @param[in] ...          Arguments for the format specification.
+ */
+#define LogWarnOnError(aError, ...) Logger::LogOnError<kLogLevelWarn>(kLogModuleName, aError, __VA_ARGS__)
+
 #else
 #define LogWarn(...)
+#define LogWarnOnError(aError, ...) OT_UNUSED_VARIABLE(aError)
 #endif
 
 #if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_NOTE)
@@ -131,11 +153,23 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * Emits a log message at note log level.
  *
  * @param[in]  ...   Arguments for the format specification.
- *
  */
 #define LogNote(...) Logger::LogAtLevel<kLogLevelNote>(kLogModuleName, __VA_ARGS__)
+
+/**
+ * Emits an error log message at note log level if there is an error.
+ *
+ * The emitted log will use the following format "Failed to {aFormattedText} - {ErrorToString(aError)}", and will
+ * be emitted only if there is an error, i.e., @p aError is not `kErrorNone`.
+ *
+ * @param[in] aError       The error to check and log.
+ * @param[in] ...          Arguments for the format specification.
+ */
+#define LogNoteOnError(aError, ...) Logger::LogOnError<kLogLevelNote>(kLogModuleName, aError, __VA_ARGS__)
+
 #else
 #define LogNote(...)
+#define LogNoteOnError(aError, ...) OT_UNUSED_VARIABLE(aError)
 #endif
 
 #if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_INFO)
@@ -143,11 +177,23 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * Emits a log message at info log level.
  *
  * @param[in]  ...   Arguments for the format specification.
- *
  */
 #define LogInfo(...) Logger::LogAtLevel<kLogLevelInfo>(kLogModuleName, __VA_ARGS__)
+
+/**
+ * Emits an error log message at info log level if there is an error.
+ *
+ * The emitted log will use the following format "Failed to {aFormattedText} - {ErrorToString(aError)}", and will
+ * be emitted only if there is an error, i.e., @p aError is not `kErrorNone`.
+ *
+ * @param[in] aError       The error to check and log.
+ * @param[in] ...          Arguments for the format specification.
+ */
+#define LogInfoOnError(aError, ...) Logger::LogOnError<kLogLevelInfo>(kLogModuleName, aError, __VA_ARGS__)
+
 #else
 #define LogInfo(...)
+#define LogInfoOnError(aError, ...) OT_UNUSED_VARIABLE(aError)
 #endif
 
 #if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_DEBG)
@@ -155,27 +201,23 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * Emits a log message at debug log level.
  *
  * @param[in]  ...   Arguments for the format specification.
- *
  */
 #define LogDebg(...) Logger::LogAtLevel<kLogLevelDebg>(kLogModuleName, __VA_ARGS__)
-#else
-#define LogDebg(...)
-#endif
 
-#if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_WARN)
 /**
- * Emits an error log message at warning log level if there is an error.
+ * Emits an error log message at debug log level if there is an error.
  *
- * The emitted log will use the the following format "Failed to {aText}: {ErrorToString(aError)}", and will be emitted
- * only if there is an error, i.e., @p aError is not `kErrorNone`.
+ * The emitted log will use the following format "Failed to {aFormattedText} - {ErrorToString(aError)}", and will
+ * be emitted only if there is an error, i.e., @p aError is not `kErrorNone`.
  *
  * @param[in] aError       The error to check and log.
- * @param[in] aText        The text to include in the log.
- *
+ * @param[in] ...          Arguments for the format specification.
  */
-#define LogWarnOnError(aError, aText) Logger::LogOnError(kLogModuleName, aError, aText)
+#define LogDebgOnError(aError, ...) Logger::LogOnError<kLogLevelDebg>(kLogModuleName, aError, __VA_ARGS__)
+
 #else
-#define LogWarnOnError(aError, aText)
+#define LogDebg(...)
+#define LogDebgOnError(aError, ...) OT_UNUSED_VARIABLE(aError)
 #endif
 
 #if OT_SHOULD_LOG
@@ -184,7 +226,6 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  *
  * @param[in] aLogLevel  The log level to use.
  * @param[in] ...        Argument for the format specification.
- *
  */
 #define LogAt(aLogLevel, ...) Logger::LogInModule(kLogModuleName, aLogLevel, __VA_ARGS__)
 #else
@@ -196,7 +237,6 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * Emits a log message independent of the configured log level.
  *
  * @param[in]  ...   Arguments for the format specification.
- *
  */
 #define LogAlways(...) Logger::LogInModule("", kLogLevelNone, __VA_ARGS__)
 #else
@@ -208,7 +248,6 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * Emit a log message for the certification test.
  *
  * @param[in]  ...  Arguments for the format specification.
- *
  */
 #define LogCert(...) LogAlways(__VA_ARGS__)
 #else
@@ -222,7 +261,6 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * @param[in]  aText         A string that is printed before the bytes.
  * @param[in]  aData         A pointer to the data buffer.
  * @param[in]  aDataLength   Number of bytes in @p aData.
- *
  */
 #define DumpCrit(aText, aData, aDataLength) Logger::Dump<kLogLevelCrit, kLogModuleName>(aText, aData, aDataLength)
 #else
@@ -236,7 +274,6 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * @param[in]  aText         A string that is printed before the bytes.
  * @param[in]  aData         A pointer to the data buffer.
  * @param[in]  aDataLength   Number of bytes in @p aData.
- *
  */
 #define DumpWarn(aText, aData, aDataLength) Logger::Dump<kLogLevelWarn, kLogModuleName>(aText, aData, aDataLength)
 #else
@@ -250,7 +287,6 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * @param[in]  aText         A string that is printed before the bytes.
  * @param[in]  aData         A pointer to the data buffer.
  * @param[in]  aDataLength   Number of bytes in @p aData.
- *
  */
 #define DumpNote(aText, aData, aDataLength) Logger::Dump<kLogLevelNote, kLogModuleName>(aText, aData, aDataLength)
 #else
@@ -264,7 +300,6 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * @param[in]  aText         A string that is printed before the bytes.
  * @param[in]  aData         A pointer to the data buffer.
  * @param[in]  aDataLength   Number of bytes in @p aData.
- *
  */
 #define DumpInfo(aText, aData, aDataLength) Logger::Dump<kLogLevelInfo, kLogModuleName>(aText, aData, aDataLength)
 #else
@@ -278,7 +313,6 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * @param[in]  aText         A string that is printed before the bytes.
  * @param[in]  aData         A pointer to the data buffer.
  * @param[in]  aDataLength   Number of bytes in @p aData.
- *
  */
 #define DumpDebg(aText, aData, aDataLength) Logger::Dump<kLogLevelDebg, kLogModuleName>(aText, aData, aDataLength)
 #else
@@ -292,7 +326,6 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * @param[in]  aText         A string that is printed before the bytes.
  * @param[in]  aData         A pointer to the data buffer.
  * @param[in]  aDataLength   Number of bytes in @p aData.
- *
  */
 #define DumpAlways(aText, aData, aDataLength) Logger::DumpInModule("", kLogLevelNone, aText, aData, aDataLength)
 #endif
@@ -304,7 +337,6 @@ constexpr uint8_t kMaxLogModuleNameLength = 14; ///< Maximum module name length
  * @param[in]  aText         A string that is printed before the bytes.
  * @param[in]  aData         A pointer to the data buffer.
  * @param[in]  aDataLength   Number of bytes in @p aData.
- *
  */
 #define DumpCert(aText, aData, aDataLength) DumpAlways(aText, aData, aDataLength)
 #else
@@ -330,11 +362,12 @@ public:
     static void LogAtLevel(const char *aModuleName, const char *aFormat, ...)
         OT_TOOL_PRINTF_STYLE_FORMAT_ARG_CHECK(2, 3);
 
-    static void LogVarArgs(const char *aModuleName, LogLevel aLogLevel, const char *aFormat, va_list aArgs);
+    template <LogLevel kLogLevel>
+    static void LogOnError(const char *aModuleName, Error aError, const char *aFormat, ...)
+        OT_TOOL_PRINTF_STYLE_FORMAT_ARG_CHECK(3, 4);
 
-#if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_WARN)
-    static void LogOnError(const char *aModuleName, Error aError, const char *aText);
-#endif
+    static void LogVarArgs(const char *aModuleName, LogLevel aLogLevel, const char *aFormat, va_list aArgs)
+        OT_TOOL_PRINTF_STYLE_FORMAT_ARG_CHECK(3, 0);
 
 #if OPENTHREAD_CONFIG_LOG_PKT_DUMP
     static constexpr uint8_t kStringLineLength = 80;
@@ -355,6 +388,10 @@ public:
     template <LogLevel kLogLevel>
     static void DumpAtLevel(const char *aModuleName, const char *aText, const void *aData, uint16_t aDataLength);
 #endif
+
+private:
+    static void Log(const char *aModuleName, LogLevel aLogLevel, Error aError, const char *aFormat, va_list aArgs)
+        OT_TOOL_PRINTF_STYLE_FORMAT_ARG_CHECK(4, 0);
 };
 
 extern template void Logger::LogAtLevel<kLogLevelNone>(const char *aModuleName, const char *aFormat, ...);
@@ -363,6 +400,13 @@ extern template void Logger::LogAtLevel<kLogLevelWarn>(const char *aModuleName, 
 extern template void Logger::LogAtLevel<kLogLevelNote>(const char *aModuleName, const char *aFormat, ...);
 extern template void Logger::LogAtLevel<kLogLevelInfo>(const char *aModuleName, const char *aFormat, ...);
 extern template void Logger::LogAtLevel<kLogLevelDebg>(const char *aModuleName, const char *aFormat, ...);
+
+extern template void Logger::LogOnError<kLogLevelNone>(const char *aModuleName, Error aError, const char *aFormat, ...);
+extern template void Logger::LogOnError<kLogLevelCrit>(const char *aModuleName, Error aError, const char *aFormat, ...);
+extern template void Logger::LogOnError<kLogLevelWarn>(const char *aModuleName, Error aError, const char *aFormat, ...);
+extern template void Logger::LogOnError<kLogLevelNote>(const char *aModuleName, Error aError, const char *aFormat, ...);
+extern template void Logger::LogOnError<kLogLevelInfo>(const char *aModuleName, Error aError, const char *aFormat, ...);
+extern template void Logger::LogOnError<kLogLevelDebg>(const char *aModuleName, Error aError, const char *aFormat, ...);
 
 #if OPENTHREAD_CONFIG_LOG_PKT_DUMP
 extern template void Logger::DumpAtLevel<kLogLevelNone>(const char *aModuleName,
@@ -414,10 +458,11 @@ typedef otLogHexDumpInfo HexDumpInfo; ///< Represents the hex dump info.
  *
  * @retval kErrorNone      Successfully generated the next line, `mLine` field in @p aInfo is updated.
  * @retval kErrorNotFound  Reached the end and no more line to generate.
- *
  */
 Error GenerateNextHexDumpLine(HexDumpInfo &aInfo);
 
+DefineMapEnum(otLogLevel, LogLevel);
+
 } // namespace ot
 
-#endif // LOG_HPP_
+#endif // OT_CORE_COMMON_LOG_HPP_

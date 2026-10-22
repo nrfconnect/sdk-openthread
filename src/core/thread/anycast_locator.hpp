@@ -31,8 +31,8 @@
  *   This file includes definitions for Anycast Locator functionality.
  */
 
-#ifndef ANYCAST_LOCATOR_HPP_
-#define ANYCAST_LOCATOR_HPP_
+#ifndef OT_CORE_THREAD_ANYCAST_LOCATOR_HPP_
+#define OT_CORE_THREAD_ANYCAST_LOCATOR_HPP_
 
 #include "openthread-core-config.h"
 
@@ -51,7 +51,6 @@ namespace ot {
  * of the closest destination of an anycast address (if any).
  *
  * The closest destination is determined based on the current routing table and path costs within the Thread mesh.
- *
  */
 class AnycastLocator : public InstanceLocator, private NonCopyable
 {
@@ -60,7 +59,6 @@ class AnycastLocator : public InstanceLocator, private NonCopyable
 public:
     /**
      * Pointer type defines the callback to notify the outcome of a request.
-     *
      */
     typedef otThreadAnycastLocatorCallback LocatorCallback;
 
@@ -68,7 +66,6 @@ public:
      * Initializes the `AnycastLocator` object.
      *
      * @param[in]  aInstance  A reference to the OpenThread instance.
-     *
      */
     explicit AnycastLocator(Instance &aInstance);
 
@@ -85,7 +82,6 @@ public:
      * @retval kErrorNone         The request started successfully. @p aCallback will be invoked to report the result.
      * @retval kErrorNoBufs       Out of buffers to prepare and send the request message.
      * @retval kErrorInvalidArgs  The @p aAnycastAddress is not a valid anycast address or @p aCallback is `nullptr`.
-     *
      */
     Error Locate(const Ip6::Address &aAnycastAddress, LocatorCallback aCallback, void *aContext);
 
@@ -93,16 +89,13 @@ public:
      * Indicates whether an earlier request is in progress.
      *
      * @returns TRUE if an earlier request is in progress, FALSE otherwise.
-     *
      */
     bool IsInProgress(void) const { return mCallback.IsSet(); }
 
 private:
-    static void HandleResponse(void *aContext, otMessage *aMessage, const otMessageInfo *aMessageInfo, Error aError);
+    template <Uri kUri> void HandleTmf(Coap::Msg &aMsg);
 
-    void HandleResponse(Coap::Message *aMessage, const Ip6::MessageInfo *aMessageInfo, Error aError);
-
-    template <Uri kUri> void HandleTmf(Coap::Message &aMessage, const Ip6::MessageInfo &aMessageInfo);
+    DeclareTmfResponseHandlerIn(AnycastLocator, HandleResponse);
 
     Callback<LocatorCallback> mCallback;
 };
@@ -115,4 +108,4 @@ DeclareTmfHandler(AnycastLocator, kUriAnycastLocate);
 
 #endif // OPENTHREAD_CONFIG_TMF_ANYCAST_LOCATOR_ENABLE
 
-#endif //  ANYCAST_LOCATOR_HPP_
+#endif // OT_CORE_THREAD_ANYCAST_LOCATOR_HPP_

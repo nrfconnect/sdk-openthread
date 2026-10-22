@@ -31,8 +31,8 @@
  *   This file includes definitions for radio selector (for multi radio links).
  */
 
-#ifndef RADIO_SELECTOR_HPP_
-#define RADIO_SELECTOR_HPP_
+#ifndef OT_CORE_THREAD_RADIO_SELECTOR_HPP_
+#define OT_CORE_THREAD_RADIO_SELECTOR_HPP_
 
 #include "openthread-core-config.h"
 
@@ -46,6 +46,7 @@
 #include "mac/mac_frame.hpp"
 #include "mac/mac_links.hpp"
 #include "mac/mac_types.hpp"
+#include "radio/radio_types.hpp"
 
 namespace ot {
 
@@ -56,7 +57,6 @@ namespace ot {
  *   This module includes definition for radio selector (for multi radio links).
  *
  * @{
- *
  */
 
 class Neighbor;
@@ -68,7 +68,6 @@ public:
      * Defines all the neighbor info required for multi radio link and radio selection.
      *
      * `Neighbor` class publicly inherits from this class.
-     *
      */
     class NeighborInfo
     {
@@ -77,7 +76,6 @@ public:
     public:
         /**
          * Represents multi radio information associated with a neighbor.
-         *
          */
         typedef otMultiRadioNeighborInfo MultiRadioInfo;
 
@@ -85,35 +83,32 @@ public:
          * Returns the supported radio types by the neighbor.
          *
          * @returns The supported radio types set.
-         *
          */
-        Mac::RadioTypes GetSupportedRadioTypes(void) const { return mSupportedRadioTypes; }
+        Radio::Types GetSupportedRadioTypes(void) const { return mSupportedRadioTypes; }
 
         /**
          * Retrieves the multi radio information `otMultiRadioNeighborInfo` associated with the neighbor.
          *
          * @param[out] aInfo  A reference to `MultiRadioInfo` to populate with neighbor info.
-         *
          */
         void PopulateMultiRadioInfo(MultiRadioInfo &aInfo);
 
     private:
-        void AddSupportedRadioType(Mac::RadioType aType) { mSupportedRadioTypes.Add(aType); }
-        void RemoveSupportedRadioType(Mac::RadioType aType) { mSupportedRadioTypes.Remove(aType); }
+        void AddSupportedRadioType(Radio::Type aType) { mSupportedRadioTypes.Add(aType); }
+        void RemoveSupportedRadioType(Radio::Type aType) { mSupportedRadioTypes.Remove(aType); }
         void ClearSupportedRadioType(void) { mSupportedRadioTypes.Clear(); }
 
-        uint8_t GetRadioPreference(Mac::RadioType aType) const { return mRadioPreference[aType]; }
-        void    SetRadioPreference(Mac::RadioType aType, uint8_t aValue) { mRadioPreference[aType] = aValue; }
+        uint8_t GetRadioPreference(Radio::Type aType) const { return mRadioPreference[aType]; }
+        void    SetRadioPreference(Radio::Type aType, uint8_t aValue) { mRadioPreference[aType] = aValue; }
 
-        Mac::RadioTypes mSupportedRadioTypes;
-        uint8_t         mRadioPreference[Mac::kNumRadioTypes];
+        Radio::Types mSupportedRadioTypes;
+        uint8_t      mRadioPreference[Radio::kNumTypes];
     };
 
     /**
      * Initializes the RadioSelector object.
      *
      * @param[in]  aInstance     A reference to the OpenThread instance.
-     *
      */
     explicit RadioSelector(Instance &aInstance);
 
@@ -127,9 +122,8 @@ public:
      * @param[in] aNeighbor     The neighbor for which a frame/message was received.
      * @param[in] aRadioType    The radio link type on which the frame/message was received.
      * @param[in] aIsDuplicate  Indicates whether the received frame/message is a duplicate or not.
-     *
      */
-    void UpdateOnReceive(Neighbor &aNeighbor, Mac::RadioType aRadioType, bool aIsDuplicate);
+    void UpdateOnReceive(Neighbor &aNeighbor, Radio::Type aRadioType, bool aIsDuplicate);
 
     /**
      * Updates the neighbor info (for multi radio support) on a send done event.
@@ -137,11 +131,10 @@ public:
      * Notifies `RadioSelector` the status of frame transmission on a radio link type. The radio link
      * type is provided by the `aFrame` itself.
      *
-     * @param[in] aFrame     A transmitted frame.
+     * @param[in] aFrameInfo A transmitted frame information.
      * @param[in] aTxError   The transmission error.
-     *
      */
-    void UpdateOnSendDone(Mac::TxFrame &aFrame, Error aTxError);
+    void UpdateOnSendDone(Mac::TxFrame::ParseInfo &aFrameInfo, Error aTxError);
 
 #if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
     /**
@@ -152,7 +145,6 @@ public:
      * @param[in]  aNeighbor              The neighbor from which ack was expected
      * @param[in]  aError                 The deferred ack status (`kErrorNone` indicates ack was received).
      * @param[out] aAllowNeighborRemove   Boolean variable to output whether the neighbor is allowed to be removed.
-     *
      */
     void UpdateOnDeferredAck(Neighbor &aNeighbor, Error aTxError, bool &aAllowNeighborRemove);
 #endif
@@ -163,9 +155,8 @@ public:
      * @param[in] aParent  The parent to which the data poll frame will be sent.
      *
      * @returns The radio type on which the data poll frame should be sent.
-     *
      */
-    Mac::RadioType SelectPollFrameRadio(const Neighbor &aParent);
+    Radio::Type SelectPollFrameRadio(const Neighbor &aParent);
 
     /**
      * Selects the radio link for sending a given message to a specified MAC destination.
@@ -178,7 +169,6 @@ public:
      * @param[in,out] aTxFrames  The set of TxFrames for all radio links.
      *
      * @returns  A reference to `mTxFrame` to use when preparing the frame for tx.
-     *
      */
     Mac::TxFrame &SelectRadio(Message &aMessage, const Mac::Address &aMacDest, Mac::TxFrames &aTxFrames);
 
@@ -199,20 +189,19 @@ private:
 
     static constexpr uint16_t kRadioPreferenceStringSize = 75;
 
-    LogLevel       UpdatePreference(Neighbor &aNeighbor, Mac::RadioType aRadioType, int16_t aDifference);
-    Mac::RadioType Select(Mac::RadioTypes aRadioOptions, const Neighbor &aNeighbor);
-    void           Log(LogLevel aLogLevel, const char *aActionText, Mac::RadioType aType, const Neighbor &aNeighbor);
+    LogLevel    UpdatePreference(Neighbor &aNeighbor, Radio::Type aRadioType, int16_t aDifference);
+    Radio::Type Select(Radio::Types aRadioOptions, const Neighbor &aNeighbor);
+    void        Log(LogLevel aLogLevel, const char *aActionText, Radio::Type aType, const Neighbor &aNeighbor);
 
-    static const Mac::RadioType sRadioSelectionOrder[Mac::kNumRadioTypes];
+    static const Radio::Type sRadioSelectionOrder[Radio::kNumTypes];
 };
 
 /**
  * @}
- *
  */
 
 } // namespace ot
 
 #endif // #if OPENTHREAD_CONFIG_MULTI_RADIO
 
-#endif // RADIO_SELECTOR_HPP_
+#endif // OT_CORE_THREAD_RADIO_SELECTOR_HPP_

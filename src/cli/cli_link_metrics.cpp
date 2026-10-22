@@ -325,10 +325,14 @@ template <> otError LinkMetrics::Process<Cmd("config")>(Arg aArgs[])
             ExitNow(error = OT_ERROR_INVALID_ARGS);
         }
 
-        SuccessOrExit(
-            error = otLinkMetricsConfigEnhAckProbing(GetInstancePtr(), &address, enhAckFlags, pLinkMetrics,
-                                                     &LinkMetrics::HandleLinkMetricsConfigEnhAckProbingMgmtResponse,
-                                                     this, &LinkMetrics::HandleLinkMetricsEnhAckProbingIe, this));
+        error = otLinkMetricsConfigEnhAckProbing(GetInstancePtr(), &address, enhAckFlags, pLinkMetrics,
+                                                 &LinkMetrics::HandleLinkMetricsConfigEnhAckProbingMgmtResponse, this,
+#if OPENTHREAD_CONFIG_CLI_LINK_METRICS_ENH_ACK_VERBOSE_ENABLE
+                                                 &LinkMetrics::HandleLinkMetricsEnhAckProbingIe, this);
+#else
+                                                 nullptr, nullptr);
+#endif
+        SuccessOrExit(error);
 
         if (sync)
         {
@@ -377,10 +381,7 @@ exit:
 
 otError LinkMetrics::Process(Arg aArgs[])
 {
-#define CmdEntry(aCommandString)                                   \
-    {                                                              \
-        aCommandString, &LinkMetrics::Process<Cmd(aCommandString)> \
-    }
+#define CmdEntry(aCommandString) {aCommandString, &LinkMetrics::Process<Cmd(aCommandString)>}
 
     static constexpr Command kCommands[] = {
         CmdEntry("config"), CmdEntry("mgmt"), CmdEntry("probe"), CmdEntry("query"), CmdEntry("request"),
@@ -545,6 +546,7 @@ void LinkMetrics::HandleLinkMetricsMgmtResponse(const otIp6Address *aAddress, ot
     OutputLine("Status: %s", LinkMetricsStatusToStr(aStatus));
 }
 
+#if OPENTHREAD_CONFIG_CLI_LINK_METRICS_ENH_ACK_VERBOSE_ENABLE
 void LinkMetrics::HandleLinkMetricsEnhAckProbingIe(otShortAddress             aShortAddress,
                                                    const otExtAddress        *aExtAddress,
                                                    const otLinkMetricsValues *aMetricsValues,
@@ -566,6 +568,7 @@ void LinkMetrics::HandleLinkMetricsEnhAckProbingIe(otShortAddress             aS
         PrintLinkMetricsValue(aMetricsValues);
     }
 }
+#endif
 
 const char *LinkMetrics::LinkMetricsStatusToStr(otLinkMetricsStatus aStatus)
 {
@@ -596,8 +599,6 @@ const char *LinkMetrics::LinkMetricsStatusToStr(otLinkMetricsStatus aStatus)
 
     return str;
 }
-
-void LinkMetrics::OutputResult(otError aError) { Interpreter::GetInterpreter().OutputResult(aError); }
 
 } // namespace Cli
 } // namespace ot

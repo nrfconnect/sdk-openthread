@@ -29,11 +29,10 @@
 /**
  * @file
  *   This file includes compile-time configurations for the Multicast DNS (mDNS).
- *
  */
 
-#ifndef CONFIG_MULTICAST_DNS_H_
-#define CONFIG_MULTICAST_DNS_H_
+#ifndef OT_CORE_CONFIG_MDNS_H_
+#define OT_CORE_CONFIG_MDNS_H_
 
 /**
  * @addtogroup config-mdns
@@ -42,14 +41,12 @@
  *   This module includes configuration variables for the Multicast DNS (mDNS).
  *
  * @{
- *
  */
 
 /**
  * @def OPENTHREAD_CONFIG_MULTICAST_DNS_ENABLE
  *
  * Define to 1 to enable Multicast DNS (mDNS) support.
- *
  */
 #ifndef OPENTHREAD_CONFIG_MULTICAST_DNS_ENABLE
 #define OPENTHREAD_CONFIG_MULTICAST_DNS_ENABLE 0
@@ -62,7 +59,6 @@
  *
  * The OpenThread mDNS module is mainly intended for use by other OT core modules, so the public APIs are by default
  * not provided.
- *
  */
 #ifndef OPENTHREAD_CONFIG_MULTICAST_DNS_PUBLIC_API_ENABLE
 #define OPENTHREAD_CONFIG_MULTICAST_DNS_PUBLIC_API_ENABLE 0
@@ -73,7 +69,6 @@
  *
  * Define to 1 for mDNS module to provide mechanisms and public APIs to iterate over registered host, service, and
  * key entries, as well as browsers and resolvers.
- *
  */
 #ifndef OPENTHREAD_CONFIG_MULTICAST_DNS_ENTRY_ITERATION_API_ENABLE
 #define OPENTHREAD_CONFIG_MULTICAST_DNS_ENTRY_ITERATION_API_ENABLE OPENTHREAD_CONFIG_MULTICAST_DNS_PUBLIC_API_ENABLE
@@ -84,7 +79,6 @@
  *
  * Define to 1 for mDNS module to be automatically enabled/disabled on the same infra-if used for border routing
  * based on infra-if state.
- *
  */
 #ifndef OPENTHREAD_CONFIG_MULTICAST_DNS_AUTO_ENABLE_ON_INFRA_IF
 #define OPENTHREAD_CONFIG_MULTICAST_DNS_AUTO_ENABLE_ON_INFRA_IF OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
@@ -96,10 +90,54 @@
  * Specified the default value for `otMdnsIsQuestionUnicastAllowed()` which indicates whether mDNS core is allowed to
  * send "QU" questions (questions requesting unicast response). When allowed, the first probe will be sent as "QU"
  * question. The `otMdnsSetQuestionUnicastAllowed()` can be used to change the default value at run-time.
- *
  */
 #ifndef OPENTHREAD_CONFIG_MULTICAST_DNS_DEFAULT_QUESTION_UNICAST_ALLOWED
 #define OPENTHREAD_CONFIG_MULTICAST_DNS_DEFAULT_QUESTION_UNICAST_ALLOWED 1
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MULTICAST_DNS_PERSIST_STATE_ON_POST_PROBE_CONFLICT
+ *
+ * Specifies the behavior of the mDNS module when a late conflict is detected. A late conflict occurs after a name has
+ * been successfully probed and claimed (post-probe). When enabled, the mDNS module will continue advertising/answering
+ * for the claimed name. The device essentially prioritizes the stability of the established advertisement. When
+ * disabled the mDNS module will transition the entry to the "conflict" state and stop answering/advertising for the
+ * name. Regardless of this configuration, the conflict callback is still invoked, informing other modules (such as the
+ * module that requested the registration) so they can decide on a higher-level resolution action.
+ *
+ * This configuration is enabled by default, especially in Thread use cases like the SRP Advertising Proxy. This is
+ * because post-probe conflicts are often transient or benign in these environments. Since the device (acting as
+ * the SRP Server) has already accepted an SRP registration from a remote Thread Node (SRP client), it is desirable for
+ * the mDNS advertisement to mirror the SRP registered service and maintain its discoverability.
+ */
+#ifndef OPENTHREAD_CONFIG_MULTICAST_DNS_PERSIST_STATE_ON_POST_PROBE_CONFLICT
+#define OPENTHREAD_CONFIG_MULTICAST_DNS_PERSIST_STATE_ON_POST_PROBE_CONFLICT 1
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MULTICAST_DNS_VERBOSE_LOGGING_ENABLE
+ *
+ * Define as 1 to enable the multicast DNS (mDNS) verbose logging feature at build-time.
+ *
+ * When this feature is enabled, verbose logging can be dynamically turned on or off at run-time using
+ * `otMdnsSetVerboseLoggingEnabled()`.
+ *
+ * When disabled, the verbose logging code is not included in the build, which reduces code size.
+ */
+#ifndef OPENTHREAD_CONFIG_MULTICAST_DNS_VERBOSE_LOGGING_ENABLE
+#define OPENTHREAD_CONFIG_MULTICAST_DNS_VERBOSE_LOGGING_ENABLE 0
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MULTICAST_DEFAULT_DNS_VERBOSE_LOGGING_STATE
+ *
+ * Defines the default run-time state of mDNS verbose logging (turned on/off) on startup.
+ *
+ * This applies only when `OPENTHREAD_CONFIG_MULTICAST_DNS_VERBOSE_LOGGING_ENABLE` is enabled. Set to 1 to turn on
+ * verbose logging by default on startup, or 0 to turn it off.
+ */
+#ifndef OPENTHREAD_CONFIG_MULTICAST_DEFAULT_DNS_VERBOSE_LOGGING_STATE
+#define OPENTHREAD_CONFIG_MULTICAST_DEFAULT_DNS_VERBOSE_LOGGING_STATE 0
 #endif
 
 /**
@@ -108,7 +146,6 @@
  * Define to 1 to add mock (empty) implementation of mDNS platform APIs.
  *
  * This is intended for generating code size report only and should not be used otherwise.
- *
  */
 #ifndef OPENTHREAD_CONFIG_MULTICAST_DNS_MOCK_PLAT_APIS_ENABLE
 #define OPENTHREAD_CONFIG_MULTICAST_DNS_MOCK_PLAT_APIS_ENABLE 0
@@ -116,7 +153,6 @@
 
 /**
  * @}
- *
  */
 
-#endif // CONFIG_MULTICAST_DNS_H_
+#endif // OT_CORE_CONFIG_MDNS_H_

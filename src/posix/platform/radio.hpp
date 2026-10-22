@@ -35,6 +35,7 @@
 #include "rcp_caps_diag.hpp"
 #include "spi_interface.hpp"
 #include "spinel_manager.hpp"
+#include "tmp_storage.hpp"
 #include "vendor_interface.hpp"
 #include "common/code_utils.hpp"
 #include "lib/spinel/radio_spinel.hpp"
@@ -50,7 +51,6 @@ namespace Posix {
 
 /**
  * Manages Thread radio.
- *
  */
 class Radio : public Logger<Radio>
 {
@@ -59,7 +59,6 @@ public:
 
     /**
      * Creates the radio manager.
-     *
      */
     Radio(void);
 
@@ -67,15 +66,18 @@ public:
      * Initialize the Thread radio.
      *
      * @param[in]   aUrl    A pointer to the null-terminated URL.
-     *
      */
     void Init(const char *aUrl);
+
+    /**
+     * De-initializes the Thread radio.
+     */
+    void Deinit(void);
 
     /**
      * Acts as an accessor to the spinel interface instance used by the radio.
      *
      * @returns A reference to the radio's spinel interface instance.
-     *
      */
     Spinel::SpinelInterface &GetSpinelInterface(void) { return SpinelManager::GetSpinelManager().GetSpinelInterface(); }
 
@@ -83,7 +85,6 @@ public:
      * Acts as an accessor to the radio spinel instance used by the radio.
      *
      * @returns A reference to the radio spinel instance.
-     *
      */
     Spinel::RadioSpinel &GetRadioSpinel(void) { return mRadioSpinel; }
 
@@ -91,7 +92,6 @@ public:
      * Acts as an accessor to the RCP capability diagnostic instance used by the radio.
      *
      * @returns A reference to the RCP capability diagnostic instance.
-     *
      */
 #if OPENTHREAD_POSIX_CONFIG_RCP_CAPS_DIAG_ENABLE
     RcpCapsDiag &GetRcpCapsDiag(void) { return mRcpCapsDiag; }
@@ -100,6 +100,25 @@ public:
 private:
     void ProcessRadioUrl(const RadioUrl &aRadioUrl);
     void ProcessMaxPowerTable(const RadioUrl &aRadioUrl);
+
+#if OPENTHREAD_POSIX_CONFIG_TMP_STORAGE_ENABLE
+    static void SaveRadioSpinelMetrics(const otRadioSpinelMetrics &aMetrics, void *aContext)
+    {
+        reinterpret_cast<Radio *>(aContext)->SaveRadioSpinelMetrics(aMetrics);
+    }
+
+    void SaveRadioSpinelMetrics(const otRadioSpinelMetrics &aMetrics) { mTmpStorage.SaveRadioSpinelMetrics(aMetrics); }
+
+    static otError RestoreRadioSpinelMetrics(otRadioSpinelMetrics &aMetrics, void *aContext)
+    {
+        return reinterpret_cast<Radio *>(aContext)->RestoreRadioSpinelMetrics(aMetrics);
+    }
+
+    otError RestoreRadioSpinelMetrics(otRadioSpinelMetrics &aMetrics)
+    {
+        return mTmpStorage.RestoreRadioSpinelMetrics(aMetrics);
+    }
+#endif
 
 #if OPENTHREAD_POSIX_CONFIG_SPINEL_HDLC_INTERFACE_ENABLE && OPENTHREAD_POSIX_CONFIG_SPINEL_SPI_INTERFACE_ENABLE
     static constexpr size_t kSpinelInterfaceRawSize = sizeof(ot::Posix::SpiInterface) > sizeof(ot::Posix::HdlcInterface)
@@ -121,15 +140,18 @@ private:
 #endif
         OT_RADIO_CAPS_ACK_TIMEOUT | OT_RADIO_CAPS_TRANSMIT_RETRIES | OT_RADIO_CAPS_CSMA_BACKOFF;
 
-    RadioUrl mRadioUrl;
 #if OPENTHREAD_SPINEL_CONFIG_VENDOR_HOOK_ENABLE
     Spinel::VendorRadioSpinel mRadioSpinel;
 #else
-    Spinel::RadioSpinel     mRadioSpinel;
+    Spinel::RadioSpinel mRadioSpinel;
 #endif
 
 #if OPENTHREAD_POSIX_CONFIG_RCP_CAPS_DIAG_ENABLE
     RcpCapsDiag mRcpCapsDiag;
+#endif
+
+#if OPENTHREAD_POSIX_CONFIG_TMP_STORAGE_ENABLE
+    TmpStorage mTmpStorage;
 #endif
 };
 

@@ -31,8 +31,8 @@
  *   This file includes definitions for data poll (mac data request command) sender.
  */
 
-#ifndef DATA_POLL_MANAGER_HPP_
-#define DATA_POLL_MANAGER_HPP_
+#ifndef OT_CORE_MAC_DATA_POLL_SENDER_HPP_
+#define OT_CORE_MAC_DATA_POLL_SENDER_HPP_
 
 #include "openthread-core-config.h"
 
@@ -57,7 +57,6 @@ namespace ot {
 
 /**
  * Implements the data poll (mac data request command) sender.
- *
  */
 
 class DataPollSender : public InstanceLocator, private NonCopyable
@@ -71,19 +70,16 @@ public:
      * Initializes the data poll sender object.
      *
      * @param[in]  aInstance   A reference to the OpenThread instance.
-     *
      */
     explicit DataPollSender(Instance &aInstance);
 
     /**
      * Instructs the data poll sender to start sending periodic data polls.
-     *
      */
     void StartPolling(void);
 
     /**
      * Instructs the data poll sender to stop sending periodic data polls.
-     *
      */
     void StopPolling(void);
 
@@ -94,7 +90,6 @@ public:
      * @retval kErrorAlready       A data poll message is already enqueued.
      * @retval kErrorInvalidState  Device is not in rx-off-when-idle mode.
      * @retval kErrorNoBufs        Insufficient message buffers available.
-     *
      */
     Error SendDataPoll(void);
 
@@ -116,7 +111,6 @@ public:
      *
      * @retval kErrorNone           Successfully set/cleared user-specified poll period.
      * @retval kErrorInvalidArgs    If aPeriod is invalid.
-     *
      */
     Error SetExternalPollPeriod(uint32_t aPeriod);
 
@@ -124,53 +118,49 @@ public:
      * Gets the current user-specified/external data poll period.
      *
      * @returns  The data poll period in milliseconds.
-     *
      */
     uint32_t GetExternalPollPeriod(void) const { return mExternalPollPeriod; }
 
     /**
-     * Informs the data poll sender of success/error status of a previously requested poll frame
-     * transmission.
+     * Informs the data poll sender that a data poll frame transmission has completed.
      *
      * In case of transmit failure, the data poll sender may choose to send the next data poll more quickly (up to
      * some fixed number of attempts).
      *
-     * @param[in] aFrame     The data poll frame.
-     * @param[in] aError     Error status of a data poll message transmission.
-     *
+     * @param[in] aFrameInfo  The data poll frame information.
+     * @param[in] aError      Error status of a data poll frame transmission.
      */
-    void HandlePollSent(Mac::TxFrame &aFrame, Error aError);
+    void HandlePollTxDone(Mac::TxFrame::ParseInfo &aFrameInfo, Error aError);
 
     /**
      * Informs the data poll sender that a data poll timeout happened, i.e., when the ack in response to
      * a data request command indicated that a frame was pending, but no frame was received after timeout interval.
      *
      * Data poll sender may choose to transmit another data poll immediately (up to some fixed number of attempts).
-     *
      */
     void HandlePollTimeout(void);
 
     /**
      * Informs the data poll sender to process a received MAC frame.
      *
-     * @param[in] aFrame     A reference to the received frame to process.
-     *
+     * @param[in] aFrameInfo     The received frame parsed information to process.
      */
-    void ProcessRxFrame(const Mac::RxFrame &aFrame);
+    void ProcessRxFrame(const Mac::RxFrame::ParseInfo &aFrameInfo);
 
 #if OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2
     /**
      * Informs the data poll sender to process a transmitted MAC frame.
      *
-     * @param[in]  aFrame      A reference to the frame that was transmitted.
-     * @param[in]  aAckFrame   A pointer to the ACK frame, `nullptr` if no ACK was received.
-     * @param[in]  aError      kErrorNone when the frame was transmitted successfully,
-     *                         kErrorNoAck when the frame was transmitted but no ACK was received,
-     *                         kErrorChannelAccessFailure when the tx failed due to activity on the channel,
-     *                         kErrorAbort when transmission was aborted for other reasons.
-     *
+     * @param[in]  aFrameInfo     The sent frame information.
+     * @param[in]  aAckFrameInfo  The ACK frame information (its `mFrame` may be `nullptr` if no ACK was received).
+     * @param[in]  aError         kErrorNone when the frame was transmitted successfully,
+     *                            kErrorNoAck when the frame was transmitted but no ACK was received,
+     *                            kErrorChannelAccessFailure when the tx failed due to activity on the channel,
+     *                            kErrorAbort when transmission was aborted for other reasons.
      */
-    void ProcessTxDone(const Mac::TxFrame &aFrame, const Mac::RxFrame *aAckFrame, Error aError);
+    void ProcessTxDone(const Mac::TxFrame::ParseInfo &aFrameInfo,
+                       const Mac::RxFrame::ParseInfo &aAckFrameInfo,
+                       Error                          aError);
 #endif
 
     /**
@@ -178,7 +168,6 @@ public:
      *
      * This is mainly used to inform the poll sender that a parameter impacting the poll period (e.g., the child's
      * timeout value which is used to determine the default data poll period) is modified.
-     *
      */
     void RecalculatePollPeriod(void);
 
@@ -189,7 +178,6 @@ public:
      * poll period configuration option `OPENTHREAD_CONFIG_MAC_ATTACH_DATA_POLL_PERIOD`.
      *
      * @param[in]  aMode  The mode value.
-     *
      */
     void SetAttachMode(bool aMode);
 
@@ -207,13 +195,11 @@ public:
      * out.
      *
      * @param[in] aNumFastPolls  If non-zero, number of fast polls to send, if zero, default value is used instead.
-     *
      */
     void SendFastPolls(uint8_t aNumFastPolls = 0);
 
     /**
      * Asks data poll sender to stop fast polls when the expecting response is received.
-     *
      */
     void StopFastPolls(void);
 
@@ -224,13 +210,11 @@ public:
      * default poll interval.
      *
      * @returns The maximum data polling period in use.
-     *
      */
     uint32_t GetKeepAlivePollPeriod(void) const;
 
     /**
      * Resets the timer for sending keep-alive messages.
-     *
      */
     void ResetKeepAliveTimer(void);
 
@@ -241,7 +225,6 @@ public:
      * within the child's timeout.
      *
      * @returns The maximum default data polling interval (in msec).
-     *
      */
     uint32_t GetDefaultPollPeriod(void) const;
 
@@ -251,7 +234,6 @@ public:
      * @param[in] aTxFrames  The set of TxFrames for all radio links.
      *
      * @returns The data poll frame.
-     *
      */
     Mac::TxFrame *PrepareDataRequest(Mac::TxFrames &aTxFrames);
 
@@ -278,7 +260,7 @@ private:
     const Neighbor &GetParent(void) const;
     void            HandlePollTimer(void) { IgnoreError(SendDataPoll()); }
 #if OPENTHREAD_CONFIG_MULTI_RADIO
-    Error GetPollDestinationAddress(Mac::Address &aDest, Mac::RadioType &aRadioType) const;
+    Error GetPollDestinationAddress(Mac::Address &aDest, Radio::Type &aRadioType) const;
 #else
     Error GetPollDestinationAddress(Mac::Address &aDest) const;
 #endif
@@ -302,9 +284,8 @@ private:
 
 /**
  * @}
- *
  */
 
 } // namespace ot
 
-#endif // DATA_POLL_MANAGER_HPP_
+#endif // OT_CORE_MAC_DATA_POLL_SENDER_HPP_

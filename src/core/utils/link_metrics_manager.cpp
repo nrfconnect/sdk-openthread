@@ -30,13 +30,7 @@
 
 #if OPENTHREAD_CONFIG_LINK_METRICS_MANAGER_ENABLE
 
-#include "common/as_core_type.hpp"
-#include "common/error.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/notifier.hpp"
-#include "thread/mle.hpp"
-#include "thread/neighbor_table.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 namespace Utils {
@@ -130,8 +124,8 @@ void LinkMetricsManager::Update(void)
 // This method updates the Link Metrics Subject in the subject list. It adds new neighbors to the list.
 void LinkMetricsManager::UpdateSubjects(void)
 {
-    Neighbor::Info         neighborInfo;
-    otNeighborInfoIterator iterator = OT_NEIGHBOR_INFO_ITERATOR_INIT;
+    Neighbor::Info          neighborInfo;
+    NeighborTable::Iterator iterator = NeighborTable::kIteratorInit;
 
     while (Get<NeighborTable>().GetNextNeighborInfo(iterator, neighborInfo) == kErrorNone)
     {
@@ -157,7 +151,7 @@ void LinkMetricsManager::UpdateLinkMetricsStates(void)
 {
     LinkedList<Subject> staleSubjects;
 
-    mSubjectList.RemoveAllMatching(*this, staleSubjects);
+    mSubjectList.RemoveAllMatching(staleSubjects, *this);
 
     while (!staleSubjects.IsEmpty())
     {
@@ -220,7 +214,7 @@ void LinkMetricsManager::HandleMgmtResponse(const otIp6Address *aAddress, otLink
     Subject        *subject;
     Neighbor       *neighbor;
 
-    AsCoreType(aAddress).GetIid().ConvertToExtAddress(extAddress);
+    extAddress.SetFromIid(AsCoreType(aAddress).GetIid());
     neighbor = Get<NeighborTable>().FindNeighbor(extAddress);
     VerifyOrExit(neighbor != nullptr);
 
@@ -292,7 +286,7 @@ Error LinkMetricsManager::Subject::ConfigureEap(Instance &aInstance)
     LinkMetrics::Metrics     metricsFlags;
 
     VerifyOrExit(neighbor != nullptr, error = kErrorUnknownNeighbor);
-    destination.SetToLinkLocalAddress(neighbor->GetExtAddress());
+    destination.InitAsLinkLocalAddress(neighbor->GetExtAddress());
 
     metricsFlags.Clear();
     metricsFlags.mLinkMargin = 1;
@@ -317,7 +311,7 @@ Error LinkMetricsManager::Subject::UnregisterEap(Instance &aInstance)
     LinkMetrics::EnhAckFlags enhAckFlags = LinkMetrics::kEnhAckClear;
 
     VerifyOrExit(neighbor != nullptr, error = kErrorUnknownNeighbor);
-    destination.SetToLinkLocalAddress(neighbor->GetExtAddress());
+    destination.InitAsLinkLocalAddress(neighbor->GetExtAddress());
 
     error = aInstance.Get<LinkMetrics::Initiator>().SendMgmtRequestEnhAckProbing(destination, enhAckFlags, nullptr);
 exit:
@@ -369,7 +363,6 @@ exit:
 
 /**
  * @}
- *
  */
 
 } // namespace Utils

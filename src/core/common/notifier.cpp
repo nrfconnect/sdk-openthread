@@ -33,12 +33,7 @@
 
 #include "notifier.hpp"
 
-#include "border_router/routing_manager.hpp"
-#include "common/array.hpp"
-#include "common/code_utils.hpp"
-#include "common/debug.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 
@@ -48,51 +43,27 @@ Notifier::Notifier(Instance &aInstance)
     : InstanceLocator(aInstance)
     , mTask(aInstance)
 {
-    for (ExternalCallback &callback : mExternalCallbacks)
-    {
-        callback.Clear();
-    }
 }
 
-Error Notifier::RegisterCallback(otStateChangedCallback aCallback, void *aContext)
+Error Notifier::RegisterCallback(StateChangedCallback aCallback, void *aContext)
 {
-    Error             error          = kErrorNone;
-    ExternalCallback *unusedCallback = nullptr;
+    Error            error = kErrorNone;
+    ExternalCallback newCallback;
 
-    VerifyOrExit(aCallback != nullptr);
-
-    for (ExternalCallback &callback : mExternalCallbacks)
-    {
-        VerifyOrExit(!callback.Matches(aCallback, aContext), error = kErrorAlready);
-
-        if (!callback.IsSet() && (unusedCallback == nullptr))
-        {
-            unusedCallback = &callback;
-        }
-    }
-
-    VerifyOrExit(unusedCallback != nullptr, error = kErrorNoBufs);
-
-    unusedCallback->Set(aCallback, aContext);
+    newCallback.Set(aCallback, aContext);
+    VerifyOrExit(!mExternalCallbacks.Contains(newCallback), error = kErrorAlready);
+    error = mExternalCallbacks.PushBack(newCallback);
 
 exit:
     return error;
 }
 
-void Notifier::RemoveCallback(otStateChangedCallback aCallback, void *aContext)
+void Notifier::RemoveCallback(StateChangedCallback aCallback, void *aContext)
 {
-    VerifyOrExit(aCallback != nullptr);
+    ExternalCallback callbackToRemove;
 
-    for (ExternalCallback &callback : mExternalCallbacks)
-    {
-        if (callback.Matches(aCallback, aContext))
-        {
-            callback.Clear();
-        }
-    }
-
-exit:
-    return;
+    callbackToRemove.Set(aCallback, aContext);
+    mExternalCallbacks.Remove(callbackToRemove);
 }
 
 void Notifier::Signal(Event aEvent)
@@ -127,6 +98,24 @@ void Notifier::EmitEvents(void)
     // Emit events to core internal modules
 
     Get<Mle::Mle>().HandleNotifierEvents(events);
+#if OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
+    Get<NetworkData::Service::Manager>().HandleNotifierEvents(events);
+#endif
+#if (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
+    Get<BackboneRouter::Leader>().HandleNotifierEvents(events);
+#endif
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_BACKBONE_ROUTER_ENABLE
+    Get<BackboneRouter::Local>().HandleNotifierEvents(events);
+#endif
+#if OPENTHREAD_CONFIG_DHCP6_SERVER_ENABLE
+    Get<Dhcp6::Server>().HandleNotifierEvents(events);
+#endif
+#if OPENTHREAD_CONFIG_NEIGHBOR_DISCOVERY_AGENT_ENABLE
+    Get<NeighborDiscovery::Agent>().HandleNotifierEvents(events);
+#endif
+#if OPENTHREAD_CONFIG_DHCP6_CLIENT_ENABLE
+    Get<Dhcp6::Client>().HandleNotifierEvents(events);
+#endif
     Get<EnergyScanServer>().HandleNotifierEvents(events);
 #if OPENTHREAD_FTD
     Get<MeshCoP::JoinerRouter>().HandleNotifierEvents(events);
@@ -145,13 +134,18 @@ void Notifier::EmitEvents(void)
     Get<AnnounceSender>().HandleNotifierEvents(events);
 #endif
 #if OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE
-    Get<MeshCoP::BorderAgent>().HandleNotifierEvents(events);
+    Get<MeshCoP::BorderAgent::Manager>().HandleNotifierEvents(events);
+    Get<MeshCoP::BorderAgent::TxtData>().HandleNotifierEvents(events);
+#endif
+#if OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE && OPENTHREAD_CONFIG_BORDER_AGENT_ADMITTER_ENABLE
+    Get<MeshCoP::BorderAgent::Admitter>().HandleNotifierEvents(events);
+#endif
+#if OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
+    Get<Ble::BleSecure>().HandleNotifierEvents(events);
+    Get<MeshCoP::TcatAgent>().HandleNotifierEvents(events);
 #endif
 #if OPENTHREAD_CONFIG_MLR_ENABLE || (OPENTHREAD_FTD && OPENTHREAD_CONFIG_TMF_PROXY_MLR_ENABLE)
-    Get<MlrManager>().HandleNotifierEvents(events);
-#endif
-#if OPENTHREAD_CONFIG_DUA_ENABLE || (OPENTHREAD_FTD && OPENTHREAD_CONFIG_TMF_PROXY_DUA_ENABLE)
-    Get<DuaManager>().HandleNotifierEvents(events);
+    Get<Mlr::Manager>().HandleNotifierEvents(events);
 #endif
 #if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
     Get<Trel::Link>().HandleNotifierEvents(events);
@@ -160,7 +154,7 @@ void Notifier::EmitEvents(void)
     Get<TimeSync>().HandleNotifierEvents(events);
 #endif
 #if OPENTHREAD_CONFIG_IP6_SLAAC_ENABLE
-    Get<Utils::Slaac>().HandleNotifierEvents(events);
+    Get<Ip6::Slaac>().HandleNotifierEvents(events);
 #endif
 #if OPENTHREAD_CONFIG_JAM_DETECTION_ENABLE
     Get<Utils::JamDetector>().HandleNotifierEvents(events);
@@ -169,17 +163,28 @@ void Notifier::EmitEvents(void)
     Get<Utils::Otns>().HandleNotifierEvents(events);
 #endif
 #if OPENTHREAD_CONFIG_HISTORY_TRACKER_ENABLE
-    Get<Utils::HistoryTracker>().HandleNotifierEvents(events);
+    Get<HistoryTracker::Local>().HandleNotifierEvents(events);
 #endif
 #if OPENTHREAD_ENABLE_VENDOR_EXTENSION
     Get<Extension::ExtensionBase>().HandleNotifierEvents(events);
 #endif
 #if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+    Get<BorderRouter::RxRaTracker>().HandleNotifierEvents(events);
     Get<BorderRouter::RoutingManager>().HandleNotifierEvents(events);
+#if OPENTHREAD_CONFIG_BORDER_ROUTING_TRACK_PEER_BR_INFO_ENABLE
+    Get<BorderRouter::NetDataBrTracker>().HandleNotifierEvents(events);
+#endif
+#if OPENTHREAD_CONFIG_BORDER_ROUTING_MULTI_AIL_DETECTION_ENABLE
+    Get<BorderRouter::MultiAilDetector>().HandleNotifierEvents(events);
+#endif
 #endif
 #if OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE
     Get<Srp::Client>().HandleNotifierEvents(events);
 #endif
+#if OPENTHREAD_CONFIG_SRP_SERVER_ENABLE && OPENTHREAD_CONFIG_SRP_SERVER_FAST_START_MODE_ENABLE
+    Get<Srp::Server>().HandleNotifierEvents(events);
+#endif
+
 #if OPENTHREAD_CONFIG_NETDATA_PUBLISHER_ENABLE
     // The `NetworkData::Publisher` is notified last (e.g., after SRP
     // client) to allow other modules to request changes to what is

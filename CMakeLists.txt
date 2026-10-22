@@ -49,12 +49,18 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_C_STANDARD 99)
 
+if(APPLE)
+    set(CMAKE_AR "/usr/bin/ar")
+    set(CMAKE_RANLIB "/usr/bin/ranlib")
+endif()
+
 message(STATUS "OpenThread Source Directory: ${PROJECT_SOURCE_DIR}")
 
 target_include_directories(ot-config INTERFACE
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/src/core
+    ${PROJECT_SOURCE_DIR}/src/include
 )
 
 include(TestBigEndian)
@@ -91,9 +97,9 @@ if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
     endif()
 
     set(OT_CFLAGS
-        $<$<COMPILE_LANGUAGE:C>:${OT_CFLAGS} -Wall -Wextra -Wshadow>
-        $<$<COMPILE_LANGUAGE:CXX>:${OT_CFLAGS} -Wall -Wextra -Wshadow -Wno-c++14-compat -fno-exceptions>
-        $<$<CXX_COMPILER_ID:Clang>:-Wc99-extensions>
+        $<$<COMPILE_LANGUAGE:C>:${OT_CFLAGS} -Wall -Wformat-nonliteral -Wextra -Wshadow>
+        $<$<COMPILE_LANGUAGE:CXX>:${OT_CFLAGS} -Wall -Wformat-nonliteral -Wextra -Wshadow -Wno-c++14-compat -fno-exceptions>
+        $<$<CXX_COMPILER_ID:Clang>:-Wc99-extensions -Wno-unknown-warning-option -Wdangling -Wdangling-gsl -Wdangling-assignment -Wdangling-field -Wreturn-stack-address>
     )
 endif()
 
@@ -101,6 +107,9 @@ set(OT_PACKAGE_NAME "OPENTHREAD" CACHE STRING "OpenThread Package Name")
 target_compile_definitions(ot-config INTERFACE "PACKAGE_NAME=\"${OT_PACKAGE_NAME}\"")
 message(STATUS "Package Name: ${OT_PACKAGE_NAME}")
 
+option(OT_GIT_DESCRIBE_LIGHTWEIGHT_TAGS
+    "Use 'git describe --tags' for OT_PACKAGE_VERSION (include lightweight release tags)"
+    OFF)
 set(OT_PACKAGE_VERSION "" CACHE STRING "OpenThread Package Version")
 if(OT_PACKAGE_VERSION STREQUAL "")
     ot_git_version(OT_PACKAGE_VERSION)
@@ -121,10 +130,21 @@ list(APPEND OT_PUBLIC_INCLUDES ${PROJECT_SOURCE_DIR}/include)
 if(OT_PLATFORM STREQUAL "posix")
     target_include_directories(ot-config INTERFACE ${PROJECT_SOURCE_DIR}/src/posix/platform)
     target_compile_definitions(ot-config INTERFACE OPENTHREAD_PLATFORM_POSIX=1)
+    target_compile_definitions(ot-config INTERFACE OPENTHREAD_PLATFORM_NEXUS=0)
     add_subdirectory("${PROJECT_SOURCE_DIR}/src/posix/platform")
 elseif(OT_PLATFORM STREQUAL "external")
+    target_compile_definitions(ot-config INTERFACE OPENTHREAD_PLATFORM_POSIX=0)
+    target_compile_definitions(ot-config INTERFACE OPENTHREAD_PLATFORM_NEXUS=0)
     # skip in this case
+elseif(OT_PLATFORM STREQUAL "nexus")
+    if (OT_APP_CLI OR OT_APP_NCP OR OT_APP_RCP)
+        message(FATAL_ERROR "no app (cli/ncp/rcp) should be enabled with nexus simulation platform")
+    endif()
+    target_compile_definitions(ot-config INTERFACE OPENTHREAD_PLATFORM_NEXUS=1)
+    target_compile_definitions(ot-config INTERFACE OPENTHREAD_PLATFORM_POSIX=0)
 else()
+    target_compile_definitions(ot-config INTERFACE OPENTHREAD_PLATFORM_POSIX=0)
+    target_compile_definitions(ot-config INTERFACE OPENTHREAD_PLATFORM_NEXUS=0)
     target_include_directories(ot-config INTERFACE ${PROJECT_SOURCE_DIR}/examples/platforms/${OT_PLATFORM})
     add_subdirectory("${PROJECT_SOURCE_DIR}/examples/platforms/${OT_PLATFORM}")
 endif()

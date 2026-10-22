@@ -31,8 +31,8 @@
  *   This file includes types and constants for IPv6 processing.
  */
 
-#ifndef IP6_TYPES_HPP_
-#define IP6_TYPES_HPP_
+#ifndef OT_CORE_NET_IP6_TYPES_HPP_
+#define OT_CORE_NET_IP6_TYPES_HPP_
 
 #include "openthread-core-config.h"
 
@@ -49,7 +49,6 @@ namespace Ip6 {
  *   This module includes definitions for core IPv6 networking.
  *
  * @{
- *
  */
 
 // Internet Protocol Numbers
@@ -64,20 +63,22 @@ static constexpr uint8_t kProtoNone     = OT_IP6_PROTO_NONE;     ///< No Next He
 static constexpr uint8_t kProtoDstOpts  = OT_IP6_PROTO_DST_OPTS; ///< Destination Options for IPv6
 
 /**
+ * The default hop limit value.
+ */
+static constexpr uint8_t kDefaultHopLimit = OPENTHREAD_CONFIG_IP6_HOP_LIMIT_DEFAULT;
+
+/**
  * The max datagram length (in bytes) of an IPv6 message.
- *
  */
 static constexpr uint16_t kMaxDatagramLength = OPENTHREAD_CONFIG_IP6_MAX_DATAGRAM_LENGTH;
 
 /**
  * The max datagram length (in bytes) of an unfragmented IPv6 message.
- *
  */
 static constexpr uint16_t kMaxAssembledDatagramLength = OPENTHREAD_CONFIG_IP6_MAX_ASSEMBLED_DATAGRAM;
 
 /**
  * 6-bit Differentiated Services Code Point (DSCP) values.
- *
  */
 enum IpDscpCs : uint8_t
 {
@@ -100,7 +101,6 @@ enum IpDscpCs : uint8_t
 
 /**
  * Represents the 2-bit Explicit Congestion Notification (ECN) values.
- *
  */
 enum Ecn : uint8_t
 {
@@ -112,10 +112,9 @@ enum Ecn : uint8_t
 
 /**
  * @}
- *
  */
 
 } // namespace Ip6
 } // namespace ot
 
-#endif // IP6_TYPES_HPP_
+#endif // OT_CORE_NET_IP6_TYPES_HPP_

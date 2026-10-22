@@ -31,8 +31,8 @@
  *   This file includes helper methods to cast between const and non-const objects and/or pointers.
  */
 
-#ifndef CONST_CAST_HPP_
-#define CONST_CAST_HPP_
+#ifndef OT_CORE_COMMON_CONST_CAST_HPP_
+#define OT_CORE_COMMON_CONST_CAST_HPP_
 
 #include "openthread-core-config.h"
 
@@ -46,7 +46,6 @@ namespace ot {
  * @param[in] aObject  A non-const reference to an object.
  *
  * @returns A const reference to @p aObject reference.
- *
  */
 template <typename Type> const Type &AsConst(Type &aObject) { return const_cast<const Type &>(aObject); }
 
@@ -58,7 +57,6 @@ template <typename Type> const Type &AsConst(Type &aObject) { return const_cast<
  * @param[in] aPointer  A non-const pointer to an object.
  *
  * @returns A const pointer to @p aPointer pointer.
- *
  */
 template <typename Type> const Type *AsConst(Type *aPointer) { return const_cast<const Type *>(aPointer); }
 
@@ -70,7 +68,6 @@ template <typename Type> const Type *AsConst(Type *aPointer) { return const_cast
  * @param[in] aObject  A const reference to an object.
  *
  * @returns A non-const reference to @p aObject reference.
- *
  */
 template <typename Type> Type &AsNonConst(const Type &aObject) { return const_cast<Type &>(aObject); }
 
@@ -82,10 +79,9 @@ template <typename Type> Type &AsNonConst(const Type &aObject) { return const_ca
  * @param[in] aPointer  A const pointer to an object.
  *
  * @returns A non-const pointer to @p aPointer pointer.
- *
  */
 template <typename Type> Type *AsNonConst(const Type *aPointer) { return const_cast<Type *>(aPointer); }
 
 } // namespace ot
 
-#endif // CONST_CAST_HPP_
+#endif // OT_CORE_COMMON_CONST_CAST_HPP_

@@ -31,8 +31,8 @@
  *   This file includes definitions for Thread Version.
  */
 
-#ifndef VERSION_HPP_
-#define VERSION_HPP_
+#ifndef OT_CORE_THREAD_VERSION_HPP_
+#define OT_CORE_THREAD_VERSION_HPP_
 
 #include "openthread-core-config.h"
 
@@ -49,6 +49,8 @@ constexpr uint16_t kThreadVersion1p3 = OT_THREAD_VERSION_1_3; ///< Thread Versio
 constexpr uint16_t kThreadVersion1p3p1 = OT_THREAD_VERSION_1_3_1; ///< Thread Version 1.3.1
 constexpr uint16_t kThreadVersion1p4   = OT_THREAD_VERSION_1_4;   ///< Thread Version 1.4
 
+extern const char kThreadVersionString[]; ///< Thread version as human-readable string.
+
 } // namespace ot
 
-#endif // VERSION_HPP_
+#endif // OT_CORE_THREAD_VERSION_HPP_

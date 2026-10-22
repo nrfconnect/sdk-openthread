@@ -31,8 +31,8 @@
  *  This file provides a generic binary search and related helper functions.
  */
 
-#ifndef BINARY_SEARCH_HPP_
-#define BINARY_SEARCH_HPP_
+#ifndef OT_CORE_COMMON_BINARY_SEARCH_HPP_
+#define OT_CORE_COMMON_BINARY_SEARCH_HPP_
 
 #include "openthread-core-config.h"
 
@@ -67,7 +67,6 @@ public:
      * @param[in] aTable  A reference to an array of `kLength` entries of type `Entry`
      *
      * @returns A pointer to the entry in the table if a match is found, otherwise `nullptr` (no match in table).
-     *
      */
     template <typename Key, typename Entry, uint16_t kLength>
     static const Entry *Find(const Key &aKey, const Entry (&aTable)[kLength])
@@ -87,7 +86,7 @@ public:
      *
      * The `Entry` class MUST provide the following `static` and `constexpr` method to compare two entries.
      *
-     *    constexpr static bool Entry::AreInOrder(const Entry &aFirst, const Entry &aSecond);
+     *    static constexpr bool Entry::AreInOrder(const Entry &aFirst, const Entry &aSecond);
      *
      * The return value MUST be TRUE if the entries are in order, i.e. `aFirst < aSecond` and FALSE otherwise.
      *
@@ -95,7 +94,6 @@ public:
      *
      * @retval TRUE   If the entries in @p aTable are sorted.
      * @retval FALSE  If the entries in @p aTable are not sorted.
-     *
      */
     template <typename Entry, uint16_t kLength> static constexpr bool IsSorted(const Entry (&aTable)[kLength])
     {
@@ -124,4 +122,4 @@ private:
 
 } // namespace ot
 
-#endif // BINARY_SEARCH_HPP_
+#endif // OT_CORE_COMMON_BINARY_SEARCH_HPP_

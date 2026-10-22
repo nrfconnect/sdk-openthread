@@ -29,15 +29,16 @@
 /**
  * @file
  *   This file includes definitions for child supervision feature.
- *
  */
 
-#ifndef CHILD_SUPERVISION_HPP_
-#define CHILD_SUPERVISION_HPP_
+#ifndef OT_CORE_THREAD_CHILD_SUPERVISION_HPP_
+#define OT_CORE_THREAD_CHILD_SUPERVISION_HPP_
 
 #include "openthread-core-config.h"
 
 #include <stdint.h>
+
+#include <openthread/child_supervision.h>
 
 #include "common/locator.hpp"
 #include "common/message.hpp"
@@ -49,8 +50,6 @@
 #include "thread/child.hpp"
 
 namespace ot {
-
-class ThreadNetif;
 
 /**
  *
@@ -79,14 +78,12 @@ class ThreadNetif;
  * on the 15.4 acknowledgments it receives from parent as an
  * indicator that it is still connected and is in parent's
  * child table.
- *
  */
 
 #if OPENTHREAD_FTD
 
 /**
  * Implements a child supervisor.
- *
  */
 class ChildSupervisor : public InstanceLocator, private NonCopyable
 {
@@ -98,7 +95,6 @@ public:
      * Initializes the object.
      *
      * @param[in]  aInstance     A reference to the OpenThread instance.
-     *
      */
     explicit ChildSupervisor(Instance &aInstance);
 
@@ -109,7 +105,6 @@ public:
      *
      * @returns  A pointer to the destination child of the message, or `nullptr` if @p aMessage is not of supervision
      *           type.
-     *
      */
     Child *GetDestination(const Message &aMessage) const;
 
@@ -118,7 +113,6 @@ public:
      * successfully sent to the child.
      *
      * @param[in] aChild     The child to which a message was successfully sent.
-     *
      */
     void UpdateOnSend(Child &aChild);
 
@@ -135,7 +129,6 @@ private:
 
 /**
  * Implements a child supervision listener.
- *
  */
 class SupervisionListener : public InstanceLocator, private NonCopyable
 {
@@ -144,19 +137,16 @@ public:
      * Initializes the object.
      *
      * @param[in]  aInstance     A reference to the OpenThread instance.
-     *
      */
     explicit SupervisionListener(Instance &aInstance);
 
     /**
      * Starts the supervision listener operation.
-     *
      */
     void Start(void);
 
     /**
      * Stops the supervision listener operation.
-     *
      */
     void Stop(void);
 
@@ -164,7 +154,6 @@ public:
      * Sets the supervision interval.
      *
      * @param[in] aInterval If non-zero, the desired supervision interval (in seconds), zero to disable supervision.
-     *
      */
     void SetInterval(uint16_t aInterval);
 
@@ -172,7 +161,6 @@ public:
      * Returns the supervision interval.
      *
      * @returns  The current supervision interval (seconds), or zero if supervision is disabled.
-     *
      */
     uint16_t GetInterval(void) const { return mInterval; }
 
@@ -187,7 +175,6 @@ public:
      * interval plus the maximum time between the child's data poll transmissions.
      *
      * @param[in]  aTimeout   The timeout interval (in seconds), zero to disable the supervision check on the child.
-     *
      */
     void SetTimeout(uint16_t aTimeout);
 
@@ -195,7 +182,6 @@ public:
      * Returns the supervision check timeout interval (in seconds).
      *
      * @returns   The check timeout interval (in seconds) or zero if the supervision check on the child is disabled.
-     *
      */
     uint16_t GetTimeout(void) const { return mTimeout; }
 
@@ -204,13 +190,11 @@ public:
      *
      * The counter tracks the number of supervision check failures on the child. It is incremented when the child does
      * not hear from its parent within the specified check timeout interval.
-     *
      */
     uint16_t GetCounter(void) const { return mCounter; }
 
     /**
      * Reset the supervision check timeout failure counter.
-     *
      */
     void ResetCounter(void) { mCounter = 0; }
 
@@ -219,7 +203,6 @@ public:
      *
      * @param[in]   aSourceAddress    The source MAC address of the received frame
      * @param[in]   aIsSecure         TRUE to indicate that the received frame is secure, FALSE otherwise.
-     *
      */
     void UpdateOnReceive(const Mac::Address &aSourceAddress, bool aIsSecure);
 
@@ -240,4 +223,4 @@ private:
 
 } // namespace ot
 
-#endif // CHILD_SUPERVISION_HPP_
+#endif // OT_CORE_THREAD_CHILD_SUPERVISION_HPP_

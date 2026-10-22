@@ -63,10 +63,10 @@ Error ParseCmd(char *aCommandString, Arg aArgs[], uint8_t aArgsMaxLength)
         }
         else if (IsSeparator(*cmd))
         {
-            *cmd = '\0';
+            *cmd = kNullChar;
         }
 
-        if ((*cmd != '\0') && ((index == 0) || (*(cmd - 1) == '\0')))
+        if ((*cmd != kNullChar) && ((index == 0) || (*(cmd - 1) == kNullChar)))
         {
             if (index == aArgsMaxLength - 1)
             {
@@ -108,16 +108,13 @@ Error ParseAsUint32(const char *aString, uint32_t &aUint32) { return ParseUint<u
 
 Error ParseAsUint64(const char *aString, uint64_t &aUint64)
 {
+    static constexpr uint64_t kMaxHexBeforeOverflow = (0xffffffffffffffffULL / 16);
+    static constexpr uint64_t kMaxDecBeforeOverflow = (0xffffffffffffffffULL / 10);
+
     Error       error = kErrorNone;
     uint64_t    value = 0;
     const char *cur   = aString;
     bool        isHex = false;
-
-    enum : uint64_t
-    {
-        kMaxHexBeforeOverflow = (0xffffffffffffffffULL / 16),
-        kMaxDecBeforeOverflow = (0xffffffffffffffffULL / 10),
-    };
 
     VerifyOrExit(aString != nullptr, error = kErrorInvalidArgs);
 
@@ -139,7 +136,7 @@ Error ParseAsUint64(const char *aString, uint64_t &aUint64)
         VerifyOrExit(newValue >= value, error = kErrorInvalidArgs);
         value = newValue;
         cur++;
-    } while (*cur != '\0');
+    } while (*cur != kNullChar);
 
     aUint64 = value;
 

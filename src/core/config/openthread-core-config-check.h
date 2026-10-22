@@ -35,11 +35,10 @@
  * the error message is only intended to give a hint of what the possible new
  * configuration name may be. Please check the documentation of the new
  * configuration parameter for details about behavior of each option before use.
- *
  */
 
-#ifndef OPENTHREAD_CORE_CONFIG_CHECK_H_
-#define OPENTHREAD_CORE_CONFIG_CHECK_H_
+#ifndef OT_CORE_CONFIG_OPENTHREAD_CORE_CONFIG_CHECK_H_
+#define OT_CORE_CONFIG_OPENTHREAD_CORE_CONFIG_CHECK_H_
 
 #if defined(OPENTHREAD_CONFIG_DISABLE_CCA_ON_LAST_ATTEMPT) ||     \
     defined(OPENTHREAD_CONFIG_DISABLE_CSMA_CA_ON_LAST_ATTEMPT) || \
@@ -98,7 +97,7 @@
 #endif
 
 #ifdef OPENTHREAD_ENABLE_MTD_NETWORK_DIAGNOSTIC
-#error "OPENTHREAD_ENABLE_MTD_NETWORK_DIAGNOSTIC was replaces by OPENTHREAD_CONFIG_TMF_NETWORK_DIAG_MTD_ENABLE."
+#error "OPENTHREAD_ENABLE_MTD_NETWORK_DIAGNOSTIC was replaced by OPENTHREAD_CONFIG_TMF_NETWORK_DIAG_MTD_ENABLE."
 #endif
 
 #ifdef OPENTHREAD_ENABLE_APPLICATION_COAP_SECURE
@@ -687,4 +686,78 @@
 #error "OPENTHREAD_CONFIG_SRP_CLIENT_UPDATE_TX_MAX_DELAY was removed."
 #endif
 
-#endif // OPENTHREAD_CORE_CONFIG_CHECK_H_
+#ifdef OPENTHREAD_CONFIG_BORDER_ROUTING_STUB_ROUTER_FLAG_IN_EMITTED_RA_ENABLE
+#error "OPENTHREAD_CONFIG_BORDER_ROUTING_STUB_ROUTER_FLAG_IN_EMITTED_RA_ENABLE is removed"
+#endif
+
+#ifdef OPENTHREAD_CONFIG_MLE_SEND_LINK_REQUEST_ON_ADV_TIMEOUT
+#error "OPENTHREAD_CONFIG_MLE_SEND_LINK_REQUEST_ON_ADV_TIMEOUT is removed, behavior is always applied"
+#endif
+
+#ifdef OPENTHREAD_CONFIG_DTLS_ENABLE
+#error "OPENTHREAD_CONFIG_DTLS_ENABLE was replaced by OPENTHREAD_CONFIG_SECURE_TRANSPORT_ENABLE"
+#endif
+
+#ifdef OPENTHREAD_CONFIG_MLE_IP_ADDRS_TO_REGISTER
+#error "OPENTHREAD_CONFIG_MLE_IP_ADDRS_TO_REGISTER is removed. All addresses are now registered."
+#endif
+
+#ifdef OPENTHREAD_CONFIG_MAC_MULTIPURPOSE_FRAME
+#error "OPENTHREAD_CONFIG_MAC_MULTIPURPOSE_FRAME was removed and is no longer supported. " \
+       "It was originally implemented as a provisional solution for the wake mechanism."
+#endif
+
+#ifdef OPENTHREAD_CONFIG_MAC_SOFTWARE_RX_ON_WHEN_IDLE_ENABLE
+#error "OPENTHREAD_CONFIG_MAC_SOFTWARE_RX_ON_WHEN_IDLE_ENABLE was removed. " \
+       "Software support for RxOnWhenIdle in SubMac was never implemented."
+#endif
+
+#ifdef OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+#error "OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE was replaced by OPENTHREAD_CONFIG_TD_WAKE_INITIATOR_ENABLE."
+#endif
+
+#ifdef OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+#error "OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE was replaced by OPENTHREAD_CONFIG_TD_WAKE_LISTENER_ENABLE."
+#endif
+
+#ifdef OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_CONNECTION_RETRY_INTERVAL
+#error "OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_CONNECTION_RETRY_INTERVAL was removed (legacy thread-in-mobile)"
+#endif
+
+#ifdef OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_CONNECTION_RETRY_COUNT
+#error "OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_CONNECTION_RETRY_COUNT was removed (legacy thread-in-mobile)"
+#endif
+
+#ifdef OPENTHREAD_CONFIG_WAKEUP_TX_INTERVAL
+#error "OPENTHREAD_CONFIG_WAKEUP_TX_INTERVAL was removed (legacy thread-in-mobile)"
+#endif
+
+#ifdef OPENTHREAD_CONFIG_WAKEUP_MAX_DURATION
+#error "OPENTHREAD_CONFIG_WAKEUP_MAX_DURATION was removed (legacy thread-in-mobile)"
+#endif
+
+#ifdef OPENTHREAD_CONFIG_WED_LISTEN_INTERVAL
+#error "OPENTHREAD_CONFIG_WED_LISTEN_INTERVAL was removed (legacy thread-in-mobile)"
+#endif
+
+#ifdef OPENTHREAD_CONFIG_WED_LISTEN_DURATION
+#error "OPENTHREAD_CONFIG_WED_LISTEN_DURATION was removed (legacy thread-in-mobile)"
+#endif
+
+#ifdef OPENTHREAD_CONFIG_WED_RECEIVE_TIME_AFTER
+#error "OPENTHREAD_CONFIG_WED_RECEIVE_TIME_AFTER was removed (legacy thread-in-mobile)"
+#endif
+
+#ifdef OPENTHREAD_CONFIG_WAKEUP_FRAME_TX_CCA_ENABLE
+#error "OPENTHREAD_CONFIG_WAKEUP_FRAME_TX_CCA_ENABLE was removed (legacy thread-in-mobile)"
+#endif
+
+#ifdef OPENTHREAD_CONFIG_P2P_ENABLE
+#error "OPENTHREAD_CONFIG_P2P_ENABLE was removed (legacy thread-in-mobile)"
+#endif
+
+#ifdef OPENTHREAD_CONFIG_P2P_MAX_PEERS
+#error "OPENTHREAD_CONFIG_P2P_MAX_PEERS was removed (legacy thread-in-mobile)"
+#endif
+
+#endif // OT_CORE_CONFIG_OPENTHREAD_CORE_CONFIG_CHECK_H_

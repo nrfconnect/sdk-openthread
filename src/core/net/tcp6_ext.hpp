@@ -31,10 +31,12 @@
  *   This file includes definitions for TCP/IPv6 socket extensions.
  */
 
-#ifndef TCP6_EXT_HPP_
-#define TCP6_EXT_HPP_
+#ifndef OT_CORE_NET_TCP6_EXT_HPP_
+#define OT_CORE_NET_TCP6_EXT_HPP_
 
 #include "openthread-core-config.h"
+
+#if OPENTHREAD_CONFIG_TCP_ENABLE
 
 #include <openthread/tcp_ext.h>
 
@@ -50,12 +52,10 @@ namespace Ip6 {
  *   This module includes definitions for TCP/IPv6 socket extensions.
  *
  * @{
- *
  */
 
 /**
  * Represents a TCP circular send buffer.
- *
  */
 class TcpCircularSendBuffer : public otTcpCircularSendBuffer
 {
@@ -109,7 +109,6 @@ public:
      * Forcibly discards all data in this TCP circular send buffer.
      *
      * @sa otTcpCircularSendBufferForceDiscardAll
-     *
      */
     void ForceDiscardAll(void);
 
@@ -133,4 +132,6 @@ DefineCoreType(otTcpCircularSendBuffer, Ip6::TcpCircularSendBuffer);
 
 } // namespace ot
 
-#endif // TCP6_HPP_
+#endif // OPENTHREAD_CONFIG_TCP_ENABLE
+
+#endif // OT_CORE_NET_TCP6_EXT_HPP_

@@ -36,7 +36,12 @@ target_compile_definitions(openthread-mtd PRIVATE
 
 target_compile_options(openthread-mtd PRIVATE
     ${OT_CFLAGS}
+    -Wundef
 )
+
+if(APPLE)
+    target_compile_options(openthread-mtd PRIVATE -Wimplicit-int-conversion)
+endif()
 
 target_include_directories(openthread-mtd PUBLIC ${OT_PUBLIC_INCLUDES} PRIVATE ${COMMON_INCLUDES})
 

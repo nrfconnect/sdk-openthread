@@ -4,7 +4,7 @@
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
- *  1. Redistributions of source code must strain the above copyright
+ *  1. Redistributions of source code must retain the above copyright
  *     notice, this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
@@ -51,7 +51,6 @@ namespace Posix {
 
 /**
  * Updates the target power table and calibrated power table to the RCP.
- *
  */
 class Configuration : public Logger<Configuration>
 {
@@ -68,6 +67,28 @@ public:
     }
 
     /**
+     * @brief Sets the path for the factory configuration file.
+     *
+     * @param[in] aFilePath  A null-terminated C string representing the new path to the
+     *                       factory configuration file. This parameter MUST NOT be `nullptr`.
+     *
+     * @retval OT_ERROR_NONE           The factory configuration file path was successfully updated.
+     * @retval OT_ERROR_INVALID_ARGS   If @p aFilePath is `nullptr`.
+     */
+    otError SetFactoryConfigFile(const char *aFilePath);
+
+    /**
+     * @brief Sets the path for the product configuration file.
+     *
+     * @param[in] aFilePath  A null-terminated C string representing the new path to the
+     *                       product configuration file. This parameter MUST NOT be `nullptr`.
+     *
+     * @retval OT_ERROR_NONE           The product configuration file path was successfully updated.
+     * @retval OT_ERROR_INVALID_ARGS   If @p aFilePath is `nullptr`.
+     */
+    otError SetProductConfigFile(const char *aFilePath);
+
+    /**
      * Set the region code.
      *
      * The radio region format is the 2-bytes ascii representation of the
@@ -77,7 +98,6 @@ public:
      *
      * @retval  OT_ERROR_NONE             Successfully set region code.
      * @retval  OT_ERROR_FAILED           Failed to set the region code.
-     *
      */
     otError SetRegion(uint16_t aRegionCode);
 
@@ -88,7 +108,6 @@ public:
      * ISO 3166 alpha-2 code.
      *
      * @returns  The region code.
-     *
      */
     uint16_t GetRegion(void) const { return mRegionCode; }
 
@@ -96,7 +115,6 @@ public:
      * Get the radio supported channel mask that the device is allowed to be on.
      *
      * @returns The radio supported channel mask.
-     *
      */
     uint32_t GetSupportedChannelMask(void) const { return mSupportedChannelMask; }
 
@@ -104,7 +122,6 @@ public:
      * Gets the radio preferred channel mask that the device prefers to form on.
      *
      * @returns The radio preferred channel mask.
-     *
      */
     uint32_t GetPreferredChannelMask(void) const { return mPreferredChannelMask; }
 
@@ -113,7 +130,6 @@ public:
      *
      * @retval TRUE  If there are any valid configuration keys in the configuration file.
      * @retval FALSE If the configuration file doesn't exist or there is no key in the configuration file.
-     *
      */
     bool IsValid(void) const;
 

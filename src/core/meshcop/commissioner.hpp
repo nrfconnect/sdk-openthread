@@ -31,8 +31,8 @@
  *   This file includes definitions for the Commissioner role.
  */
 
-#ifndef COMMISSIONER_HPP_
-#define COMMISSIONER_HPP_
+#ifndef OT_CORE_MESHCOP_COMMISSIONER_HPP_
+#define OT_CORE_MESHCOP_COMMISSIONER_HPP_
 
 #include "openthread-core-config.h"
 
@@ -49,9 +49,6 @@
 #include "common/non_copyable.hpp"
 #include "common/timer.hpp"
 #include "mac/mac_types.hpp"
-#include "meshcop/announce_begin_client.hpp"
-#include "meshcop/energy_scan_client.hpp"
-#include "meshcop/panid_query_client.hpp"
 #include "meshcop/secure_transport.hpp"
 #include "net/ip6_address.hpp"
 #include "net/udp6.hpp"
@@ -63,6 +60,10 @@ namespace ot {
 
 namespace MeshCoP {
 
+#if !OPENTHREAD_CONFIG_SECURE_TRANSPORT_ENABLE
+#error "Commissioner feature requires `OPENTHREAD_CONFIG_SECURE_TRANSPORT_ENABLE`"
+#endif
+
 class Commissioner : public InstanceLocator, private NonCopyable
 {
     friend class Tmf::Agent;
@@ -71,7 +72,6 @@ class Commissioner : public InstanceLocator, private NonCopyable
 public:
     /**
      * Type represents the Commissioner State.
-     *
      */
     enum State : uint8_t
     {
@@ -82,7 +82,6 @@ public:
 
     /**
      * Type represents Joiner Event.
-     *
      */
     enum JoinerEvent : uint8_t
     {
@@ -93,14 +92,15 @@ public:
         kJoinerEventRemoved   = OT_COMMISSIONER_JOINER_REMOVED,
     };
 
-    typedef otCommissionerStateCallback  StateCallback;  ///< State change callback function pointer type.
-    typedef otCommissionerJoinerCallback JoinerCallback; ///< Joiner state change callback function pointer type.
+    typedef otCommissionerStateCallback         StateCallback;         ///< State change callback type.
+    typedef otCommissionerJoinerCallback        JoinerCallback;        ///< Joiner state change callback type.
+    typedef otCommissionerEnergyReportCallback  EnergyReportCallback;  ///< Energy report callback type.
+    typedef otCommissionerPanIdConflictCallback PanIdConflictCallback; ///< PAN ID conflict callback type.
 
     /**
      * Initializes the Commissioner object.
      *
      * @param[in]  aInstance     A reference to the OpenThread instance.
-     *
      */
     explicit Commissioner(Instance &aInstance);
 
@@ -114,7 +114,6 @@ public:
      * @retval kErrorNone           Successfully started the Commissioner service.
      * @retval kErrorAlready        Commissioner is already started.
      * @retval kErrorInvalidState   Device is not currently attached to a network.
-     *
      */
     Error Start(StateCallback aStateCallback, JoinerCallback aJoinerCallback, void *aCallbackContext);
 
@@ -123,7 +122,6 @@ public:
      *
      * @retval kErrorNone     Successfully stopped the Commissioner service.
      * @retval kErrorAlready  Commissioner is already stopped.
-     *
      */
     Error Stop(void) { return Stop(kSendKeepAliveToResign); }
 
@@ -131,7 +129,6 @@ public:
      * Returns the Commissioner Id.
      *
      * @returns The Commissioner Id.
-     *
      */
     const char *GetId(void) const { return mCommissionerId; }
 
@@ -143,13 +140,11 @@ public:
      * @retval kErrorNone           Successfully set the Commissioner Id.
      * @retval kErrorInvalidArgs    Given name is too long.
      * @retval kErrorInvalidState   The commissioner is active and id cannot be changed.
-     *
      */
     Error SetId(const char *aId);
 
     /**
      * Clears all Joiner entries.
-     *
      */
     void ClearJoiners(void);
 
@@ -162,7 +157,6 @@ public:
      * @retval kErrorNone          Successfully added the Joiner.
      * @retval kErrorNoBufs        No buffers available to add the Joiner.
      * @retval kErrorInvalidState  Commissioner service is not started.
-     *
      */
     Error AddJoinerAny(const char *aPskd, uint32_t aTimeout) { return AddJoiner(nullptr, nullptr, aPskd, aTimeout); }
 
@@ -176,7 +170,6 @@ public:
      * @retval kErrorNone          Successfully added the Joiner.
      * @retval kErrorNoBufs        No buffers available to add the Joiner.
      * @retval kErrorInvalidState  Commissioner service is not started.
-     *
      */
     Error AddJoiner(const Mac::ExtAddress &aEui64, const char *aPskd, uint32_t aTimeout)
     {
@@ -193,7 +186,6 @@ public:
      * @retval kErrorNone          Successfully added the Joiner.
      * @retval kErrorNoBufs        No buffers available to add the Joiner.
      * @retval kErrorInvalidState  Commissioner service is not started.
-     *
      */
     Error AddJoiner(const JoinerDiscerner &aDiscerner, const char *aPskd, uint32_t aTimeout)
     {
@@ -208,7 +200,6 @@ public:
      *
      * @retval kErrorNone       Successfully get the Joiner info.
      * @retval kErrorNotFound   Not found next Joiner.
-     *
      */
     Error GetNextJoinerInfo(uint16_t &aIterator, otJoinerInfo &aJoiner) const;
 
@@ -220,7 +211,6 @@ public:
      * @retval kErrorNone          Successfully added the Joiner.
      * @retval kErrorNotFound      The Joiner entry accepting any Joiner was not found.
      * @retval kErrorInvalidState  Commissioner service is not started.
-     *
      */
     Error RemoveJoinerAny(uint32_t aDelay) { return RemoveJoiner(nullptr, nullptr, aDelay); }
 
@@ -233,7 +223,6 @@ public:
      * @retval kErrorNone          Successfully added the Joiner.
      * @retval kErrorNotFound      The Joiner specified by @p aEui64 was not found.
      * @retval kErrorInvalidState  Commissioner service is not started.
-     *
      */
     Error RemoveJoiner(const Mac::ExtAddress &aEui64, uint32_t aDelay)
     {
@@ -249,7 +238,6 @@ public:
      * @retval kErrorNone          Successfully added the Joiner.
      * @retval kErrorNotFound      The Joiner specified by @p aEui64 was not found.
      * @retval kErrorInvalidState  Commissioner service is not started.
-     *
      */
     Error RemoveJoiner(const JoinerDiscerner &aDiscerner, uint32_t aDelay)
     {
@@ -260,7 +248,6 @@ public:
      * Gets the Provisioning URL.
      *
      * @returns A pointer to char buffer containing the URL string.
-     *
      */
     const char *GetProvisioningUrl(void) const { return mProvisioningUrl; }
 
@@ -271,7 +258,6 @@ public:
      *
      * @retval kErrorNone         Successfully set the Provisioning URL.
      * @retval kErrorInvalidArgs  @p aProvisioningUrl is invalid (too long).
-     *
      */
     Error SetProvisioningUrl(const char *aProvisioningUrl);
 
@@ -279,7 +265,6 @@ public:
      * Returns the Commissioner Session ID.
      *
      * @returns The Commissioner Session ID.
-     *
      */
     uint16_t GetSessionId(void) const { return mSessionId; }
 
@@ -287,7 +272,6 @@ public:
      * Indicates whether or not the Commissioner role is active.
      *
      * @returns TRUE if the Commissioner role is active, FALSE otherwise.
-     *
      */
     bool IsActive(void) const { return mState == kStateActive; }
 
@@ -295,7 +279,6 @@ public:
      * Indicates whether or not the Commissioner role is disabled.
      *
      * @returns TRUE if the Commissioner role is disabled, FALSE otherwise.
-     *
      */
     bool IsDisabled(void) const { return mState == kStateDisabled; }
 
@@ -303,7 +286,6 @@ public:
      * Gets the Commissioner State.
      *
      * @returns The Commissioner State.
-     *
      */
     State GetState(void) const { return mState; }
 
@@ -316,7 +298,6 @@ public:
      * @retval kErrorNone          Send MGMT_COMMISSIONER_GET successfully.
      * @retval kErrorNoBufs        Insufficient buffer space to send.
      * @retval kErrorInvalidState  Commissioner service is not started.
-     *
      */
     Error SendMgmtCommissionerGetRequest(const uint8_t *aTlvs, uint8_t aLength);
 
@@ -330,33 +311,64 @@ public:
      * @retval kErrorNone          Send MGMT_COMMISSIONER_SET successfully.
      * @retval kErrorNoBufs        Insufficient buffer space to send.
      * @retval kErrorInvalidState  Commissioner service is not started.
-     *
      */
     Error SendMgmtCommissionerSetRequest(const CommissioningDataset &aDataset, const uint8_t *aTlvs, uint8_t aLength);
 
     /**
-     * Returns a reference to the AnnounceBeginClient instance.
+     * Sends a Announce Begin message.
      *
-     * @returns A reference to the AnnounceBeginClient instance.
+     * @param[in]  aChannelMask   The channel mask value.
+     * @param[in]  aCount         The number of Announce messages sent per channel.
+     * @param[in]  aPeriod        The time between two successive MLE Announce transmissions (in milliseconds).
+     * @param[in]  aAddress       The destination address.
      *
+     * @retval kErrorNone    Successfully enqueued the Announce Begin message.
+     * @retval kErrorNoBufs  Insufficient buffers to generate a Announce Begin message.
      */
-    AnnounceBeginClient &GetAnnounceBeginClient(void) { return mAnnounceBegin; }
+    Error SendAnnounceBeginRequest(uint32_t            aChannelMask,
+                                   uint8_t             aCount,
+                                   uint16_t            aPeriod,
+                                   const Ip6::Address &aAddress);
 
     /**
-     * Returns a reference to the EnergyScanClient instance.
+     * Sends an Energy Scan Query message.
      *
-     * @returns A reference to the EnergyScanClient instance.
+     * @param[in]  aChannelMask   The channel mask value.
+     * @param[in]  aCount         The number of energy measurements per channel.
+     * @param[in]  aPeriod        The time between energy measurements (milliseconds).
+     * @param[in]  aScanDuration  The scan duration for each energy measurement (milliseconds).
+     * @param[in]  aAddress       The IPv6 destination.
+     * @param[in]  aCallback      Callback function called to report Energy Scan results.
+     * @param[in]  aContext       A pointer to application-specific context.
      *
+     * @retval kErrorNone     Successfully enqueued the Energy Scan Query message.
+     * @retval kErrorNoBufs   Insufficient buffers to generate an Energy Scan Query message.
      */
-    EnergyScanClient &GetEnergyScanClient(void) { return mEnergyScan; }
+    Error SendEnergyScanQuery(uint32_t             aChannelMask,
+                              uint8_t              aCount,
+                              uint16_t             aPeriod,
+                              uint16_t             aScanDuration,
+                              const Ip6::Address  &aAddress,
+                              EnergyReportCallback aCallback,
+                              void                *aContext);
 
     /**
-     * Returns a reference to the PanIdQueryClient instance.
+     * Sends a PAN ID Query message.
      *
-     * @returns A reference to the PanIdQueryClient instance.
+     * @param[in]  aPanId         The PAN ID to query.
+     * @param[in]  aChannelMask   The channel mask value.
+     * @param[in]  aAddress       The IPv6 destination.
+     * @param[in]  aCallback      Callback function to report PAN ID conflicts.
+     * @param[in]  aContext       A pointer to application-specific context.
      *
+     * @retval kErrorNone    Successfully enqueued the PAN ID Query message.
+     * @retval kErrorNoBufs  Insufficient buffers to generate a PAN ID Query message.
      */
-    PanIdQueryClient &GetPanIdQueryClient(void) { return mPanIdQuery; }
+    Error SendPanIdQuery(uint16_t              aPanId,
+                         uint32_t              aChannelMask,
+                         const Ip6::Address   &aAddress,
+                         PanIdConflictCallback aCallback,
+                         void                 *aContext);
 
 private:
     static constexpr uint32_t kPetitionAttemptDelay = 5;  // COMM_PET_ATTEMPT_DELAY (seconds)
@@ -365,8 +377,12 @@ private:
     static constexpr uint32_t kKeepAliveTimeout     = 50; // TIMEOUT_COMM_PET (seconds)
     static constexpr uint32_t kRemoveJoinerDelay    = 20; // Delay to remove successfully joined joiner
 
+    static constexpr uint16_t kMaxJoinerEntries = OPENTHREAD_CONFIG_COMMISSIONER_MAX_JOINER_ENTRIES;
+
     static constexpr uint32_t kJoinerSessionTimeoutMillis =
         1000 * OPENTHREAD_CONFIG_COMMISSIONER_JOINER_SESSION_TIMEOUT; // Expiration time for active Joiner session
+
+    static constexpr uint8_t kMaxEnergyScanResults = OPENTHREAD_CONFIG_TMF_ENERGY_SCAN_MAX_RESULTS;
 
     enum ResignMode : uint8_t
     {
@@ -415,35 +431,15 @@ private:
     void HandleTimer(void);
     void HandleJoinerExpirationTimer(void);
 
-    static void HandleMgmtCommissionerSetResponse(void                *aContext,
-                                                  otMessage           *aMessage,
-                                                  const otMessageInfo *aMessageInfo,
-                                                  Error                aResult);
-    void        HandleMgmtCommissionerSetResponse(Coap::Message          *aMessage,
-                                                  const Ip6::MessageInfo *aMessageInfo,
-                                                  Error                   aResult);
-    static void HandleMgmtCommissionerGetResponse(void                *aContext,
-                                                  otMessage           *aMessage,
-                                                  const otMessageInfo *aMessageInfo,
-                                                  Error                aResult);
-    void        HandleMgmtCommissionerGetResponse(Coap::Message          *aMessage,
-                                                  const Ip6::MessageInfo *aMessageInfo,
-                                                  Error                   aResult);
-    static void HandleLeaderPetitionResponse(void                *aContext,
-                                             otMessage           *aMessage,
-                                             const otMessageInfo *aMessageInfo,
-                                             Error                aResult);
-    void HandleLeaderPetitionResponse(Coap::Message *aMessage, const Ip6::MessageInfo *aMessageInfo, Error aResult);
-    static void HandleLeaderKeepAliveResponse(void                *aContext,
-                                              otMessage           *aMessage,
-                                              const otMessageInfo *aMessageInfo,
-                                              Error                aResult);
-    void HandleLeaderKeepAliveResponse(Coap::Message *aMessage, const Ip6::MessageInfo *aMessageInfo, Error aResult);
+    DeclareTmfResponseHandlerIn(Commissioner, HandleMgmtCommissionerSetResponse);
+    DeclareTmfResponseHandlerIn(Commissioner, HandleMgmtCommissionerGetResponse);
+    DeclareTmfResponseHandlerIn(Commissioner, HandleLeaderPetitionResponse);
+    DeclareTmfResponseHandlerIn(Commissioner, HandleLeaderKeepAliveResponse);
 
-    static void HandleSecureAgentConnectEvent(SecureTransport::ConnectEvent aEvent, void *aContext);
-    void        HandleSecureAgentConnectEvent(SecureTransport::ConnectEvent aEvent);
+    static void HandleSecureAgentConnectEvent(Dtls::Session::ConnectEvent aEvent, void *aContext);
+    void        HandleSecureAgentConnectEvent(Dtls::Session::ConnectEvent aEvent);
 
-    template <Uri kUri> void HandleTmf(Coap::Message &aMessage, const Ip6::MessageInfo &aMessageInfo);
+    template <Uri kUri> void HandleTmf(Coap::Msg &aMsg);
 
     void HandleRelayReceive(Coap::Message &aMessage, const Ip6::MessageInfo &aMessageInfo);
 
@@ -470,36 +466,31 @@ private:
     using CommissionerTimer     = TimerMilliIn<Commissioner, &Commissioner::HandleTimer>;
     using JoinerSessionTimer    = TimerMilliIn<Commissioner, &Commissioner::HandleJoinerSessionTimer>;
 
-    Joiner mJoiners[OPENTHREAD_CONFIG_COMMISSIONER_MAX_JOINER_ENTRIES];
-
-    Joiner                  *mActiveJoiner;
-    Ip6::InterfaceIdentifier mJoinerIid;
-    uint16_t                 mJoinerPort;
-    uint16_t                 mJoinerRloc;
-    uint16_t                 mSessionId;
-    uint8_t                  mTransmitAttempts;
-    JoinerExpirationTimer    mJoinerExpirationTimer;
-    CommissionerTimer        mTimer;
-    JoinerSessionTimer       mJoinerSessionTimer;
-
-    AnnounceBeginClient mAnnounceBegin;
-    EnergyScanClient    mEnergyScan;
-    PanIdQueryClient    mPanIdQuery;
-
-    Ip6::Netif::UnicastAddress mCommissionerAloc;
-
-    ProvisioningUrlTlv::StringType mProvisioningUrl;
-    CommissionerIdTlv::StringType  mCommissionerId;
-
-    State mState;
-
-    Callback<StateCallback>  mStateCallback;
-    Callback<JoinerCallback> mJoinerCallback;
+    Joiner                          mJoiners[kMaxJoinerEntries];
+    Joiner                         *mActiveJoiner;
+    Ip6::InterfaceIdentifier        mJoinerIid;
+    uint16_t                        mJoinerPort;
+    uint16_t                        mJoinerRloc;
+    uint16_t                        mSessionId;
+    uint8_t                         mTransmitAttempts;
+    State                           mState;
+    JoinerExpirationTimer           mJoinerExpirationTimer;
+    CommissionerTimer               mTimer;
+    JoinerSessionTimer              mJoinerSessionTimer;
+    Ip6::Netif::UnicastAddress      mCommissionerAloc;
+    ProvisioningUrlTlv::StringType  mProvisioningUrl;
+    CommissionerIdTlv::StringType   mCommissionerId;
+    Callback<StateCallback>         mStateCallback;
+    Callback<JoinerCallback>        mJoinerCallback;
+    Callback<EnergyReportCallback>  mEnergyReportCallback;
+    Callback<PanIdConflictCallback> mPanIdConflictCallback;
 };
 
 DeclareTmfHandler(Commissioner, kUriDatasetChanged);
 DeclareTmfHandler(Commissioner, kUriRelayRx);
 DeclareTmfHandler(Commissioner, kUriJoinerFinalize);
+DeclareTmfHandler(Commissioner, kUriEnergyReport);
+DeclareTmfHandler(Commissioner, kUriPanIdConflict);
 
 } // namespace MeshCoP
 
@@ -510,4 +501,4 @@ DefineMapEnum(otCommissionerJoinerEvent, MeshCoP::Commissioner::JoinerEvent);
 
 #endif // OPENTHREAD_FTD && OPENTHREAD_CONFIG_COMMISSIONER_ENABLE
 
-#endif // COMMISSIONER_HPP_
+#endif // OT_CORE_MESHCOP_COMMISSIONER_HPP_

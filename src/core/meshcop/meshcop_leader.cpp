@@ -35,20 +35,7 @@
 
 #if OPENTHREAD_FTD
 
-#include <stdio.h>
-
-#include "coap/coap_message.hpp"
-#include "common/as_core_type.hpp"
-#include "common/code_utils.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/random.hpp"
 #include "instance/instance.hpp"
-#include "meshcop/meshcop.hpp"
-#include "meshcop/meshcop_tlvs.hpp"
-#include "thread/thread_netif.hpp"
-#include "thread/thread_tlvs.hpp"
-#include "thread/uri_paths.hpp"
 
 namespace ot {
 namespace MeshCoP {
@@ -58,26 +45,23 @@ RegisterLogModule("MeshCoPLeader");
 Leader::Leader(Instance &aInstance)
     : InstanceLocator(aInstance)
     , mTimer(aInstance)
-    , mDelayTimerMinimal(DelayTimerTlv::kMinDelay)
-    , mSessionId(Random::NonCrypto::GetUint16())
+    , mSessionId(Random::NonCrypto::Generate<uint16_t>())
 {
 }
 
-template <> void Leader::HandleTmf<kUriLeaderPetition>(Coap::Message &aMessage, const Ip6::MessageInfo &aMessageInfo)
+template <> void Leader::HandleTmf<kUriLeaderPetition>(Coap::Msg &aMsg)
 {
-    OT_UNUSED_VARIABLE(aMessageInfo);
-
     CommissioningData             data;
     CommissionerIdTlv::StringType commissionerId;
     StateTlv::State               state = StateTlv::kReject;
 
     LogInfo("Received %s", UriToString<kUriLeaderPetition>());
 
-    VerifyOrExit(Get<Mle::MleRouter>().IsLeader());
+    VerifyOrExit(Get<Mle::Mle>().IsLeader());
 
-    VerifyOrExit(Get<Mle::MleRouter>().IsRoutingLocator(aMessageInfo.GetPeerAddr()));
+    VerifyOrExit(Get<Mle::Mle>().IsRoutingLocator(aMsg.mMessageInfo.GetPeerAddr()));
 
-    SuccessOrExit(Tlv::Find<CommissionerIdTlv>(aMessage, commissionerId));
+    SuccessOrExit(Tlv::Find<CommissionerIdTlv>(aMsg.mMessage, commissionerId));
 
     if (mTimer.IsRunning())
     {
@@ -85,26 +69,24 @@ template <> void Leader::HandleTmf<kUriLeaderPetition>(Coap::Message &aMessage, 
         ResignCommissioner();
     }
 
-    data.Init(aMessageInfo.GetPeerAddr().GetIid().GetLocator(), ++mSessionId);
+    data.Init(aMsg.mMessageInfo.GetPeerAddr().GetIid().GetLocator(), ++mSessionId);
     SuccessOrExit(Get<NetworkData::Leader>().SetCommissioningData(&data, data.GetLength()));
 
     IgnoreError(StringCopy(mCommissionerId, commissionerId));
 
     state = StateTlv::kAccept;
-    mTimer.Start(Time::SecToMsec(kTimeoutLeaderPetition));
+    mTimer.Start(kLeaderPetitionTimeout);
 
 exit:
-    SendPetitionResponse(aMessage, aMessageInfo, state);
+    SendPetitionResponse(aMsg, state);
 }
 
-void Leader::SendPetitionResponse(const Coap::Message    &aRequest,
-                                  const Ip6::MessageInfo &aMessageInfo,
-                                  StateTlv::State         aState)
+void Leader::SendPetitionResponse(const Coap::Msg &aMsg, StateTlv::State aState)
 {
     Error          error = kErrorNone;
     Coap::Message *message;
 
-    message = Get<Tmf::Agent>().NewPriorityResponseMessage(aRequest);
+    message = Get<Tmf::Agent>().AllocateAndInitPriorityResponseFor(aMsg.mMessage);
     VerifyOrExit(message != nullptr, error = kErrorNoBufs);
 
     SuccessOrExit(error = Tlv::Append<StateTlv>(*message, aState));
@@ -119,7 +101,7 @@ void Leader::SendPetitionResponse(const Coap::Message    &aRequest,
         SuccessOrExit(error = Tlv::Append<CommissionerSessionIdTlv>(*message, mSessionId));
     }
 
-    SuccessOrExit(error = Get<Tmf::Agent>().SendMessage(*message, aMessageInfo));
+    SuccessOrExit(error = Get<Tmf::Agent>().SendMessage(*message, aMsg.mMessageInfo));
 
     LogInfo("Sent %s response", UriToString<kUriLeaderPetition>());
 
@@ -128,24 +110,21 @@ exit:
     LogWarnOnError(error, "send petition response");
 }
 
-template <> void Leader::HandleTmf<kUriLeaderKeepAlive>(Coap::Message &aMessage, const Ip6::MessageInfo &aMessageInfo)
+template <> void Leader::HandleTmf<kUriLeaderKeepAlive>(Coap::Msg &aMsg)
 {
-    uint8_t                state;
-    uint16_t               sessionId;
-    BorderAgentLocatorTlv *borderAgentLocator;
-    StateTlv::State        responseState;
+    uint8_t         state;
+    uint16_t        sessionId;
+    StateTlv::State responseState;
 
     LogInfo("Received %s", UriToString<kUriLeaderKeepAlive>());
 
-    VerifyOrExit(Get<Mle::MleRouter>().IsLeader());
+    VerifyOrExit(Get<Mle::Mle>().IsLeader());
 
-    SuccessOrExit(Tlv::Find<StateTlv>(aMessage, state));
+    SuccessOrExit(Tlv::Find<StateTlv>(aMsg.mMessage, state));
 
-    SuccessOrExit(Tlv::Find<CommissionerSessionIdTlv>(aMessage, sessionId));
+    SuccessOrExit(Tlv::Find<CommissionerSessionIdTlv>(aMsg.mMessage, sessionId));
 
-    borderAgentLocator = Get<NetworkData::Leader>().FindInCommissioningData<BorderAgentLocatorTlv>();
-
-    if ((borderAgentLocator == nullptr) || (sessionId != mSessionId))
+    if (!Get<NetworkData::Leader>().HasBorderAgentRloc() || (sessionId != mSessionId))
     {
         responseState = StateTlv::kReject;
     }
@@ -156,56 +135,38 @@ template <> void Leader::HandleTmf<kUriLeaderKeepAlive>(Coap::Message &aMessage,
     }
     else
     {
-        uint16_t rloc = aMessageInfo.GetPeerAddr().GetIid().GetLocator();
-
-        if (borderAgentLocator->GetBorderAgentLocator() != rloc)
-        {
-            borderAgentLocator->SetBorderAgentLocator(rloc);
-            Get<NetworkData::Leader>().IncrementVersion();
-        }
+        Get<NetworkData::Leader>().UpdateBorderAgentRloc(aMsg.mMessageInfo.GetPeerAddr().GetIid().GetLocator());
 
         responseState = StateTlv::kAccept;
-        mTimer.Start(Time::SecToMsec(kTimeoutLeaderPetition));
+        mTimer.Start(kLeaderPetitionTimeout);
     }
 
-    SendKeepAliveResponse(aMessage, aMessageInfo, responseState);
+    SendKeepAliveResponse(aMsg, responseState);
 
 exit:
     return;
 }
 
-void Leader::SendKeepAliveResponse(const Coap::Message    &aRequest,
-                                   const Ip6::MessageInfo &aMessageInfo,
-                                   StateTlv::State         aState)
+void Leader::SendKeepAliveResponse(const Coap::Msg &aMsg, StateTlv::State aState)
 {
-    Error          error = kErrorNone;
-    Coap::Message *message;
+    Error error;
 
-    message = Get<Tmf::Agent>().NewPriorityResponseMessage(aRequest);
-    VerifyOrExit(message != nullptr, error = kErrorNoBufs);
-
-    SuccessOrExit(error = Tlv::Append<StateTlv>(*message, aState));
-
-    SuccessOrExit(error = Get<Tmf::Agent>().SendMessage(*message, aMessageInfo));
-
+    SuccessOrExit(error = Get<Tmf::Agent>().SendResponseWithStateTlv(aMsg, aState));
     LogInfo("Sent %s response", UriToString<kUriLeaderKeepAlive>());
 
 exit:
-    FreeMessageOnError(message, error);
     LogWarnOnError(error, "send keep alive response");
 }
 
 void Leader::SendDatasetChanged(const Ip6::Address &aAddress)
 {
-    Error            error = kErrorNone;
-    Tmf::MessageInfo messageInfo(GetInstance());
-    Coap::Message   *message;
+    Error          error = kErrorNone;
+    Coap::Message *message;
 
-    message = Get<Tmf::Agent>().NewPriorityConfirmablePostMessage(kUriDatasetChanged);
+    message = Get<Tmf::Agent>().AllocateAndInitPriorityConfirmablePostMessage(kUriDatasetChanged);
     VerifyOrExit(message != nullptr, error = kErrorNoBufs);
 
-    messageInfo.SetSockAddrToRlocPeerAddrTo(aAddress);
-    SuccessOrExit(error = Get<Tmf::Agent>().SendMessage(*message, messageInfo));
+    SuccessOrExit(error = Get<Tmf::Agent>().SendMessageTo(*message, aAddress));
 
     LogInfo("Sent %s", UriToString<kUriDatasetChanged>());
 
@@ -214,20 +175,9 @@ exit:
     LogWarnOnError(error, "send dataset changed");
 }
 
-Error Leader::SetDelayTimerMinimal(uint32_t aDelayTimerMinimal)
-{
-    Error error = kErrorNone;
-
-    VerifyOrExit((aDelayTimerMinimal != 0 && aDelayTimerMinimal < DelayTimerTlv::kMinDelay), error = kErrorInvalidArgs);
-    mDelayTimerMinimal = aDelayTimerMinimal;
-
-exit:
-    return error;
-}
-
 void Leader::HandleTimer(void)
 {
-    VerifyOrExit(Get<Mle::MleRouter>().IsLeader());
+    VerifyOrExit(Get<Mle::Mle>().IsLeader());
 
     ResignCommissioner();
 

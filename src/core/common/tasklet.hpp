@@ -31,8 +31,8 @@
  *   This file includes definitions for tasklets and the tasklet scheduler.
  */
 
-#ifndef TASKLET_HPP_
-#define TASKLET_HPP_
+#ifndef OT_CORE_COMMON_TASKLET_HPP_
+#define OT_CORE_COMMON_TASKLET_HPP_
 
 #include "openthread-core-config.h"
 
@@ -52,19 +52,16 @@ namespace ot {
  *   This module includes definitions for tasklets and the tasklet scheduler.
  *
  * @{
- *
  */
 
 /**
  * Is used to represent a tasklet.
- *
  */
 class Tasklet : public InstanceLocator
 {
 public:
     /**
      * Implements the tasklet scheduler.
-     *
      */
     class Scheduler : private NonCopyable
     {
@@ -72,40 +69,45 @@ public:
 
     public:
         /**
-         * Initializes the object.
-         *
-         */
-        Scheduler(void)
-            : mTail(nullptr)
-        {
-        }
-
-        /**
          * Indicates whether or not there are tasklets pending.
          *
          * @retval TRUE   If there are tasklets pending.
          * @retval FALSE  If there are no tasklets pending.
-         *
          */
-        bool AreTaskletsPending(void) const { return mTail != nullptr; }
+        bool AreTaskletsPending(void) const { return !mPostedQueue.IsEmpty(); }
 
         /**
          * Processes all tasklets queued when this is called.
-         *
          */
         void ProcessQueuedTasklets(void);
 
     private:
-        void PostTasklet(Tasklet &aTasklet);
+        class Queue // A circular singly linked-list
+        {
+        public:
+            Queue(void)
+                : mTail(nullptr)
+            {
+            }
 
-        Tasklet *mTail; // A circular singly linked-list
+            void     Clear(void) { mTail = nullptr; }
+            bool     IsEmpty(void) const { return (mTail == nullptr); }
+            void     PostTasklet(Tasklet &aTasklet);
+            void     RemoveTasklet(Tasklet &aTasklet);
+            Tasklet *PopTasklet(void);
+
+        private:
+            Tasklet *mTail;
+        };
+
+        Queue mPostedQueue;
+        Queue mRunningQueue;
     };
 
     /**
      * Reference is called when the tasklet is run.
      *
      * @param[in]  aTasklet  A reference to the tasklet being run.
-     *
      */
     typedef void (&Handler)(Tasklet &aTasklet);
 
@@ -114,7 +116,6 @@ public:
      *
      * @param[in]  aInstance   A reference to the OpenThread instance object.
      * @param[in]  aHandler    A pointer to a function that is called when the tasklet is run.
-     *
      */
     Tasklet(Instance &aInstance, Handler aHandler)
         : InstanceLocator(aInstance)
@@ -127,16 +128,21 @@ public:
      * Puts the tasklet on the tasklet scheduler run queue.
      *
      * If the tasklet is already posted, no change is made and run queue stays as before.
-     *
      */
     void Post(void);
+
+    /**
+     * Removes the tasklet from the tasklet scheduler run queue.
+     *
+     * If the tasklet is not posted, no change is made and run queue stays as before.
+     */
+    void Unpost(void);
 
     /**
      * Indicates whether the tasklet is posted or not.
      *
      * @retval TRUE  The tasklet is posted.
      * @retval FALSE The tasklet is not posted.
-     *
      */
     bool IsPosted(void) const { return (mNext != nullptr); }
 
@@ -154,7 +160,6 @@ private:
  * @tparam HandleTaskletPtr   A pointer to a non-static member method of `Owner` to use as tasklet handler.
  *
  * The `Owner` MUST be a type that is accessible using `InstanceLocator::Get<Owner>()`.
- *
  */
 template <typename Owner, void (Owner::*HandleTaskletPtr)(void)> class TaskletIn : public Tasklet
 {
@@ -163,7 +168,6 @@ public:
      * Initializes the tasklet.
      *
      * @param[in]  aInstance   The OpenThread instance.
-     *
      */
     explicit TaskletIn(Instance &aInstance)
         : Tasklet(aInstance, HandleTasklet)
@@ -171,7 +175,7 @@ public:
     }
 
 private:
-    static void HandleTasklet(Tasklet &aTasklet); // Implemented in `locator_getters.hpp`
+    static void HandleTasklet(Tasklet &aTasklet); // Implemented in `instance.hpp`
 };
 
 /**
@@ -181,7 +185,6 @@ private:
  * method. This method works if there is a single instance of `Type` within OpenThread instance hierarchy. The
  * `TaskletContext` is intended for cases where there may be multiple instances of the same class/type using a `Tasklet`
  * object. `TaskletContext` will store a context `void *` information.
- *
  */
 class TaskletContext : public Tasklet
 {
@@ -192,7 +195,6 @@ public:
      * @param[in]  aInstance   A reference to the OpenThread instance.
      * @param[in]  aHandler    A pointer to a function that is called when the tasklet is run.
      * @param[in]  aContext    A pointer to an arbitrary context information.
-     *
      */
     TaskletContext(Instance &aInstance, Handler aHandler, void *aContext)
         : Tasklet(aInstance, aHandler)
@@ -204,7 +206,6 @@ public:
      * Returns the pointer to the arbitrary context information.
      *
      * @returns Pointer to the arbitrary context information.
-     *
      */
     void *GetContext(void) { return mContext; }
 
@@ -214,9 +215,8 @@ private:
 
 /**
  * @}
- *
  */
 
 } // namespace ot
 
-#endif // TASKLET_HPP_
+#endif // OT_CORE_COMMON_TASKLET_HPP_

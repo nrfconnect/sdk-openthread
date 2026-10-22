@@ -134,11 +134,11 @@ void otPlatFree(void *aPtr)
 #endif
 
 #if OPENTHREAD_CONFIG_LOG_OUTPUT == OPENTHREAD_CONFIG_LOG_OUTPUT_PLATFORM_DEFINED
-void otPlatLog(otLogLevel aLogLevel, otLogRegion aLogRegion, const char *aFormat, ...)
+#if OPENTHREAD_CONFIG_LOG_INSTANCE_AWARE_API_ENABLE
+void otPlatLogOutput(otInstance *, otLogLevel, const char *aLogLine) { printf("   %s\n", aLogLine); }
+#else
+void otPlatLog(otLogLevel, otLogRegion, const char *aFormat, ...)
 {
-    OT_UNUSED_VARIABLE(aLogLevel);
-    OT_UNUSED_VARIABLE(aLogRegion);
-
     va_list args;
 
     printf("   ");
@@ -147,6 +147,7 @@ void otPlatLog(otLogLevel aLogLevel, otLogRegion aLogRegion, const char *aFormat
     va_end(args);
     printf("\n");
 }
+#endif
 #endif
 
 } // extern "C"
@@ -185,7 +186,7 @@ void AdvanceTime(uint32_t aDuration)
     sNow = time;
 }
 
-void InitTest(void)
+void InitTest(bool aStartThread = true)
 {
     //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     // Initialize OT instance.
@@ -208,15 +209,18 @@ void InitTest(void)
     otDatasetConvertToTlvs(&dataset, &datasetTlvs);
     SuccessOrQuit(otDatasetSetActiveTlvs(sInstance, &datasetTlvs));
 
-    SuccessOrQuit(otIp6SetEnabled(sInstance, true));
-    SuccessOrQuit(otThreadSetEnabled(sInstance, true));
+    if (aStartThread)
+    {
+        SuccessOrQuit(otIp6SetEnabled(sInstance, true));
+        SuccessOrQuit(otThreadSetEnabled(sInstance, true));
 
-    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    // Ensure device starts as leader.
+        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        // Ensure device starts as leader.
 
-    AdvanceTime(10000);
+        AdvanceTime(10000);
 
-    VerifyOrQuit(otThreadGetDeviceRole(sInstance) == OT_DEVICE_ROLE_LEADER);
+        VerifyOrQuit(otThreadGetDeviceRole(sInstance) == OT_DEVICE_ROLE_LEADER);
+    }
 }
 
 void FinalizeTest(void)
@@ -306,9 +310,9 @@ void PrepareService1(Srp::Client::Service &aService)
     static const char          kTxtKey3[]       = "D";
     static const uint8_t       kTxtValue3[]     = {0};
     static const otDnsTxtEntry kTxtEntries[]    = {
-           {kTxtKey1, kTxtValue1, sizeof(kTxtValue1)},
-           {kTxtKey2, kTxtValue2, sizeof(kTxtValue2)},
-           {kTxtKey3, kTxtValue3, sizeof(kTxtValue3)},
+        {kTxtKey1, kTxtValue1, sizeof(kTxtValue1)},
+        {kTxtKey2, kTxtValue2, sizeof(kTxtValue2)},
+        {kTxtKey3, kTxtValue3, sizeof(kTxtValue3)},
     };
 
     memset(&aService, 0, sizeof(aService));
@@ -963,11 +967,11 @@ void TestUpdateLeaseShortVariant(void)
     VerifyOrQuit(service1.GetState() == Srp::Client::kRemoved);
 
     //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    // Register the service again, but this time change it to request
-    // a lease time that is larger than the `LeaseConfig.mMinLease` of
-    // 27 hours. This ensures that server needs to include the Lease
-    // Option in its response (since it need to grant a different
-    // lease interval).
+    // Register the service again, but this time request a lease time
+    // larger than the server's `LeaseConfig.mMaxLease` of 27 hours, so
+    // the server grants a different (clamped) interval. Validate that
+    // the client adopts the granted lease from the Update Lease
+    // Option in the response.
 
     service1.mLease    = 100u * 3600; // 100 hours >= 27 hours.
     service1.mKeyLease = 110u * 3600;
@@ -1027,6 +1031,7 @@ void TestUpdateLeaseShortVariant(void)
 static uint16_t         sServerRxCount;
 static Ip6::MessageInfo sServerMsgInfo;
 static uint16_t         sServerLastMsgId;
+static uint16_t         sServerLastMsgLength;
 
 void HandleServerUdpReceive(void *aContext, otMessage *aMessage, const otMessageInfo *aMessageInfo)
 {
@@ -1038,11 +1043,12 @@ void HandleServerUdpReceive(void *aContext, otMessage *aMessage, const otMessage
 
     SuccessOrQuit(AsCoreType(aMessage).Read(0, header));
 
-    sServerMsgInfo   = AsCoreType(aMessageInfo);
-    sServerLastMsgId = header.GetMessageId();
+    sServerMsgInfo       = AsCoreType(aMessageInfo);
+    sServerLastMsgId     = header.GetMessageId();
+    sServerLastMsgLength = AsCoreType(aMessage).GetLength();
     sServerRxCount++;
 
-    Log("HandleServerUdpReceive(), message-id: 0x%x", header.GetMessageId());
+    Log("HandleServerUdpReceive(), message-id:0x%x, message-len:%u", sServerLastMsgId, sServerLastMsgLength);
 }
 
 void TestSrpClientDelayedResponse(void)
@@ -1060,7 +1066,7 @@ void TestSrpClientDelayedResponse(void)
 
     srpClient = &sInstance->Get<Srp::Client>();
 
-    for (uint8_t testIter = 0; testIter < 3; testIter++)
+    for (uint8_t testIter = 0; testIter < 2; testIter++)
     {
         Log("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         Log("testIter = %u", testIter);
@@ -1071,31 +1077,14 @@ void TestSrpClientDelayedResponse(void)
         Ip6::Udp::Socket  udpSocket(*sInstance, HandleServerUdpReceive, nullptr);
         Ip6::SockAddr     serverSockAddr;
         uint16_t          firstMsgId;
+        uint16_t          secondMsgId;
         Message          *response;
         Dns::UpdateHeader header;
 
         sServerRxCount = 0;
 
-        SuccessOrQuit(udpSocket.Open());
-        SuccessOrQuit(udpSocket.Bind(kServerPort, Ip6::kNetifThread));
-
-        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-        // Manually start the client with a message ID based on `testIter`
-        // We use zero in the first iteration, `0xffff` in the second
-        // iteration to test wrapping of 16-bit message ID.
-
-        switch (testIter)
-        {
-        case 0:
-            srpClient->SetNextMessageId(0);
-            break;
-        case 1:
-            srpClient->SetNextMessageId(0xffff);
-            break;
-        case 2:
-            srpClient->SetNextMessageId(0xaaaa);
-            break;
-        }
+        SuccessOrQuit(udpSocket.Open(Ip6::kNetifThreadInternal));
+        SuccessOrQuit(udpSocket.Bind(kServerPort));
 
         serverSockAddr.SetAddress(sInstance->Get<Mle::Mle>().GetMeshLocalRloc());
         serverSockAddr.SetPort(kServerPort);
@@ -1117,35 +1106,43 @@ void TestSrpClientDelayedResponse(void)
         AdvanceTime(1 * 1000);
 
         VerifyOrQuit(sServerRxCount == 1);
-        firstMsgId = sServerLastMsgId;
+        firstMsgId     = sServerLastMsgId;
+        sServerRxCount = 0;
+
+        if (testIter == 1)
+        {
+            // In the second test iteration, register a second
+            // service. Ensure that client uses a new ID for new
+            // updated SRP message (containing both services).
+
+            AdvanceTime(5 * 1000);
+
+            PrepareService2(service2);
+            SuccessOrQuit(srpClient->AddService(service2));
+
+            AdvanceTime(20 * 1000);
+            VerifyOrQuit(sServerRxCount > 1);
+            VerifyOrQuit(sServerLastMsgId != firstMsgId);
+            secondMsgId    = sServerLastMsgId;
+            sServerRxCount = 0;
+        }
+
+        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        // Wait for longer to allow client to retry a bunch of times.
+        // Ensure the same ID is used for retries.
+
+        AdvanceTime(60 * 1000);
+        VerifyOrQuit(sServerRxCount > 1);
 
         switch (testIter)
         {
         case 0:
-            VerifyOrQuit(firstMsgId == 0);
+            VerifyOrQuit(sServerLastMsgId == firstMsgId);
             break;
         case 1:
-            VerifyOrQuit(firstMsgId == 0xffff);
-            break;
-        case 2:
-            VerifyOrQuit(firstMsgId == 0xaaaa);
+            VerifyOrQuit(sServerLastMsgId == secondMsgId);
             break;
         }
-
-        if (testIter == 2)
-        {
-            AdvanceTime(2 * 1000);
-
-            PrepareService2(service2);
-            SuccessOrQuit(srpClient->AddService(service2));
-        }
-
-        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-        // Wait for longer to allow client to retry a bunch of times
-
-        AdvanceTime(20 * 1000);
-        VerifyOrQuit(sServerRxCount > 1);
-        VerifyOrQuit(sServerLastMsgId != firstMsgId);
 
         VerifyOrQuit(srpClient->GetHostInfo().GetState() != Srp::Client::kRegistered);
         VerifyOrQuit(service1.GetState() != Srp::Client::kRegistered);
@@ -1168,20 +1165,19 @@ void TestSrpClientDelayedResponse(void)
         AdvanceTime(10);
 
         //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-        // In the first two iterations, we ensure that client
-        // did successfully accept the response with older message ID.
-        // This should not be the case in the third iteration due to
-        // changes to client services after first UPdate message was
-        // sent by client.
+        // In the first test iteration, we ensure that client did
+        // successfully accept the response with first message ID.
+        // This should not be the case in the second iteration due to
+        // changes to client services after the first Update message
+        // was sent by client.
 
         switch (testIter)
         {
         case 0:
-        case 1:
             VerifyOrQuit(srpClient->GetHostInfo().GetState() == Srp::Client::kRegistered);
             VerifyOrQuit(service1.GetState() == Srp::Client::kRegistered);
             break;
-        case 2:
+        case 1:
             VerifyOrQuit(srpClient->GetHostInfo().GetState() != Srp::Client::kRegistered);
             VerifyOrQuit(service1.GetState() != Srp::Client::kRegistered);
             break;
@@ -1205,7 +1201,414 @@ void TestSrpClientDelayedResponse(void)
     Log("End of TestSrpClientDelayedResponse");
 }
 
+void TestSrpClientSingleServiceMode(void)
+{
+    static constexpr uint16_t kNumServices = 5;
+    static constexpr uint16_t kServerPort  = 53535;
+
+    static const char *kSubLabels[] = {"_longsubtypelebel11111", "_longsubtypelebel2222222", nullptr};
+
+    Srp::Client           *srpClient;
+    Srp::Client::Service   services[kNumServices];
+    Dns::Name::LabelBuffer serviceInstnaces[kNumServices];
+
+    Log("--------------------------------------------------------------------------------------------");
+    Log("TestSrpClientSingleServiceMode");
+
+    InitTest();
+
+    srpClient = &sInstance->Get<Srp::Client>();
+
+    {
+        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        // Prepare a socket to act as SRP server.
+
+        Ip6::Udp::Socket  udpSocket(*sInstance, HandleServerUdpReceive, nullptr);
+        Ip6::SockAddr     serverSockAddr;
+        uint16_t          firstMsgId;
+        uint16_t          secondMsgId;
+        uint16_t          firstMsgLength;
+        uint16_t          numServices;
+        Message          *response;
+        Dns::UpdateHeader header;
+
+        sServerRxCount = 0;
+
+        SuccessOrQuit(udpSocket.Open(Ip6::kNetifThreadInternal));
+        SuccessOrQuit(udpSocket.Bind(kServerPort));
+
+        serverSockAddr.SetAddress(sInstance->Get<Mle::Mle>().GetMeshLocalRloc());
+        serverSockAddr.SetPort(kServerPort);
+        SuccessOrQuit(srpClient->Start(serverSockAddr));
+
+        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        // Prepare five services with long service names and multiple sub-types.
+
+        for (uint16_t i = 0; i < GetArrayLength(services); i++)
+        {
+            StringWriter writer(serviceInstnaces[i], sizeof(Dns::Name::LabelBuffer));
+
+            writer.Append("IncrediblyLongServiceInstanceName-001122334455667788-%02X", i);
+
+            ClearAllBytes(services[i]);
+            services[i].mName          = "_longsrvname._udp";
+            services[i].mInstanceName  = serviceInstnaces[i];
+            services[i].mSubTypeLabels = kSubLabels;
+            services[i].mTxtEntries    = nullptr;
+            services[i].mNumTxtEntries = 0;
+            services[i].mPort          = 5536 + i;
+        }
+
+        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        // Register four services (they should still fit in an IPv6 MTU).
+
+        SuccessOrQuit(srpClient->SetHostName("SuperLongHostNameAABBCCDDEEFF001122334455667788990123457889"));
+        SuccessOrQuit(srpClient->EnableAutoHostAddress());
+
+        SuccessOrQuit(srpClient->AddService(services[0]));
+        SuccessOrQuit(srpClient->AddService(services[1]));
+        SuccessOrQuit(srpClient->AddService(services[2]));
+        SuccessOrQuit(srpClient->AddService(services[3]));
+
+        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        // Wait for a short time for the server to receive the SRP
+        // update from the client. Verify that the message is smaller
+        // than the IPv6 MTU and includes all services.
+
+        AdvanceTime(1 * 1000);
+
+        VerifyOrQuit(sServerRxCount == 1);
+        firstMsgId     = sServerLastMsgId;
+        firstMsgLength = sServerLastMsgLength;
+        sServerRxCount = 0;
+
+        VerifyOrQuit(services[0].GetState() == Srp::Client::kAdding);
+        VerifyOrQuit(services[1].GetState() == Srp::Client::kAdding);
+        VerifyOrQuit(services[2].GetState() == Srp::Client::kAdding);
+        VerifyOrQuit(services[3].GetState() == Srp::Client::kAdding);
+
+        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        // Wait longer to allow the client to retry multiple times, and
+        // ensure the same ID is used for all retries.
+
+        AdvanceTime(60 * 1000);
+        VerifyOrQuit(sServerRxCount > 1);
+        VerifyOrQuit(sServerLastMsgId == firstMsgId);
+
+        VerifyOrQuit(services[0].GetState() == Srp::Client::kAdding);
+        VerifyOrQuit(services[1].GetState() == Srp::Client::kAdding);
+        VerifyOrQuit(services[2].GetState() == Srp::Client::kAdding);
+        VerifyOrQuit(services[3].GetState() == Srp::Client::kAdding);
+
+        sServerRxCount = 0;
+
+        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        // Register a fifth service, causing the SRP update to exceed
+        // the MTU limit. The client should now enter "single service
+        // mode" and register services one by one.
+
+        SuccessOrQuit(srpClient->AddService(services[4]));
+
+        AdvanceTime(60 * 1000);
+        VerifyOrQuit(sServerRxCount > 1);
+        VerifyOrQuit(sServerLastMsgId != firstMsgId);
+        VerifyOrQuit(sServerLastMsgLength < firstMsgLength);
+
+        secondMsgId = sServerLastMsgId;
+
+        // Check that only one service is included in the message.
+
+        numServices = 0;
+
+        for (const Srp::Client::Service &service : services)
+        {
+            switch (service.GetState())
+            {
+            case Srp::Client::kToAdd:
+            case Srp::Client::kToRefresh:
+                break;
+
+            case Srp::Client::kAdding:
+            case Srp::Client::kRefreshing:
+                numServices++;
+                break;
+
+            default:
+                VerifyOrQuit(false);
+            }
+        }
+
+        VerifyOrQuit(numServices == 1);
+
+        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        // Now send a response from server accepting the registration.
+
+        response = udpSocket.NewMessage();
+        VerifyOrQuit(response != nullptr);
+
+        Log("Sending response with msg-id: 0x%x", secondMsgId);
+
+        header.SetMessageId(secondMsgId);
+        header.SetType(Dns::UpdateHeader::kTypeResponse);
+        header.SetResponseCode(Dns::UpdateHeader::kResponseSuccess);
+        SuccessOrQuit(response->Append(header));
+        SuccessOrQuit(udpSocket.SendTo(*response, sServerMsgInfo));
+
+        sServerRxCount = 0;
+        AdvanceTime(10);
+
+        // Check that exactly one service is successfully
+        // registered.
+
+        numServices = 0;
+
+        for (const Srp::Client::Service &service : services)
+        {
+            switch (service.GetState())
+            {
+            case Srp::Client::kToAdd:
+            case Srp::Client::kToRefresh:
+            case Srp::Client::kAdding:
+            case Srp::Client::kRefreshing:
+                break;
+            case Srp::Client::kRegistered:
+                numServices++;
+                break;
+
+            default:
+                VerifyOrQuit(false);
+            }
+        }
+
+        VerifyOrQuit(numServices == 1);
+
+        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        // Wait for the client to register the remaining services and
+        // validate that it used a new message ID.
+
+        AdvanceTime(60 * 1000);
+
+        VerifyOrQuit(sServerRxCount > 1);
+        VerifyOrQuit(sServerLastMsgId != secondMsgId);
+
+        // Check that all remaining services are included in
+        // the message.
+
+        numServices = 0;
+
+        for (const Srp::Client::Service &service : services)
+        {
+            switch (service.GetState())
+            {
+            case Srp::Client::kAdding:
+            case Srp::Client::kRefreshing:
+                break;
+            case Srp::Client::kRegistered:
+                numServices++;
+                break;
+
+            default:
+                VerifyOrQuit(false);
+            }
+        }
+
+        VerifyOrQuit(numServices == 1);
+    }
+
+    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    // Finalize OT instance
+
+    Log("Finalizing OT instance");
+    FinalizeTest();
+
+    Log("End of TestSrpClientSingleServiceMode");
+}
+
 #endif // OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
+
+void TestSrpServerAddressModeForceAdd(void)
+{
+    Srp::Server *srpServer;
+    Srp::Client *srpClient;
+    uint16_t     heapAllocations;
+
+    Log("--------------------------------------------------------------------------------------------");
+    Log("TestSrpServerAddressModeForceAdd");
+
+    InitTest();
+
+    srpServer = &sInstance->Get<Srp::Server>();
+    srpClient = &sInstance->Get<Srp::Client>();
+
+    heapAllocations = sHeapAllocatedPtrs.GetLength();
+
+    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    // Set address mode to `kAddressModeUnicastForceAdd`.
+
+    SuccessOrQuit(srpServer->SetAddressMode(Srp::Server::kAddressModeUnicastForceAdd));
+    VerifyOrQuit(srpServer->GetAddressMode() == Srp::Server::kAddressModeUnicastForceAdd);
+
+    VerifyOrQuit(srpServer->GetState() == Srp::Server::kStateDisabled);
+
+    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    // Start SRP server, ensure it starts quickly.
+
+    srpServer->SetEnabled(true);
+    VerifyOrQuit(srpServer->GetState() != Srp::Server::kStateDisabled);
+
+    AdvanceTime(0);
+    VerifyOrQuit(srpServer->GetState() == Srp::Server::kStateRunning);
+
+    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    // Start SRP client and validate that it discovers server.
+
+    srpClient->SetCallback(HandleSrpClientCallback, sInstance);
+
+    srpClient->EnableAutoStartMode(nullptr, nullptr);
+    VerifyOrQuit(srpClient->IsAutoStartModeEnabled());
+
+    AdvanceTime(2000);
+    VerifyOrQuit(srpClient->IsRunning());
+
+    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    // Disable SRP server. Validate that the NetData entry is removed and
+    // client detects this.
+
+    Log("Disabling SRP server");
+
+    srpServer->SetEnabled(false);
+    AdvanceTime(1);
+
+    VerifyOrQuit(!srpClient->IsRunning());
+
+    VerifyOrQuit(heapAllocations == sHeapAllocatedPtrs.GetLength());
+
+    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    // Finalize OT instance and validate all heap allocations are freed.
+
+    Log("Finalizing OT instance");
+    FinalizeTest();
+
+    VerifyOrQuit(sHeapAllocatedPtrs.IsEmpty());
+
+    Log("End of TestSrpServerAddressModeForceAdd");
+}
+
+#if OPENTHREAD_CONFIG_SRP_SERVER_FAST_START_MODE_ENABLE
+
+void TestSrpServerFastStartMode(void)
+{
+    Srp::Server          *srpServer;
+    otExternalRouteConfig route;
+    Ip6::Address          address;
+
+    Log("--------------------------------------------------------------------------------------------");
+    Log("TestSrpServerFastStartMode");
+
+    InitTest(/* aStartThread */ false);
+
+    srpServer = &sInstance->Get<Srp::Server>();
+
+    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    // Configure SRP server to use the "Fast Start Mode"/
+
+    SuccessOrQuit(srpServer->EnableFastStartMode());
+    VerifyOrQuit(srpServer->IsFastStartModeEnabled());
+
+    VerifyOrQuit(srpServer->GetState() == Srp::Server::kStateDisabled);
+
+    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    // Bring the IPv6 interface up and start Thread operation.
+
+    SuccessOrQuit(otIp6SetEnabled(sInstance, true));
+    SuccessOrQuit(otThreadSetEnabled(sInstance, true));
+
+    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    // Ensure that as soon as device attaches, the SRP server is started.
+
+    while (otThreadGetDeviceRole(sInstance) == OT_DEVICE_ROLE_DETACHED)
+    {
+        AdvanceTime(100);
+    }
+
+    VerifyOrQuit(otThreadGetDeviceRole(sInstance) == OT_DEVICE_ROLE_LEADER);
+    VerifyOrQuit(srpServer->GetState() == Srp::Server::kStateRunning);
+    VerifyOrQuit(srpServer->GetAddressMode() == Srp::Server::kAddressModeUnicastForceAdd);
+
+    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    // Add new entries in Network Data to trigger an "NetDataChanged" event
+    // and ensure that the SRP server continues to run.
+
+    AdvanceTime(10 * 1000);
+
+    VerifyOrQuit(srpServer->GetState() == Srp::Server::kStateRunning);
+
+    ClearAllBytes(route);
+    route.mStable = true;
+
+    SuccessOrQuit(otBorderRouterAddRoute(sInstance, &route));
+    SuccessOrQuit(otBorderRouterRegister(sInstance));
+
+    AdvanceTime(1 * 1000);
+
+    VerifyOrQuit(srpServer->GetState() == Srp::Server::kStateRunning);
+
+    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    // Publish an "DNS/SRP" entry in Network Data and ensure that this is
+    // correctly detected by the "Fast Start Mode" and triggers SRP server to be
+    // disabled.
+
+    SuccessOrQuit(address.FromString("fd00::1"));
+    otNetDataPublishDnsSrpServiceUnicast(sInstance, &address, /* aPort */ 1234, 0);
+
+    AdvanceTime(10 * 1000);
+    VerifyOrQuit(otNetDataIsDnsSrpServiceAdded(sInstance));
+
+    VerifyOrQuit(srpServer->IsFastStartModeEnabled());
+    VerifyOrQuit(srpServer->GetState() == Srp::Server::kStateDisabled);
+
+    // Ensure the original AddressMode is restored on SRP server
+
+    VerifyOrQuit(srpServer->GetAddressMode() == Srp::Server::kAddressModeUnicast);
+
+    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    // Unpublish the "DNS/SRP" entry in Network Data and check that
+    // the "Fast Start Mode" causes the SRP server to start again.
+
+    otNetDataUnpublishDnsSrpService(sInstance);
+
+    AdvanceTime(25 * 1000);
+    VerifyOrQuit(!otNetDataIsDnsSrpServiceAdded(sInstance));
+
+    VerifyOrQuit(srpServer->IsFastStartModeEnabled());
+    VerifyOrQuit(srpServer->GetState() == Srp::Server::kStateRunning);
+
+    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    // Start auto-enable mode and ensure "fast start mode" is turned
+    // off and the original AddressMode is restored on the SRP server.
+
+#if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+    srpServer->SetAutoEnableMode(true);
+
+    VerifyOrQuit(!srpServer->IsFastStartModeEnabled());
+    VerifyOrQuit(srpServer->IsAutoEnableMode());
+
+    VerifyOrQuit(srpServer->GetState() == Srp::Server::kStateDisabled);
+    VerifyOrQuit(srpServer->GetAddressMode() == Srp::Server::kAddressModeUnicast);
+
+    VerifyOrQuit(srpServer->EnableFastStartMode() == kErrorInvalidState);
+#endif
+
+    //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    // Finalize OT instance and validate all heap allocations are freed.
+
+    Log("Finalizing OT instance");
+    FinalizeTest();
+
+    Log("End of TestSrpServerFastStartMode");
+}
+
+#endif // OPENTHREAD_CONFIG_SRP_SERVER_FAST_START_MODE_ENABLE
 
 #endif // ENABLE_SRP_TEST
 
@@ -1222,6 +1625,11 @@ int main(void)
 #if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
     ot::TestUpdateLeaseShortVariant();
     ot::TestSrpClientDelayedResponse();
+    ot::TestSrpClientSingleServiceMode();
+#endif
+    ot::TestSrpServerAddressModeForceAdd();
+#if OPENTHREAD_CONFIG_SRP_SERVER_FAST_START_MODE_ENABLE
+    ot::TestSrpServerFastStartMode();
 #endif
 
     printf("All tests passed\n");

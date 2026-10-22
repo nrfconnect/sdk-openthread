@@ -31,8 +31,8 @@
  *   This file contains definitions for the CLI interpreter.
  */
 
-#ifndef CLI_DATASET_HPP_
-#define CLI_DATASET_HPP_
+#ifndef OT_CLI_CLI_DATASET_HPP_
+#define OT_CLI_CLI_DATASET_HPP_
 
 #include "openthread-core-config.h"
 
@@ -47,7 +47,6 @@ namespace Cli {
 
 /**
  * Implements the Dataset CLI interpreter.
- *
  */
 class Dataset : private Utils
 {
@@ -67,7 +66,6 @@ public:
      * @retval OT_ERROR_INVALID_COMMAND   Invalid or unknown CLI command.
      * @retval OT_ERROR_INVALID_ARGS      Invalid arguments.
      * @retval ...                        Error during execution of the CLI command.
-     *
      */
     otError Process(Arg aArgs[]);
 
@@ -79,7 +77,7 @@ private:
     {
         int Compare(const char *aName) const { return strcmp(aName, mName); }
 
-        constexpr static bool AreInOrder(const ComponentMapper &aFirst, const ComponentMapper &aSecond)
+        static constexpr bool AreInOrder(const ComponentMapper &aFirst, const ComponentMapper &aSecond)
         {
             return AreStringsInOrder(aFirst.mName, aSecond.mName);
         }
@@ -124,7 +122,7 @@ private:
 
     template <CommandId kCommandId> otError Process(Arg aArgs[]);
 
-    otError Print(otOperationalDatasetTlvs &aDatasetTlvs);
+    otError Print(otOperationalDatasetTlvs &aDatasetTlvs, bool aNonsensitiveOnly);
 
 #if OPENTHREAD_CONFIG_DATASET_UPDATER_ENABLE && OPENTHREAD_FTD
     otError     ProcessUpdater(Arg aArgs[]);
@@ -141,4 +139,4 @@ private:
 } // namespace Cli
 } // namespace ot
 
-#endif // CLI_DATASET_HPP_
+#endif // OT_CLI_CLI_DATASET_HPP_

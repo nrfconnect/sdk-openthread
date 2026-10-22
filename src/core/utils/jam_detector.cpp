@@ -35,12 +35,7 @@
 
 #if OPENTHREAD_CONFIG_JAM_DETECTION_ENABLE
 
-#include "common/code_utils.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/random.hpp"
 #include "instance/instance.hpp"
-#include "thread/thread_netif.hpp"
 
 namespace ot {
 namespace Utils {
@@ -101,7 +96,7 @@ void JamDetector::CheckState(void)
 {
     VerifyOrExit(mEnabled);
 
-    switch (Get<Mle::MleRouter>().GetRole())
+    switch (Get<Mle::Mle>().GetRole())
     {
     case Mle::kRoleDisabled:
         VerifyOrExit(mTimer.IsRunning());
@@ -165,7 +160,7 @@ void JamDetector::HandleTimer(void)
 
     VerifyOrExit(mEnabled);
 
-    rssi = Get<Radio>().GetRssi();
+    rssi = Get<Radio::Radio>().GetRssi();
 
     // If the RSSI is valid, check if it exceeds the threshold
     // and try to update the history bit map
@@ -193,7 +188,7 @@ void JamDetector::HandleTimer(void)
         }
     }
 
-    mTimer.Start(mSampleInterval + Random::NonCrypto::GetUint32InRange(0, kMaxRandomDelay));
+    mTimer.Start(mSampleInterval + Random::NonCrypto::GenerateUpToExcluding(kMaxRandomDelay));
 
 exit:
     return;

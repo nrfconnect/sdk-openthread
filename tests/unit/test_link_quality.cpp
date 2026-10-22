@@ -38,20 +38,17 @@ namespace ot {
 
 static Instance *sInstance;
 
-enum
-{
-    kMaxRssValue = 0,
-    kMinRssValue = -128,
+constexpr int8_t kMaxRssValue = 0;
+constexpr int8_t kMinRssValue = -128;
 
-    kStringBuffferSize = 80,
+constexpr uint16_t kStringBuffferSize = 80;
 
-    kRssAverageMaxDiff = 16,
-    kNumRssAdds        = 300,
+constexpr uint8_t  kRssAverageMaxDiff = 16;
+constexpr uint16_t kNumRssAdds        = 300;
 
-    kRawAverageBitShift = 3,
-    kRawAverageMultiple = (1 << kRawAverageBitShift),
-    kRawAverageBitMask  = (1 << kRawAverageBitShift) - 1,
-};
+constexpr uint8_t kRawAverageBitShift = 3;
+constexpr uint8_t kRawAverageMultiple = (1 << kRawAverageBitShift);
+constexpr uint8_t kRawAverageBitMask  = (1 << kRawAverageBitShift) - 1;
 
 #define MIN_RSS(_rss1, _rss2) (((_rss1) < (_rss2)) ? (_rss1) : (_rss2))
 #define MAX_RSS(_rss1, _rss2) (((_rss1) < (_rss2)) ? (_rss2) : (_rss1))
@@ -114,7 +111,7 @@ void TestLinkQualityData(RssTestData aRssData)
         PrintOutcome(linkInfo);
     }
 
-    VerifyOrQuit(linkInfo.GetLinkQuality() == aRssData.mExpectedLinkQuality);
+    VerifyOrQuit(linkInfo.GetLinkQualityIn() == aRssData.mExpectedLinkQuality);
 }
 
 // Check and verify the raw average RSS value to match the value from GetAverage().
@@ -333,30 +330,30 @@ void TestLinkQualityCalculations(void)
 {
     const int8_t      rssList1[] = {-81, -80, -79, -78, -76, -80, -77, -75, -77, -76, -77, -74};
     const RssTestData rssData1   = {
-          rssList1,         // mRssList
-          sizeof(rssList1), // mRssListSize
-          3                 // mExpectedLinkQuality
+        rssList1,         // mRssList
+        sizeof(rssList1), // mRssListSize
+        3                 // mExpectedLinkQuality
     };
 
     const int8_t      rssList2[] = {-90, -80, -85};
     const RssTestData rssData2   = {
-          rssList2,         // mRssList
-          sizeof(rssList2), // mRssListSize
-          2                 // mExpectedLinkQuality
+        rssList2,         // mRssList
+        sizeof(rssList2), // mRssListSize
+        2                 // mExpectedLinkQuality
     };
 
     const int8_t      rssList3[] = {-95, -96, -98, -99, -100, -100, -98, -99, -100, -100, -100, -100, -100};
     const RssTestData rssData3   = {
-          rssList3,         // mRssList
-          sizeof(rssList3), // mRssListSize
-          0                 // mExpectedLinkQuality
+        rssList3,         // mRssList
+        sizeof(rssList3), // mRssListSize
+        0                 // mExpectedLinkQuality
     };
 
     const int8_t      rssList4[] = {-75, -100, -100, -100, -100, -100, -95, -92, -93, -94, -93, -93};
     const RssTestData rssData4   = {
-          rssList4,         // mRssList
-          sizeof(rssList4), // mRssListSize
-          1                 // mExpectedLinkQuality
+        rssList4,         // mRssList
+        sizeof(rssList4), // mRssListSize
+        1                 // mExpectedLinkQuality
     };
 
     TestLinkQualityData(rssData1);

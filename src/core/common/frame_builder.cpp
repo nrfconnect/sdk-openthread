@@ -38,6 +38,7 @@
 #include "common/code_utils.hpp"
 #include "common/debug.hpp"
 #include "common/encoding.hpp"
+#include "common/type_traits.hpp"
 
 #if OPENTHREAD_FTD || OPENTHREAD_MTD
 #include "common/message.hpp"
@@ -45,28 +46,28 @@
 
 namespace ot {
 
-void FrameBuilder::Init(void *aBuffer, uint16_t aLength)
+void FrameBuilder::Init(void *aBuffer, uint16_t aMaxLength)
 {
     mBuffer    = static_cast<uint8_t *>(aBuffer);
     mLength    = 0;
-    mMaxLength = aLength;
+    mMaxLength = aMaxLength;
 }
 
 Error FrameBuilder::AppendUint8(uint8_t aUint8) { return Append<uint8_t>(aUint8); }
 
-Error FrameBuilder::AppendBigEndianUint16(uint16_t aUint16) { return Append<uint16_t>(BigEndian::HostSwap16(aUint16)); }
-
-Error FrameBuilder::AppendBigEndianUint32(uint32_t aUint32) { return Append<uint32_t>(BigEndian::HostSwap32(aUint32)); }
-
-Error FrameBuilder::AppendLittleEndianUint16(uint16_t aUint16)
+template <Encoding kEncoding, typename UintType> Error FrameBuilder::AppendUint(UintType aUint)
 {
-    return Append<uint16_t>(LittleEndian::HostSwap16(aUint16));
+    static_assert(TypeTraits::IsUint<UintType>::kValue, "UintType is not valid, it must be an unsigned int");
+
+    return Append<UintType>(HostSwap<kEncoding>(aUint));
 }
 
-Error FrameBuilder::AppendLittleEndianUint32(uint32_t aUint32)
-{
-    return Append<uint32_t>(LittleEndian::HostSwap32(aUint32));
-}
+template Error FrameBuilder::AppendUint<kBigEndian, uint16_t>(uint16_t aUint);
+template Error FrameBuilder::AppendUint<kBigEndian, uint32_t>(uint32_t aUint);
+template Error FrameBuilder::AppendUint<kBigEndian, uint64_t>(uint64_t aUint);
+template Error FrameBuilder::AppendUint<kLittleEndian, uint16_t>(uint16_t aUint);
+template Error FrameBuilder::AppendUint<kLittleEndian, uint32_t>(uint32_t aUint);
+template Error FrameBuilder::AppendUint<kLittleEndian, uint64_t>(uint64_t aUint);
 
 Error FrameBuilder::AppendBytes(const void *aBuffer, uint16_t aLength)
 {
@@ -90,7 +91,7 @@ Error FrameBuilder::AppendMacAddress(const Mac::Address &aMacAddress)
         break;
 
     case Mac::Address::kTypeShort:
-        error = AppendLittleEndianUint16(aMacAddress.GetShort());
+        error = AppendUint<kLittleEndian>(aMacAddress.GetShort());
         break;
 
     case Mac::Address::kTypeExtended:
@@ -117,6 +118,18 @@ exit:
     return error;
 }
 #endif
+
+void *FrameBuilder::AppendLength(uint16_t aLength)
+{
+    void *buffer = nullptr;
+
+    VerifyOrExit(CanAppend(aLength));
+    buffer = &mBuffer[mLength];
+    mLength += aLength;
+
+exit:
+    return buffer;
+}
 
 void FrameBuilder::WriteBytes(uint16_t aOffset, const void *aBuffer, uint16_t aLength)
 {

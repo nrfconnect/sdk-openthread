@@ -54,7 +54,7 @@ namespace Cli {
  * anycast
  * Done
  * @endcode
- * @cparam srp server addrmode [@ca{anycast}|@ca{unicast}]
+ * @cparam srp server addrmode [@ca{anycast}|@ca{unicast}|@ca{unicast-force-add}]
  * @par
  * Gets or sets the address mode used by the SRP server.
  * @par
@@ -78,6 +78,10 @@ template <> otError SrpServer::Process<Cmd("addrmode")>(Arg aArgs[])
         case OT_SRP_SERVER_ADDRESS_MODE_ANYCAST:
             OutputLine("anycast");
             break;
+
+        case OT_SRP_SERVER_ADDRESS_MODE_UNICAST_FORCE_ADD:
+            OutputLine("unicast-force-add");
+            break;
         }
 
         error = OT_ERROR_NONE;
@@ -89,6 +93,10 @@ template <> otError SrpServer::Process<Cmd("addrmode")>(Arg aArgs[])
     else if (aArgs[0] == "anycast")
     {
         error = otSrpServerSetAddressMode(GetInstancePtr(), OT_SRP_SERVER_ADDRESS_MODE_ANYCAST);
+    }
+    else if (aArgs[0] == "unicast-force-add")
+    {
+        error = otSrpServerSetAddressMode(GetInstancePtr(), OT_SRP_SERVER_ADDRESS_MODE_UNICAST_FORCE_ADD);
     }
 
     return error;
@@ -144,19 +152,64 @@ template <> otError SrpServer::Process<Cmd("auto")>(Arg aArgs[])
  */
 template <> otError SrpServer::Process<Cmd("domain")>(Arg aArgs[])
 {
+    return ProcessGetSet(aArgs, otSrpServerGetDomain, otSrpServerSetDomain);
+}
+
+#if OPENTHREAD_CONFIG_SRP_SERVER_FAST_START_MODE_ENABLE
+/**
+ * @cli srp server faststart (enable)
+ * @code
+ * srp server faststart enable
+ * Done
+ * @endcode
+ * @code
+ * srp server faststart
+ * Enabled
+ * Done
+ * @endcode
+ * @cparam srp server faststart [@ca{enable}]
+ * @par
+ * Enables the "Fast Start Mode" on the SRP server.
+ * @par
+ * The Fast Start Mode is designed for scenarios where a device, often a mobile device, needs to act as a provisional
+ * SRP server (e.g., functioning as a temporary Border Router). The SRP server function is enabled only if no other
+ * Border Routers (BRs) are already providing the SRP service within the Thread network. Importantly, Fast Start Mode
+ * allows the device to quickly start its SRP server functionality upon joining the network, allowing other Thread
+ * devices to quickly connect and register their services without the typical delays associated with standard Border
+ * Router initialization (and SRP server startup).
+ * @par
+ * The Fast Start Mode can be enabled when the device is in the detached or disabled state, the SRP server is currently
+ * disabled, and "auto-enable mode" is not in use.
+ * @par
+ * After successfully enabling Fast Start Mode, it can be disabled by a direct command to enable/disable the SRP
+ * server, using `srp server [enable/disable]`.
+ * @par
+ * This command requires that `OPENTHREAD_CONFIG_SRP_SERVER_FAST_START_MODE_ENABLE` be enabled.
+ * @moreinfo{@srp}.
+ * @sa otSrpServerIsFastStartModeEnabled
+ * @sa otSrpServerEnableFastStartMode
+ */
+template <> otError SrpServer::Process<Cmd("faststart")>(Arg aArgs[])
+{
     otError error = OT_ERROR_NONE;
 
     if (aArgs[0].IsEmpty())
     {
-        OutputLine("%s", otSrpServerGetDomain(GetInstancePtr()));
+        OutputEnabledDisabledStatus(otSrpServerIsFastStartModeEnabled(GetInstancePtr()));
+    }
+    else if (aArgs[0] == "enable")
+    {
+        error = otSrpServerEnableFastStartMode(GetInstancePtr());
     }
     else
     {
-        error = otSrpServerSetDomain(GetInstancePtr(), aArgs[0].GetCString());
+        error = OT_ERROR_INVALID_ARGS;
     }
 
     return error;
 }
+
+#endif // OPENTHREAD_CONFIG_SRP_SERVER_FAST_START_MODE_ENABLE
 
 /**
  * @cli srp server state
@@ -325,32 +378,35 @@ template <> otError SrpServer::Process<Cmd("host")>(Arg aArgs[])
     host = nullptr;
     while ((host = otSrpServerGetNextHost(GetInstancePtr(), host)) != nullptr)
     {
-        const otIp6Address *addresses;
-        uint8_t             addressesNum;
-        bool                isDeleted = otSrpServerHostIsDeleted(host);
+        const otIp6Address  *addresses;
+        uint8_t              addressesNum;
+        bool                 isDeleted = otSrpServerHostIsDeleted(host);
+        otSrpServerLeaseInfo leaseInfo;
 
         OutputLine("%s", otSrpServerHostGetFullName(host));
         OutputLine(kIndentSize, "deleted: %s", isDeleted ? "true" : "false");
-        if (isDeleted)
+
+        if (!isDeleted)
         {
-            continue;
-        }
+            OutputSpaces(kIndentSize);
+            OutputFormat("addresses: [");
 
-        OutputSpaces(kIndentSize);
-        OutputFormat("addresses: [");
+            addresses = otSrpServerHostGetAddresses(host, &addressesNum);
 
-        addresses = otSrpServerHostGetAddresses(host, &addressesNum);
-
-        for (uint8_t i = 0; i < addressesNum; ++i)
-        {
-            OutputIp6Address(addresses[i]);
-            if (i < addressesNum - 1)
+            for (uint8_t i = 0; i < addressesNum; ++i)
             {
-                OutputFormat(", ");
+                OutputIp6Address(addresses[i]);
+                if (i < addressesNum - 1)
+                {
+                    OutputFormat(", ");
+                }
             }
+
+            OutputLine("]");
         }
 
-        OutputLine("]");
+        otSrpServerHostGetLeaseInfo(host, &leaseInfo);
+        OutputLeaseInfo(leaseInfo, isDeleted);
     }
 
 exit:
@@ -377,6 +433,27 @@ void SrpServer::OutputHostAddresses(const otSrpServerHost *aHost)
     OutputFormat("]");
 }
 
+void SrpServer::OutputLeaseInfo(const otSrpServerLeaseInfo &aLeaseInfo, bool aIsDeleted)
+{
+    if (!aIsDeleted)
+    {
+        OutputLine(kIndentSize, "lease: %lu", ToUlong(aLeaseInfo.mLease / 1000));
+    }
+
+    OutputLine(kIndentSize, "key-lease: %lu", ToUlong(aLeaseInfo.mKeyLease / 1000));
+
+    if (!aIsDeleted)
+    {
+        OutputFormat(kIndentSize, "remaining lease: ");
+        OutputMsecDurationInSec(aLeaseInfo.mRemainingLease);
+        OutputNewLine();
+    }
+
+    OutputFormat(kIndentSize, "remaining key-lease: ");
+    OutputMsecDurationInSec(aLeaseInfo.mRemainingKeyLease);
+    OutputNewLine();
+}
+
 /**
  * @cli srp server service
  * @code
@@ -390,6 +467,8 @@ void SrpServer::OutputHostAddresses(const otSrpServerHost *aHost)
  *     ttl: 7200
  *     lease: 7200
  *     key-lease: 1209600
+ *     remaining lease: 6345.459
+ *     remaining key-lease: 1208734.459
  *     TXT: [616263, xyz=585960]
  *     host: srp-api-test-1.default.service.arpa.
  *     addresses: [fdde:ad00:beef:0:0:ff:fe00:fc10]
@@ -402,6 +481,8 @@ void SrpServer::OutputHostAddresses(const otSrpServerHost *aHost)
  *     ttl: 3600
  *     lease: 3600
  *     key-lease: 1209600
+ *     remaining lease: 2600.012
+ *     remaining key-lease: 1208600.012
  *     TXT: [616263, xyz=585960]
  *     host: srp-api-test-0.default.service.arpa.
  *     addresses: [fdde:ad00:beef:0:0:ff:fe00:fc10]
@@ -440,12 +521,13 @@ template <> otError SrpServer::Process<Cmd("service")>(Arg aArgs[])
             OutputLine("%s", otSrpServerServiceGetInstanceName(service));
             OutputLine(kIndentSize, "deleted: %s", isDeleted ? "true" : "false");
 
+            otSrpServerServiceGetLeaseInfo(service, &leaseInfo);
+
             if (isDeleted)
             {
+                OutputLeaseInfo(leaseInfo, isDeleted);
                 continue;
             }
-
-            otSrpServerServiceGetLeaseInfo(service, &leaseInfo);
 
             OutputFormat(kIndentSize, "subtypes: ");
 
@@ -470,8 +552,8 @@ template <> otError SrpServer::Process<Cmd("service")>(Arg aArgs[])
             OutputLine(kIndentSize, "priority: %u", otSrpServerServiceGetPriority(service));
             OutputLine(kIndentSize, "weight: %u", otSrpServerServiceGetWeight(service));
             OutputLine(kIndentSize, "ttl: %lu", ToUlong(otSrpServerServiceGetTtl(service)));
-            OutputLine(kIndentSize, "lease: %lu", ToUlong(leaseInfo.mLease / 1000));
-            OutputLine(kIndentSize, "key-lease: %lu", ToUlong(leaseInfo.mKeyLease / 1000));
+
+            OutputLeaseInfo(leaseInfo, isDeleted);
 
             txtData = otSrpServerServiceGetTxtData(service, &txtDataLength);
             OutputFormat(kIndentSize, "TXT: ");
@@ -489,6 +571,18 @@ template <> otError SrpServer::Process<Cmd("service")>(Arg aArgs[])
 exit:
     return error;
 }
+
+/**
+ * @cli srp server port (get)
+ * @code
+ * srp server port
+ * 53536
+ * Done
+ * @endcode
+ * @par api_copy
+ * #otSrpServerGetPort
+ */
+template <> otError SrpServer::Process<Cmd("port")>(Arg aArgs[]) { return ProcessGet(aArgs, otSrpServerGetPort); }
 
 /**
  * @cli srp server seqnum (get,set)
@@ -511,45 +605,24 @@ exit:
  */
 template <> otError SrpServer::Process<Cmd("seqnum")>(Arg aArgs[])
 {
-    otError error = OT_ERROR_NONE;
-
-    if (aArgs[0].IsEmpty())
-    {
-        OutputLine("%u", otSrpServerGetAnycastModeSequenceNumber(GetInstancePtr()));
-    }
-    else
-    {
-        uint8_t sequenceNumber;
-
-        SuccessOrExit(error = aArgs[0].ParseAsUint8(sequenceNumber));
-        error = otSrpServerSetAnycastModeSequenceNumber(GetInstancePtr(), sequenceNumber);
-    }
-
-exit:
-    return error;
+    return ProcessGetSet(aArgs, otSrpServerGetAnycastModeSequenceNumber, otSrpServerSetAnycastModeSequenceNumber);
 }
 
 otError SrpServer::Process(Arg aArgs[])
 {
-#define CmdEntry(aCommandString)                                 \
-    {                                                            \
-        aCommandString, &SrpServer::Process<Cmd(aCommandString)> \
-    }
+#define CmdEntry(aCommandString) {aCommandString, &SrpServer::Process<Cmd(aCommandString)>}
 
     static constexpr Command kCommands[] = {
         CmdEntry("addrmode"),
 #if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
         CmdEntry("auto"),
 #endif
-        CmdEntry("disable"),
-        CmdEntry("domain"),
-        CmdEntry("enable"),
-        CmdEntry("host"),
-        CmdEntry("lease"),
-        CmdEntry("seqnum"),
-        CmdEntry("service"),
-        CmdEntry("state"),
-        CmdEntry("ttl"),
+        CmdEntry("disable"),   CmdEntry("domain"), CmdEntry("enable"),
+#if OPENTHREAD_CONFIG_SRP_SERVER_FAST_START_MODE_ENABLE
+        CmdEntry("faststart"),
+#endif
+        CmdEntry("host"),      CmdEntry("lease"),  CmdEntry("port"),   CmdEntry("seqnum"),
+        CmdEntry("service"),   CmdEntry("state"),  CmdEntry("ttl"),
     };
 
     static_assert(BinarySearch::IsSorted(kCommands), "kCommands is not sorted");

@@ -45,11 +45,16 @@ cmake-build-*/**
 # Python bytecodes
 __pycache__
 
+# Python environments
+.venv
+venv/
+
 # Unit test files
 CTestTestfile.cmake
 ot-test-*
 ot_testing/
 Testing/
+tests/nexus/nexus_*
 
 # Misc
 DartConfiguration.tcl

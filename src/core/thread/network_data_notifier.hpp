@@ -31,8 +31,8 @@
  *   This file includes definitions for transmitting SVR_DATA.ntf messages.
  */
 
-#ifndef NETWORK_DATA_NOTIFIER_HPP_
-#define NETWORK_DATA_NOTIFIER_HPP_
+#ifndef OT_CORE_THREAD_NETWORK_DATA_NOTIFIER_HPP_
+#define OT_CORE_THREAD_NETWORK_DATA_NOTIFIER_HPP_
 
 #include "openthread-core-config.h"
 
@@ -40,12 +40,12 @@
 
 #include <openthread/border_router.h>
 
-#include "coap/coap.hpp"
 #include "common/message.hpp"
 #include "common/non_copyable.hpp"
 #include "common/notifier.hpp"
 #include "common/tasklet.hpp"
 #include "common/time_ticker.hpp"
+#include "thread/tmf.hpp"
 
 namespace ot {
 namespace NetworkData {
@@ -54,7 +54,6 @@ class NetworkData;
 
 /**
  * Implements the SVR_DATA.ntf transmission logic.
- *
  */
 class Notifier : public InstanceLocator, private NonCopyable
 {
@@ -66,7 +65,6 @@ public:
      * Constructor.
      *
      * @param[in] aInstance  The OpenThread instance.
-     *
      */
     explicit Notifier(Instance &aInstance);
 
@@ -76,7 +74,6 @@ public:
      * Posts a tasklet to sync new server data with leader so if there are multiple changes within the same
      * flow of execution (multiple calls to this method) they are all synchronized together and included in the same
      * message to the leader.
-     *
      */
     void HandleServerDataUpdated(void);
 
@@ -88,13 +85,11 @@ public:
      *
      * @param[in] aCallback   The callback.
      * @param[in] aContext    The context to use with @p aCallback.
-     *
      */
     void SetNetDataFullCallback(NetDataCallback aCallback, void *aContext);
 
     /**
      * Signals that network data (local or leader) is getting full.
-     *
      */
     void SignalNetworkDataFull(void) { mNetDataFullTask.Post(); }
 #endif
@@ -110,13 +105,11 @@ public:
      *
      * - It has added at least one external route entry.
      * - It has added at least one prefix entry with default-route and on-mesh flags set.
-     * - It has added at least one domain prefix (domain and on-mesh flags set).
      *
      * Does not check the current role of device.
      *
      * @retval TRUE    Device is eligible to request router role upgrade as a border router.
      * @retval FALSE   Device is not eligible to request router role upgrade as a border router.
-     *
      */
     bool IsEligibleForRouterRoleUpgradeAsBorderRouter(void) const;
 #endif
@@ -136,13 +129,10 @@ private:
     Error UpdateInconsistentData(void);
 #endif
 
-    void        HandleNotifierEvents(Events aEvents);
-    void        HandleTimer(void);
-    static void HandleCoapResponse(void                *aContext,
-                                   otMessage           *aMessage,
-                                   const otMessageInfo *aMessageInfo,
-                                   Error                aResult);
-    void        HandleCoapResponse(Error aResult);
+    void HandleNotifierEvents(Events aEvents);
+    void HandleTimer(void);
+
+    DeclareTmfResponseHandlerIn(Notifier, HandleCoapResponse);
 
 #if OPENTHREAD_CONFIG_BORDER_ROUTER_SIGNAL_NETWORK_DATA_FULL
     void HandleNetDataFull(void);
@@ -180,4 +170,4 @@ private:
 
 #endif // OPENTHREAD_FTD || OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE || OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
 
-#endif // NETWORK_DATA_NOTIFIER_HPP_
+#endif // OT_CORE_THREAD_NETWORK_DATA_NOTIFIER_HPP_

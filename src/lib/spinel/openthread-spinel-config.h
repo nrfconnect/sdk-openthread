@@ -31,12 +31,11 @@
  *   This file includes compile-time configuration constants for OpenThread.
  */
 
-#ifndef OPENTHREAD_SPINEL_CONFIG_H_
-#define OPENTHREAD_SPINEL_CONFIG_H_
+#ifndef OT_LIB_SPINEL_OPENTHREAD_SPINEL_CONFIG_H_
+#define OT_LIB_SPINEL_OPENTHREAD_SPINEL_CONFIG_H_
 
 /**
  * Include project specific lib config file if defined.
- *
  */
 #ifdef OPENTHREAD_PROJECT_LIB_CONFIG_FILE
 #include OPENTHREAD_PROJECT_LIB_CONFIG_FILE
@@ -47,7 +46,6 @@
  *
  * Specifies the rx frame buffer size used by `SpinelInterface` in RCP host (posix) code. This is applicable/used when
  * `RadioSpinel` platform is used.
- *
  */
 #ifndef OPENTHREAD_LIB_SPINEL_RX_FRAME_BUFFER_SIZE
 #define OPENTHREAD_LIB_SPINEL_RX_FRAME_BUFFER_SIZE 8192
@@ -57,7 +55,6 @@
  * @def OPENTHREAD_LIB_SPINEL_LOG_MAX_SIZE
  *
  * The maximum log string size (number of chars).
- *
  */
 #ifndef OPENTHREAD_LIB_SPINEL_LOG_MAX_SIZE
 #define OPENTHREAD_LIB_SPINEL_LOG_MAX_SIZE 1024
@@ -67,7 +64,6 @@
  * @def OPENTHREAD_LIB_SPINEL_NCP_LOG_MAX_SIZE
  *
  * The maximum OpenThread log string size (number of chars) supported by NCP using Spinel `StreamWrite`.
- *
  */
 #ifndef OPENTHREAD_LIB_SPINEL_NCP_LOG_MAX_SIZE
 #define OPENTHREAD_LIB_SPINEL_NCP_LOG_MAX_SIZE 150
@@ -77,7 +73,6 @@
  * @def OPENTHREAD_SPINEL_CONFIG_OPENTHREAD_MESSAGE_ENABLE
  *
  * Define 1 to enable feeding an OpenThread message to encoder/decoder.
- *
  */
 #ifndef OPENTHREAD_SPINEL_CONFIG_OPENTHREAD_MESSAGE_ENABLE
 #define OPENTHREAD_SPINEL_CONFIG_OPENTHREAD_MESSAGE_ENABLE 0
@@ -88,17 +83,38 @@
  *
  * Defines the max count of RCP failures allowed to be recovered.
  * 0 means to disable RCP failure recovering.
- *
  */
 #ifndef OPENTHREAD_SPINEL_CONFIG_RCP_RESTORATION_MAX_COUNT
 #define OPENTHREAD_SPINEL_CONFIG_RCP_RESTORATION_MAX_COUNT 0
 #endif
 
 /**
+ * @def OPENTHREAD_SPINEL_CONFIG_RCP_KEY_ID_MODE_CHECK_COMPATIBILITY_WORKAROUND_ENABLE
+ *
+ * Define to 1 to enable backward compatibility workaround for Key ID Mode check in RCP.
+ *
+ * Older RCP builds enforce a validation check in `NcpBase` expecting the legacy bit-shifted value `(1 << 3)` for
+ * Key ID Mode 1. When enabled, `RadioSpinel` maps `aKeyIdMode` to the legacy bit-shifted value `(1 << 3)` when
+ * setting `SPINEL_PROP_RCP_MAC_KEY` to maintain compatibility with older RCP builds.
+ */
+#ifndef OPENTHREAD_SPINEL_CONFIG_RCP_KEY_ID_MODE_CHECK_COMPATIBILITY_WORKAROUND_ENABLE
+#define OPENTHREAD_SPINEL_CONFIG_RCP_KEY_ID_MODE_CHECK_COMPATIBILITY_WORKAROUND_ENABLE 1
+#endif
+
+/**
+ * @def OPENTHREAD_SPINEL_CONFIG_MAX_SRC_MATCH_ENTRIES
+ *
+ * Defines size of the local source match table used by RadioSpinel
+ * when OPENTHREAD_SPINEL_CONFIG_RCP_RESTORATION_MAX_COUNT is used.
+ */
+#ifndef OPENTHREAD_SPINEL_CONFIG_MAX_SRC_MATCH_ENTRIES
+#define OPENTHREAD_SPINEL_CONFIG_MAX_SRC_MATCH_ENTRIES OPENTHREAD_CONFIG_MLE_MAX_CHILDREN
+#endif
+
+/**
  * @def OPENTHREAD_SPINEL_CONFIG_ABORT_ON_UNEXPECTED_RCP_RESET_ENABLE
  *
  * Define 1 to abort the host when receiving unexpected reset from RCP.
- *
  */
 #ifndef OPENTHREAD_SPINEL_CONFIG_ABORT_ON_UNEXPECTED_RCP_RESET_ENABLE
 #define OPENTHREAD_SPINEL_CONFIG_ABORT_ON_UNEXPECTED_RCP_RESET_ENABLE 0
@@ -110,7 +126,6 @@
  * This setting configures the interval (in units of microseconds) for host-rcp
  * time sync. The host will recalculate the time offset between host and RCP
  * every interval.
- *
  */
 #ifndef OPENTHREAD_SPINEL_CONFIG_RCP_TIME_SYNC_INTERVAL
 #define OPENTHREAD_SPINEL_CONFIG_RCP_TIME_SYNC_INTERVAL (60 * 1000 * 1000)
@@ -120,7 +135,6 @@
  * @def OPENTHREAD_SPINEL_CONFIG_BROADCAST_IID
  *
  * Define broadcast IID for spinel frames dedicated to all hosts in multipan configuration.
- *
  */
 #ifndef OPENTHREAD_SPINEL_CONFIG_BROADCAST_IID
 #define OPENTHREAD_SPINEL_CONFIG_BROADCAST_IID SPINEL_HEADER_IID_3
@@ -130,17 +144,24 @@
  * @def OPENTHREAD_SPINEL_CONFIG_VENDOR_HOOK_ENABLE
  *
  * Enables compilation of vendor specific code for Spinel
- *
  */
 #ifndef OPENTHREAD_SPINEL_CONFIG_VENDOR_HOOK_ENABLE
 #define OPENTHREAD_SPINEL_CONFIG_VENDOR_HOOK_ENABLE 0
 #endif
 
 /**
+ * @def OPENTHREAD_SPINEL_CONFIG_COMPATIBILITY_ERROR_CALLBACK_ENABLE
+ *
+ * Enables compatibility error callback in Spinel
+ */
+#ifndef OPENTHREAD_SPINEL_CONFIG_COMPATIBILITY_ERROR_CALLBACK_ENABLE
+#define OPENTHREAD_SPINEL_CONFIG_COMPATIBILITY_ERROR_CALLBACK_ENABLE 0
+#endif
+
+/**
  * @def OPENTHREAD_SPINEL_CONFIG_VENDOR_HOOK_HEADER
  *
  * Header file defining class VendorRadioSpinel
- *
  */
 #ifndef OPENTHREAD_SPINEL_CONFIG_VENDOR_HOOK_HEADER
 #define OPENTHREAD_SPINEL_CONFIG_VENDOR_HOOK_HEADER "lib/spinel/example_vendor_hook.hpp"
@@ -150,10 +171,45 @@
  * @def OPENTHREAD_SPINEL_CONFIG_RCP_TX_WAIT_TIME_SECS
  *
  * Defines the Tx wait duration in seconds.
- *
  */
 #ifndef OPENTHREAD_SPINEL_CONFIG_RCP_TX_WAIT_TIME_SECS
 #define OPENTHREAD_SPINEL_CONFIG_RCP_TX_WAIT_TIME_SECS 5
 #endif
 
-#endif // OPENTHREAD_SPINEL_CONFIG_H_
+/**
+ * @def OPENTHREAD_SPINEL_CONFIG_COPROCESSOR_RESET_FAILURE_CALLBACK_ENABLE
+ *
+ * Enables Co-processor reset failure callback in Spinel driver
+ */
+#ifndef OPENTHREAD_SPINEL_CONFIG_COPROCESSOR_RESET_FAILURE_CALLBACK_ENABLE
+#define OPENTHREAD_SPINEL_CONFIG_COPROCESSOR_RESET_FAILURE_CALLBACK_ENABLE 0
+#endif
+
+/**
+ * @def OPENTHREAD_SPINEL_CONFIG_SKIP_RESET_IF_READY
+ *
+ * Enables skipping reset if it's ready.
+ */
+#ifndef OPENTHREAD_SPINEL_CONFIG_SKIP_RESET_IF_READY
+#if defined(OPENTHREAD_CONFIG_MULTIPAN_RCP_ENABLE) && OPENTHREAD_CONFIG_MULTIPAN_RCP_ENABLE
+// Avoid resetting the device twice in a row in Multipan RCP architecture
+#define OPENTHREAD_SPINEL_CONFIG_SKIP_RESET_IF_READY 1
+#else
+#define OPENTHREAD_SPINEL_CONFIG_SKIP_RESET_IF_READY 0
+#endif
+#endif
+
+/**
+ * @def OPENTHREAD_SPINEL_CONFIG_MAX_INTERFACE_ID
+ *
+ * Specifies the maximum number of Spinel interface IDs.
+ */
+#ifndef OPENTHREAD_SPINEL_CONFIG_MAX_INTERFACE_ID
+#if defined(OPENTHREAD_CONFIG_MULTIPAN_RCP_ENABLE) && OPENTHREAD_CONFIG_MULTIPAN_RCP_ENABLE
+#define OPENTHREAD_SPINEL_CONFIG_MAX_INTERFACE_ID 4
+#else
+#define OPENTHREAD_SPINEL_CONFIG_MAX_INTERFACE_ID 1
+#endif
+#endif
+
+#endif // OT_LIB_SPINEL_OPENTHREAD_SPINEL_CONFIG_H_

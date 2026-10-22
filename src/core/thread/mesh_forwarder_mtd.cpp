@@ -37,27 +37,13 @@
 
 namespace ot {
 
-void MeshForwarder::SendMessage(OwnedPtr<Message> aMessagePtr)
-{
-    Message &message = *aMessagePtr.Release();
-
-    message.SetDirectTransmission();
-    message.SetOffset(0);
-    message.SetDatagramTag(0);
-    message.SetTimestampToNow();
-
-    mSendQueue.Enqueue(message);
-    mScheduleTransmissionTask.Post();
-
-#if (OPENTHREAD_CONFIG_MAX_FRAMES_IN_DIRECT_TX_QUEUE > 0)
-    ApplyDirectTxQueueLimit(message);
-#endif
-}
-
-Error MeshForwarder::EvictMessage(Message::Priority aPriority)
+Error MeshForwarder::EvictMessage(Message::Priority aPriority, EvictReason aEvictReason)
 {
     Error    error = kErrorNotFound;
     Message *message;
+
+    error = RemoveUnsecureReassemblyMessage(aEvictReason);
+    VerifyOrExit(error == kErrorNotFound);
 
 #if OPENTHREAD_CONFIG_DELAY_AWARE_QUEUE_MANAGEMENT_ENABLE
     error = RemoveAgedMessages();
@@ -66,9 +52,11 @@ Error MeshForwarder::EvictMessage(Message::Priority aPriority)
 
     VerifyOrExit((message = mSendQueue.GetTail()) != nullptr);
 
+    VerifyOrExit(!message->GetDoNotEvict());
+
     if (message->GetPriority() < static_cast<uint8_t>(aPriority))
     {
-        EvictMessage(*message);
+        FinalizeAndRemoveMessage(*message, kErrorNoBufs, kMessageEvict);
         ExitNow(error = kErrorNone);
     }
 

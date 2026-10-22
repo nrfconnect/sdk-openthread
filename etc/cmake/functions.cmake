@@ -27,8 +27,12 @@
 #
 
 function(ot_git_version git_version)
+    set(git_describe_args describe --dirty --always)
+    if(OT_GIT_DESCRIBE_LIGHTWEIGHT_TAGS)
+        list(APPEND git_describe_args --tags)
+    endif()
     execute_process(
-        COMMAND git describe --dirty --always
+        COMMAND git ${git_describe_args}
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         OUTPUT_VARIABLE GIT_REV OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET

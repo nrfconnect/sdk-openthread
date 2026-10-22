@@ -26,8 +26,8 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef BLE_SECURE_HPP_
-#define BLE_SECURE_HPP_
+#ifndef OT_CORE_RADIO_BLE_SECURE_HPP_
+#define OT_CORE_RADIO_BLE_SECURE_HPP_
 
 #include "openthread-core-config.h"
 
@@ -35,6 +35,7 @@
 
 #include <openthread/ble_secure.h>
 
+#include "common/notifier.hpp"
 #include "meshcop/meshcop.hpp"
 #include "meshcop/secure_transport.hpp"
 #include "meshcop/tcat_agent.hpp"
@@ -48,29 +49,33 @@ namespace ot {
 
 namespace Ble {
 
-class BleSecure : public InstanceLocator, private NonCopyable
+#if !OPENTHREAD_CONFIG_SECURE_TRANSPORT_ENABLE
+#error "BLE TCAT feature requires `OPENTHREAD_CONFIG_SECURE_TRANSPORT_ENABLE`"
+#endif
+
+class BleSecure : public InstanceLocator, public MeshCoP::Tls::Extension, private NonCopyable
 {
+    friend class ot::Notifier;
+
 public:
     /**
      * Pointer to call when the secure BLE connection state changes.
      *
-     *  Please see otHandleBleSecureConnect for details.
-     *
+     *  Please see #otHandleBleSecureConnect for details.
      */
     typedef otHandleBleSecureConnect ConnectCallback;
 
     /**
      * Pointer to call when data was received over the TLS connection.
-     * If line mode is activated the function is called only after EOL has been received.
+     * If line mode is active the function is called only after EOL has been received.
+     * If TLV mode is active the function is called after a complete TLV has been received.
      *
-     *  Please see otHandleBleSecureReceive for details.
-     *
+     *  Please see #otHandleBleSecureReceive for details.
      */
     typedef otHandleBleSecureReceive ReceiveCallback;
 
     /**
      * Represents a TCAT command class.
-     *
      */
     typedef MeshCoP::TcatAgent::CommandClass CommandClass;
 
@@ -78,66 +83,91 @@ public:
      * Constructor initializes the object.
      *
      * @param[in]  aInstance    A reference to the OpenThread instance.
-     *
      */
     explicit BleSecure(Instance &aInstance);
 
     /**
      * Starts the secure BLE agent.
      *
+     * See #otBleSecureStart for more details.
+     *
      * @param[in]  aConnectHandler  A pointer to a function that will be called when the connection
      *                              state changes.
      * @param[in]  aReceiveHandler  A pointer to a function that will be called once data has been received
      *                              over the TLS connection.
-     * @param[in]  aTlvMode         A boolean value indicating if line mode shall be activated.
+     * @param[in]  aTlvMode         A boolean value indicating if TLV mode (TRUE) shall be activated or
+     *                              line mode (FALSE).
      * @param[in]  aContext         A pointer to arbitrary context information. May be NULL if not used.
      *
      * @retval kErrorNone       Successfully started the BLE agent.
      * @retval kErrorAlready    Already started.
-     *
      */
     Error Start(ConnectCallback aConnectHandler, ReceiveCallback aReceiveHandler, bool aTlvMode, void *aContext);
 
     /**
-     * Enables the TCAT protocol over BLE Secure.
+     * Sets the TCAT Vendor Info object.
      *
-     * @param[in]  aHandler          Callback to a function that is called when the join operation completes.
+     * See #otBleSecureSetTcatVendorInfo for more details.
      *
-     * @retval kErrorNone           Successfully started the BLE Secure Joiner role.
-     * @retval kErrorInvalidArgs    The aVendorInfo is invalid.
-     * @retval kErrorInvaidState    The BLE function has not been started or line mode is not selected.
+     * @param[in] aVendorInfo A pointer to the Vendor Information (MUST remain valid after the method call).
      *
+     * @retval kErrorNone         Successfully set vendor info.
+     * @retval kErrorInvalidArgs  Vendor info could not be set.
      */
-    Error TcatStart(MeshCoP::TcatAgent::JoinCallback aHandler);
+    Error SetTcatVendorInfo(const MeshCoP::TcatAgent::VendorInfo &aVendorInfo)
+    {
+        return Get<MeshCoP::TcatAgent>().SetTcatVendorInfo(aVendorInfo);
+    }
 
     /**
-     * Set the TCAT Vendor Info object
+     * Enables the TCAT protocol over BLE Secure.
      *
-     * @param[in] aVendorInfo A pointer to the Vendor Information (must remain valid after the method call).
+     * @param[in]  aJoinHandler   Callback to a function that is called when a network join operation
+     *                            completes, under guidance of a TCAT Commissioner. This handler uses
+     *                            the context (aContext) parameter already set with #Start().
      *
+     * @retval kErrorNone          Successfully started TCAT over BLE Secure.
+     * @retval kErrorInvalidArgs   Vendor info is invalid, see #TcatSetVendorInfo.
+     * @retval kErrorInvalidState  The BLE function is not started yet or TLV mode is not selected.
      */
-    Error TcatSetVendorInfo(const MeshCoP::TcatAgent::VendorInfo &aVendorInfo)
-    {
-        return mTcatAgent.SetTcatVendorInfo(aVendorInfo);
-    }
+    Error TcatStart(MeshCoP::TcatAgent::JoinCallback aJoinHandler);
 
     /**
      * Stops the secure BLE agent.
      *
+     * See #otBleSecureStop for more details.
      */
     void Stop(void);
 
     /**
+     * Sets the TCAT agent over BLE Secure into active or standby state.
+     *
+     * See #otBleSecureTcatActive for more details.
+     *
+     * @param[in] aActive     TRUE to activate TCAT agent, FALSE to set it to standby.
+     * @param[in] aDelayMs    Delay in ms before activating TCAT, or 0 for immediate.
+     * @param[in] aDurationMs Duration in ms of TCAT activation, or 0 for indefinite.
+     *                        If a duration is given, then kStateActiveTemporary is used.
+     *
+     * @retval kErrorNone           Successfully set TCAT over BLE Secure to requested state.
+     * @retval kErrorInvalidState   TCAT is not in a state that can transition to the requested state.
+     */
+    Error TcatActive(bool aActive, uint32_t aDelayMs, uint32_t aDurationMs);
+
+    /**
      * Initializes TLS session with a peer using an already open BLE connection.
      *
-     * @retval kErrorNone  Successfully started TLS connection.
-     *
+     * @retval kErrorNone          Successfully started TLS connection.
+     * @retval kErrorSecurity      TLS security error during session establishment.
+     * @retval kErrorInvalidState  BLE link is not active.
+     * @retval kErrorNoBufs        Failure in buffer memory allocation.
+     * @retval kErrorInvalidArgs   Internal TLS stack error.
+     * @retval kErrorFailed        General TLS error.
      */
     Error Connect(void);
 
     /**
-     * Stops the BLE and TLS connection.
-     *
+     * Stops the BLE and TLS connections.
      */
     void Disconnect(void);
 
@@ -146,7 +176,6 @@ public:
      *
      * @retval TRUE  If TLS session is active.
      * @retval FALSE If TLS session is not active.
-     *
      */
     bool IsConnectionActive(void) const { return mTls.IsConnectionActive(); }
 
@@ -155,216 +184,48 @@ public:
      *
      * @retval TRUE   The TLS session is connected.
      * @retval FALSE  The TLS session is not connected.
-     *
      */
     bool IsConnected(void) const { return mTls.IsConnected(); }
 
     /**
-     * Indicates whether or not the TCAT agent is enabled.
+     * Indicates whether or not the TCAT agent is started over BLE secure.
      *
-     * @retval TRUE   The TCAT agent is enabled.
-     * @retval FALSE  The TCAT agent is not enabled.
-     *
+     * @retval TRUE   The TCAT agent is started, communicating over BLE secure.
+     * @retval FALSE  The TCAT agent is disabled on BLE secure.
      */
-    bool IsTcatEnabled(void) const { return mTcatAgent.IsEnabled(); }
+    bool IsTcatAgentStarted(void) const { return Get<MeshCoP::TcatAgent>().IsStarted(); }
 
     /**
-     * Indicates whether or not a TCAT command class is authorized for use.
+     * Indicates whether or not a TCAT command class is authorized for use by the current TCAT Commissioner.
      *
-     * @param[in]  aInstance  A pointer to an OpenThread instance.
+     * @param[in]  aInstance      A pointer to an OpenThread instance.
      * @param[in]  aCommandClass  A command class to subject to authorization check.
      *
-     * @retval TRUE   The command class is authorized for use by the present TCAT commissioner.
+     * @retval TRUE   The command class is authorized for use by the current TCAT commissioner.
      * @retval FALSE  The command class is not authorized for use.
-     *
      */
     bool IsCommandClassAuthorized(CommandClass aCommandClass) const
     {
-        return mTcatAgent.IsCommandClassAuthorized(aCommandClass);
+        return Get<MeshCoP::TcatAgent>().IsCommandClassAuthorized(aCommandClass);
     }
 
     /**
-     * Sets the PSK.
+     * Sets the PSK for the TLS connection over BLE secure.
      *
      * @param[in]  aPsk        A pointer to the PSK.
      * @param[in]  aPskLength  The PSK length.
      *
      * @retval kErrorNone         Successfully set the PSK.
      * @retval kErrorInvalidArgs  The PSK is invalid.
-     *
      */
     Error SetPsk(const uint8_t *aPsk, uint8_t aPskLength) { return mTls.SetPsk(aPsk, aPskLength); }
 
     /**
-     * Sets the PSK.
+     * Sets the PSK for the TLS connection over BLE secure.
      *
      * @param[in]  aPskd  A Joiner PSKd.
-     *
      */
     void SetPsk(const MeshCoP::JoinerPskd &aPskd);
-
-#ifdef MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
-    /**
-     * Sets the Pre-Shared Key (PSK) for TLS sessions identified by a PSK.
-     *
-     * TLS mode "TLS with AES 128 CCM 8" for secure BLE.
-     *
-     * @param[in]  aPsk          A pointer to the PSK.
-     * @param[in]  aPskLength    The PSK char length.
-     * @param[in]  aPskIdentity  The Identity Name for the PSK.
-     * @param[in]  aPskIdLength  The PSK Identity Length.
-     *
-     */
-    void SetPreSharedKey(const uint8_t *aPsk, uint16_t aPskLength, const uint8_t *aPskIdentity, uint16_t aPskIdLength)
-    {
-        mTls.SetPreSharedKey(aPsk, aPskLength, aPskIdentity, aPskIdLength);
-    }
-#endif // MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
-
-#ifdef MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
-    /**
-     * Sets a X509 certificate with corresponding private key for TLS session.
-     *
-     * TLS mode "ECDHE ECDSA with AES 128 CCM 8" for secure BLE.
-     *
-     * @param[in]  aX509Cert          A pointer to the PEM formatted X509 PEM certificate.
-     * @param[in]  aX509Length        The length of certificate.
-     * @param[in]  aPrivateKey        A pointer to the PEM formatted private key.
-     * @param[in]  aPrivateKeyLength  The length of the private key.
-     *
-     */
-    void SetCertificate(const uint8_t *aX509Cert,
-                        uint32_t       aX509Length,
-                        const uint8_t *aPrivateKey,
-                        uint32_t       aPrivateKeyLength)
-    {
-        mTls.SetCertificate(aX509Cert, aX509Length, aPrivateKey, aPrivateKeyLength);
-    }
-
-    /**
-     * Sets the trusted top level CAs. It is needed for validate the certificate of the peer.
-     *
-     * TLS mode "ECDHE ECDSA with AES 128 CCM 8" for secure BLE.
-     *
-     * @param[in]  aX509CaCertificateChain  A pointer to the PEM formatted X509 CA chain.
-     * @param[in]  aX509CaCertChainLength   The length of chain.
-     *
-     */
-    void SetCaCertificateChain(const uint8_t *aX509CaCertificateChain, uint32_t aX509CaCertChainLength)
-    {
-        mTls.SetCaCertificateChain(aX509CaCertificateChain, aX509CaCertChainLength);
-    }
-#endif // MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
-
-#if defined(MBEDTLS_BASE64_C) && defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
-    /**
-     * Returns the peer x509 certificate base64 encoded.
-     *
-     * TLS mode "ECDHE ECDSA with AES 128 CCM 8" for secure BLE.
-     *
-     * @param[out]  aPeerCert        A pointer to the base64 encoded certificate buffer.
-     * @param[out]  aCertLength      On input, the size the max size of @p aPeerCert.
-     *                               On output, the length of the base64 encoded peer certificate.
-     *
-     * @retval kErrorNone           Successfully get the peer certificate.
-     * @retval kErrorInvalidArgs    @p aInstance or @p aCertLength is invalid.
-     * @retval kErrorInvalidState   Not connected yet.
-     * @retval kErrorNoBufs         Can't allocate memory for certificate.
-     *
-     */
-    Error GetPeerCertificateBase64(unsigned char *aPeerCert, size_t *aCertLength);
-#endif // defined(MBEDTLS_BASE64_C) && defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
-
-#if defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
-    /**
-     * Returns an attribute value identified by its OID from the subject
-     * of the peer x509 certificate. The peer OID is provided in binary format.
-     * The attribute length is set if the attribute was successfully read or zero
-     * if unsuccessful. The ASN.1 type as is set as defineded in the ITU-T X.690 standard
-     * if the attribute was successfully read.
-     *
-     * @param[in]      aOid                  A pointer to the OID to be found.
-     * @param[in]      aOidLength            The length of the OID.
-     * @param[out]     aAttributeBuffer      A pointer to the attribute buffer.
-     * @param[in,out]  aAttributeLength      On input, the size the max size of @p aAttributeBuffer.
-     *                                           On output, the length of the attribute written to the buffer.
-     * @param[out]  aAsn1Type                A pointer to the ASN.1 type of the attribute written to the buffer.
-     *
-     * @retval kErrorInvalidState   Not connected yet.
-     * @retval kErrorNone           Successfully read attribute.
-     * @retval kErrorNoBufs         Insufficient memory for storing the attribute value.
-     *
-     */
-    Error GetPeerSubjectAttributeByOid(const char *aOid,
-                                       size_t      aOidLength,
-                                       uint8_t    *aAttributeBuffer,
-                                       size_t     *aAttributeLength,
-                                       int        *aAsn1Type)
-    {
-        return mTls.GetPeerSubjectAttributeByOid(aOid, aOidLength, aAttributeBuffer, aAttributeLength, aAsn1Type);
-    }
-
-    /**
-     * Returns an attribute value for the OID 1.3.6.1.4.1.44970.x from the v3 extensions of
-     * the peer x509 certificate, where the last digit x is set to aThreadOidDescriptor.
-     * The attribute length is set if the attribute was successfully read or zero if unsuccessful.
-     * Requires a connection to be active.
-     *
-     * @param[in]      aThreadOidDescriptor  The last digit of the Thread attribute OID.
-     * @param[out]     aAttributeBuffer      A pointer to the attribute buffer.
-     * @param[in,out]  aAttributeLength      On input, the size the max size of @p aAttributeBuffer.
-     *                                       On output, the length of the attribute written to the buffer.
-     *
-     * @retval kErrorNone             Successfully read attribute.
-     * @retval kErrorNotFound         The requested attribute was not found.
-     * @retval kErrorNoBufs           Insufficient memory for storing the attribute value.
-     * @retval kErrorInvalidState     Not connected yet.
-     * @retval kErrorNotImplemented   The value of aThreadOidDescriptor is >127.
-     * @retval kErrorParse            The certificate extensions could not be parsed.
-     *
-     */
-    Error GetThreadAttributeFromPeerCertificate(int      aThreadOidDescriptor,
-                                                uint8_t *aAttributeBuffer,
-                                                size_t  *aAttributeLength)
-    {
-        return mTls.GetThreadAttributeFromPeerCertificate(aThreadOidDescriptor, aAttributeBuffer, aAttributeLength);
-    }
-#endif // defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
-
-    /**
-     * Returns an attribute value for the OID 1.3.6.1.4.1.44970.x from the v3 extensions of
-     * the own x509 certificate, where the last digit x is set to aThreadOidDescriptor.
-     * The attribute length is set if the attribute was successfully read or zero if unsuccessful.
-     * Requires a connection to be active.
-     *
-     * @param[in]      aThreadOidDescriptor  The last digit of the Thread attribute OID.
-     * @param[out]     aAttributeBuffer      A pointer to the attribute buffer.
-     * @param[in,out]  aAttributeLength      On input, the size the max size of @p aAttributeBuffer.
-     *                                       On output, the length of the attribute written to the buffer.
-     *
-     * @retval kErrorNone             Successfully read attribute.
-     * @retval kErrorNotFound         The requested attribute was not found.
-     * @retval kErrorNoBufs           Insufficient memory for storing the attribute value.
-     * @retval kErrorInvalidState     Not connected yet.
-     * @retval kErrorNotImplemented   The value of aThreadOidDescriptor is >127.
-     * @retval kErrorParse            The certificate extensions could not be parsed.
-     *
-     */
-    Error GetThreadAttributeFromOwnCertificate(int      aThreadOidDescriptor,
-                                               uint8_t *aAttributeBuffer,
-                                               size_t  *aAttributeLength)
-    {
-        return mTls.GetThreadAttributeFromOwnCertificate(aThreadOidDescriptor, aAttributeBuffer, aAttributeLength);
-    }
-
-    /**
-     * Sets the authentication mode for the BLE secure connection. It disables or enables the verification
-     * of peer certificate.
-     *
-     * @param[in]  aVerifyPeerCertificate  true, if the peer certificate should be verified
-     *
-     */
-    void SetSslAuthMode(bool aVerifyPeerCertificate) { mTls.SetSslAuthMode(aVerifyPeerCertificate); }
 
     /**
      * Sends a secure BLE message.
@@ -378,7 +239,6 @@ public:
      * @retval kErrorNone          Successfully sent message.
      * @retval kErrorNoBufs        Failed to allocate buffer memory.
      * @retval kErrorInvalidState  TLS connection was not initialized.
-     *
      */
     Error SendMessage(Message &aMessage);
 
@@ -391,30 +251,32 @@ public:
      * @retval kErrorNone          Successfully sent data.
      * @retval kErrorNoBufs        Failed to allocate buffer memory.
      * @retval kErrorInvalidState  TLS connection was not initialized.
-     *
      */
     Error Send(uint8_t *aBuf, uint16_t aLength);
 
     /**
-     * Sends a secure BLE data packet containing a TCAT Send Application Data TLV.
+     * Sends a secure BLE data packet containing a TCAT application protocol TLV.
      *
-     * @param[in]  aBuf            A pointer to the data to send as the Value of the TCAT Send Application Data TLV.
-     * @param[in]  aLength         A number indicating the length of the data buffer.
+     * @param[in]  aApplicationProtocol  An application protocol the data is directed to.
+     * @param[in]  aBuf                  A pointer to the data to send as the Value of the TCAT application TLV.
+     * @param[in]  aLength               A number indicating the length of the data buffer.
      *
-     * @retval kErrorNone          Successfully sent data.
-     * @retval kErrorNoBufs        Failed to allocate buffer memory.
-     * @retval kErrorInvalidState  TLS connection was not initialized.
-     *
+     * @retval kErrorNone                Successfully sent data.
+     * @retval kErrorNoBufs              Failed to allocate buffer memory.
+     * @retval kErrorInvalidState        TLS connection was not initialized.
+     * @retval kErrorRejected            Application protocol is response with data or status but no response is
+     *                                   pending.
      */
-    Error SendApplicationTlv(uint8_t *aBuf, uint16_t aLength);
+    Error SendApplicationTlv(MeshCoP::TcatAgent::TcatApplicationProtocol aApplicationProtocol,
+                             uint8_t                                    *aBuf,
+                             uint16_t                                    aLength);
 
     /**
-     * Sends all remaining bytes in the send buffer.
+     * Flushes i.e. sends all remaining bytes in the send buffer.
      *
      * @retval kErrorNone          Successfully enqueued data into the output interface.
      * @retval kErrorNoBufs        Failed to allocate buffer memory.
      * @retval kErrorInvalidState  TLS connection was not initialized.
-     *
      */
     Error Flush(void);
 
@@ -423,15 +285,13 @@ public:
      *
      * @param[in]  aBuf            A pointer to the data received.
      * @param[in]  aLength         A number indicating the length of the data buffer.
-     *
      */
-    Error HandleBleReceive(uint8_t *aBuf, uint16_t aLength);
+    void HandleBleReceive(uint8_t *aBuf, uint16_t aLength);
 
     /**
      * Used to notify the secure BLE server that a BLE Device has been connected.
      *
      * @param[in]  aConnectionId    The identifier of the open connection.
-     *
      */
     void HandleBleConnected(uint16_t aConnectionId);
 
@@ -439,33 +299,71 @@ public:
      * Used to notify the secure BLE server that the BLE Device has been disconnected.
      *
      * @param[in]  aConnectionId    The identifier of the open connection.
-     *
      */
     void HandleBleDisconnected(uint16_t aConnectionId);
 
     /**
      * Used to notify the secure BLE server that the BLE Device has updated ATT_MTU size.
      *
-     * @param[in]  aMtu             The updated ATT_MTU value.
-     *
+     * @param[in]  aMtu             The updated ATT_MTU value. Note that values above OT_BLE_ATT_MTU_MAX
+     *                              will be clamped to OT_BLE_ATT_MTU_MAX.
      */
-    Error HandleBleMtuUpdate(uint16_t aMtu);
+    void HandleBleMtuUpdate(uint16_t aMtu);
+
+    /**
+     * @brief Gets the Install Code Verify Status during the current session.
+     *
+     * @retval TRUE  The install code was correctly verified.
+     * @retval FALSE The install code was not verified.
+     */
+    bool GetInstallCodeVerifyStatus(void) const { return Get<MeshCoP::TcatAgent>().GetInstallCodeVerifyStatus(); }
+
+    /**
+     * @brief Notifies the BLE layer that the TCAT advertisement data was changed, so
+     * BLE advertisement message content should be updated.
+     *
+     * @retval kErrorNone         Successfully updated using the new data.
+     * @retval kErrorNoBufs       Updated failed due to buffer allocation failure.
+     * @retval kErrorInvalidArgs  Updated failed due to invalid advertisement data.
+     * @retval kErrorFailed       Update failed.
+     */
+    Error NotifyAdvertisementChanged();
+
+    /**
+     * @brief Notifies the BLE layer whether it should be sending BLE advertisements.
+     * Based on its current state, the BLE layer will make platform calls to start or stop
+     * BLE advertising. In case of errors, the error is written to log and state is not
+     * updated.
+     *
+     * @param[in] aSendAdvertisements  If TRUE, BLE is requested to send advertisements.
+     *                                 If FALSE, BLE is requested to not send advertisements.
+     */
+    void NotifySendAdvertisements(bool aSendAdvertisements);
 
 private:
     enum BleState : uint8_t
     {
-        kStopped     = 0, // Ble secure not started.
-        kAdvertising = 1, // Ble secure not advertising.
-        kConnected   = 2, // Ble secure not connected.
+        kStopped        = 0, // Ble secure not started (so not advertising).
+        kAdvertising    = 1, // Ble secure is advertising.
+        kConnected      = 2, // Ble secure is connected (so not advertising).
+        kNotAdvertising = 3, // Ble secure is started but not advertising.
+        kClosing        = 4, // Ble secure connection is closing (so not advertising).
     };
 
-    static constexpr uint8_t  kInitialMtuSize   = 23; // ATT_MTU
-    static constexpr uint8_t  kGattOverhead     = 3;  // BLE GATT payload fits MTU size - 3 bytes
-    static constexpr uint8_t  kPacketBufferSize = OT_BLE_ATT_MTU_MAX - kGattOverhead;
-    static constexpr uint16_t kTxBleHandle      = 0; // Characteristics Handle for TX (not used)
+    typedef otBleRadioPacket RadioPacket;
 
-    static void HandleTlsConnectEvent(MeshCoP::SecureTransport::ConnectEvent aEvent, void *aContext);
-    void        HandleTlsConnectEvent(MeshCoP::SecureTransport::ConnectEvent aEvent);
+    static constexpr uint8_t  kInitialMtuSize   = OT_BLE_ATT_MTU_DEFAULT;
+    static constexpr uint8_t  kMinMtuSize       = OT_BLE_ATT_MTU_MIN;
+    static constexpr uint8_t  kMaxMtuSize       = OT_BLE_ATT_MTU_MAX;
+    static constexpr uint8_t  kGattOverhead     = 3; // BLE GATT payload fits (MTU size - 3 bytes)
+    static constexpr uint8_t  kPacketBufferSize = OT_BLE_ATT_MTU_MAX - kGattOverhead;
+    static constexpr uint16_t kTxBleHandle      = 0;   // Characteristics Handle for TX (not used)
+    static constexpr uint16_t kTlsDataMaxSize   = 800; // Maximum size of data chunks sent with mTls.Send(..)
+
+    void HandleNotifierEvents(Events aEvents);
+
+    static void HandleTlsConnectEvent(MeshCoP::Tls::ConnectEvent aEvent, void *aContext);
+    void        HandleTlsConnectEvent(MeshCoP::Tls::ConnectEvent aEvent);
 
     static void HandleTlsReceive(void *aContext, uint8_t *aBuf, uint16_t aLength);
     void        HandleTlsReceive(uint8_t *aBuf, uint16_t aLength);
@@ -475,10 +373,11 @@ private:
     static Error HandleTransport(void *aContext, ot::Message &aMessage, const Ip6::MessageInfo &aMessageInfo);
     Error        HandleTransport(ot::Message &aMessage);
 
+    Error SetRequestedBleAdvertisementsState(void);
+
     using TxTask = TaskletIn<BleSecure, &BleSecure::HandleTransmit>;
 
-    MeshCoP::SecureTransport  mTls;
-    MeshCoP::TcatAgent        mTcatAgent;
+    MeshCoP::Tls              mTls;
     Callback<ConnectCallback> mConnectCallback;
     Callback<ReceiveCallback> mReceiveCallback;
     bool                      mTlvMode;
@@ -488,6 +387,8 @@ private:
     TxTask                    mTransmitTask;
     uint8_t                   mPacketBuffer[kPacketBufferSize];
     BleState                  mBleState;
+    bool                      mIsBleAdvRequested;
+    bool                      mTlsConnected;
     uint16_t                  mMtuSize;
 };
 
@@ -496,4 +397,4 @@ private:
 
 #endif // OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
 
-#endif // BLE_SECURE_HPP_
+#endif // OT_CORE_RADIO_BLE_SECURE_HPP_

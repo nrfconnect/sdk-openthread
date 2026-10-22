@@ -33,10 +33,7 @@
 
 #include "openthread-core-config.h"
 
-#include <openthread/message.h>
-
-#include "common/as_core_type.hpp"
-#include "common/locator_getters.hpp"
+#include "instance/instance.hpp"
 
 using namespace ot;
 
@@ -125,12 +122,9 @@ int otMessageWrite(otMessage *aMessage, uint16_t aOffset, const void *aBuf, uint
     return aLength;
 }
 
-void otMessageQueueInit(otMessageQueue *aQueue)
-{
-    AssertPointerIsNotNull(aQueue);
+otMessage *otMessageClone(const otMessage *aMessage) { return AsCoreType(aMessage).Clone<kNoReservedHeader>(); }
 
-    aQueue->mData = nullptr;
-}
+void otMessageQueueInit(otMessageQueue *aQueue) { AsCoreType(aQueue).Clear(); }
 
 void otMessageQueueEnqueue(otMessageQueue *aQueue, otMessage *aMessage)
 {
@@ -151,11 +145,11 @@ otMessage *otMessageQueueGetHead(otMessageQueue *aQueue) { return AsCoreType(aQu
 
 otMessage *otMessageQueueGetNext(otMessageQueue *aQueue, const otMessage *aMessage)
 {
+    OT_UNUSED_VARIABLE(aQueue);
+
     Message *next;
 
     VerifyOrExit(aMessage != nullptr, next = nullptr);
-
-    VerifyOrExit(AsCoreType(aMessage).GetMessageQueue() == aQueue, next = nullptr);
     next = AsCoreType(aMessage).GetNext();
 
 exit:

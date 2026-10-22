@@ -44,30 +44,12 @@ namespace Cli {
 
 template <> otError Dns::Process<Cmd("compression")>(Arg aArgs[])
 {
-    otError error = OT_ERROR_NONE;
-
     /**
      * @cli dns compression
      * @code
      * dns compression
      * Enabled
      * @endcode
-     * @cparam dns compression [@ca{enable|disable}]
-     * @par api_copy
-     * #otDnsIsNameCompressionEnabled
-     * @par
-     * By default DNS name compression is enabled. When disabled,
-     * DNS names are appended as full and never compressed. This
-     * is applicable to OpenThread's DNS and SRP client/server
-     * modules."
-     * `OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE` is required.
-     */
-    if (aArgs[0].IsEmpty())
-    {
-        OutputEnabledDisabledStatus(otDnsIsNameCompressionEnabled());
-    }
-    /**
-     * @cli dns compression (enable,disable)
      * @code
      * dns compression enable
      * Enabled
@@ -81,25 +63,20 @@ template <> otError Dns::Process<Cmd("compression")>(Arg aArgs[])
      * @endcode
      * @cparam dns compression [@ca{enable|disable}]
      * @par
-     * Set the "DNS name compression" mode.
+     * Gets or sets the "DNS name compression" mode.
      * @par
-     * By default DNS name compression is enabled. When disabled,
-     * DNS names are appended as full and never compressed. This
-     * is applicable to OpenThread's DNS and SRP client/server
-     * modules."
-     * `OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE` is required.
+     * This is intended for testing only and requires `OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE`.
+     * @par
+     * By default, DNS name compression is enabled. When disabled, DNS names are appended in full and are never
+     * compressed. This applies to OpenThread's DNS and SRP client/server modules.
+     * @par
+     * DNS name compression cannot be disabled if the OpenThread mDNS module is enabled. Enabling the mDNS module will
+     * automatically enable name compression if it was previously disabled. Attempting to disable compression while the
+     * mDNS module is active will return an error.
+     * @sa otDnsIsNameCompressionEnabled
      * @sa otDnsSetNameCompressionEnabled
      */
-    else
-    {
-        bool enable;
-
-        SuccessOrExit(error = ParseEnableOrDisable(aArgs[0], enable));
-        otDnsSetNameCompressionEnabled(enable);
-    }
-
-exit:
-    return error;
+    return ProcessEnableDisable(aArgs, otDnsIsNameCompressionEnabled, otDnsSetNameCompressionEnabled);
 }
 
 #endif // OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
@@ -139,8 +116,7 @@ template <> otError Dns::Process<Cmd("config")>(Arg aArgs[])
         OutputSockAddrLine(defaultConfig->mServerSockAddr);
         OutputLine("ResponseTimeout: %lu ms", ToUlong(defaultConfig->mResponseTimeout));
         OutputLine("MaxTxAttempts: %u", defaultConfig->mMaxTxAttempts);
-        OutputLine("RecursionDesired: %s",
-                   (defaultConfig->mRecursionFlag == OT_DNS_FLAG_RECURSION_DESIRED) ? "yes" : "no");
+        OutputLine("RecursionDesired: %s", ToYesNo(defaultConfig->mRecursionFlag == OT_DNS_FLAG_RECURSION_DESIRED));
         OutputLine("ServiceMode: %s", DnsConfigServiceModeToString(defaultConfig->mServiceMode));
 #if OPENTHREAD_CONFIG_DNS_CLIENT_NAT64_ENABLE
         OutputLine("Nat64Mode: %s", (defaultConfig->mNat64Mode == OT_DNS_NAT64_ALLOW) ? "allow" : "disallow");
@@ -181,6 +157,21 @@ template <> otError Dns::Process<Cmd("config")>(Arg aArgs[])
      * TransportProtocol: udp
      * Done
      * @endcode
+     * @code
+     * dns config def def def def def srv_txt_sep udp
+     * Done
+     * @endcode
+     * @code
+     * dns config
+     * Server: [2001:4860:4860:0:0:0:0:8888]:53
+     * ResponseTimeout: 7000 ms
+     * MaxTxAttempts: 3
+     * RecursionDesired: yes
+     * ServiceMode: srv_txt_sep
+     * Nat64Mode: allow
+     * TransportProtocol: udp
+     * Done
+     * @endcode
      * @par api_copy
      * #otDnsClientSetDefaultConfig
      * @cparam dns config [@ca{dns-server-IP}] [@ca{dns-server-port}] <!--
@@ -188,10 +179,13 @@ template <> otError Dns::Process<Cmd("config")>(Arg aArgs[])
      * -->                [@ca{recursion-desired-boolean}] [@ca{service-mode}] <!--
      * -->                [@ca{protocol}]
      * @par
-     * We can leave some of the fields as unspecified (or use value zero). The
-     * unspecified fields are replaced by the corresponding OT config option
-     * definitions `OPENTHREAD_CONFIG_DNS_CLIENT_DEFAULT` to form the default
-     * query config.
+     * You can leave some of the fields as unspecified (or use value zero or "def"). This
+     * includes the DNS server IP address itself. Since an address has no "zero" form,
+     * use "def" (or, equivalently, the unspecified address "::") to select the default
+     * server address. The unspecified fields are replaced by the corresponding OT config
+     * option definitions `OPENTHREAD_CONFIG_DNS_CLIENT_DEFAULT_<OPTION>` to form the
+     * default query config. Note that specifying zero for a boolean argument means
+     * disabled. Use "def" to select the default value.
      * `OPENTHREAD_CONFIG_DNS_CLIENT_ENABLE` is required.
      */
     else
@@ -219,6 +213,11 @@ exit:
  * DNS response for example.com. - fd4c:9574:3720:2:0:0:5db8:d822 TTL:20456
  * Done
  * @endcode
+ * @code
+ * dns resolve example.com def 53
+ * DNS response for example.com. - fd4c:9574:3720:2:0:0:5db8:d822 TTL:20456
+ * Done
+ * @endcode
  * @cparam dns resolve @ca{hostname} [@ca{dns-server-IP}] <!--
  * -->                 [@ca{dns-server-port}] [@ca{response-timeout-ms}] <!--
  * -->                 [@ca{max-tx-attempts}] [@ca{recursion-desired-boolean}]
@@ -227,9 +226,11 @@ exit:
  * @par
  * Send DNS Query to obtain IPv6 address for given hostname.
  * @par
- * The parameters after hostname are optional. Any unspecified (or zero) value
+ * The parameters after hostname are optional. Any unspecified (or zero or "def") value
  * for these optional parameters is replaced by the value from the current default
- * config (dns config).
+ * config (dns config). This includes the DNS server IP address itself. Use "def" (or,
+ * equivalently, the unspecified address "::") to select the server address from the
+ * current default config while still overriding later parameters explicitly.
  * @par
  * The DNS server IP can be an IPv4 address, which will be synthesized to an
  * IPv6 address using the preferred NAT64 prefix from the network data.
@@ -308,7 +309,7 @@ exit:
  * Send a browse (service instance enumeration) DNS query to get the list of services for
  * given service-name
  * @par
- * The parameters after `service-name` are optional. Any unspecified (or zero) value
+ * The parameters after `service-name` are optional. Any unspecified (or zero or "def") value
  * for these optional parameters is replaced by the value from the current default
  * config (`dns config`).
  * @par
@@ -348,7 +349,7 @@ exit:
  * Service instance label is provided first, followed by the service name
  * (note that service instance label can contain dot '.' character).
  * @par
- * The parameters after `service-name` are optional. Any unspecified (or zero)
+ * The parameters after `service-name` are optional. Any unspecified (or zero or "def")
  * value for these optional parameters is replaced by the value from the
  * current default config (`dns config`).
  * @par
@@ -377,7 +378,7 @@ template <> otError Dns::Process<Cmd("service")>(Arg aArgs[])
  * Service instance label is provided first, followed by the service name
  * (note that service instance label can contain dot '.' character).
  * @par
- * The parameters after `service-name` are optional. Any unspecified (or zero)
+ * The parameters after `service-name` are optional. Any unspecified (or zero or "def")
  * value for these optional parameters is replaced by the value from the
  * current default config (`dns config`).
  * @par
@@ -410,9 +411,56 @@ exit:
 
 #endif // OPENTHREAD_CONFIG_DNS_CLIENT_SERVICE_DISCOVERY_ENABLE
 
-//----------------------------------------------------------------------------------------------------------------------
+#if OPENTHREAD_CONFIG_DNS_CLIENT_ARBITRARY_RECORD_QUERY_ENABLE
 
-void Dns::OutputResult(otError aError) { Interpreter::GetInterpreter().OutputResult(aError); }
+/**
+ * @cli dns query
+ * @cparam dns query @ca{record-type} @ca{first-label} @ca{next-labels} <!--
+ * -->                 [@ca{DNS-server-IP}] [@ca{DNS-server-port}] <!--
+ * -->                 [@ca{response-timeout-ms}] [@ca{max-tx-attempts}] <!--
+ * -->                 [@ca{recursion-desired-boolean}]
+ * @code
+ * dns query 25 myhost default.service.arpa.
+ * DNS query response for myhost.default.service.arpa.
+ * 0)
+ *     RecordType:25, RecordLength: 32, TTL:7108, Section:answer
+ *     Name:myhost.default.service.arpa.
+ *     RecordData:[001900010000e02d00440201030d4983605c0406803deb2d672cc42224773977]
+ * Done
+ * @endcode
+ * @par
+ * Send a DNS query for a given record type and DNS name.
+ * DNS name is provided as a first label, followed by the next labels
+ * which are dot '.' separated. Note that the first label can itself
+ * contain the dot '.' character.
+ * @par
+ * The parameters after `next-labels` are optional. Any unspecified (or zero or "def")
+ * value for these optional parameters is replaced by the value from the
+ * current default config (`dns config`).
+ * @par
+ * `OPENTHREAD_CONFIG_DNS_CLIENT_ARBITRARY_RECORD_QUERY_ENABLE` is required.
+ */
+template <> otError Dns::Process<Cmd("query")>(Arg aArgs[])
+{
+    otError           error = OT_ERROR_NONE;
+    otDnsQueryConfig  queryConfig;
+    otDnsQueryConfig *config = &queryConfig;
+    uint16_t          recordType;
+
+    SuccessOrExit(error = aArgs[0].ParseAsUint16(recordType));
+    VerifyOrExit(!aArgs[2].IsEmpty(), error = OT_ERROR_INVALID_ARGS);
+    SuccessOrExit(error = GetDnsConfig(aArgs + 3, config));
+    SuccessOrExit(error = otDnsClientQueryRecord(GetInstancePtr(), recordType, aArgs[1].GetCString(),
+                                                 aArgs[2].GetCString(), &HandleDnsRecordResponse, this, config));
+    error = OT_ERROR_PENDING;
+
+exit:
+    return error;
+}
+
+#endif // OPENTHREAD_CONFIG_DNS_CLIENT_ARBITRARY_RECORD_QUERY_ENABLE
+
+//----------------------------------------------------------------------------------------------------------------------
 
 otError Dns::GetDnsConfig(Arg aArgs[], otDnsQueryConfig *&aConfig)
 {
@@ -421,39 +469,53 @@ otError Dns::GetDnsConfig(Arg aArgs[], otDnsQueryConfig *&aConfig)
     // [max tx attempt] [recursion desired] [service mode]
     // [transport]`
 
-    otError error = OT_ERROR_NONE;
-    bool    recursionDesired;
-    bool    nat64Synth;
+    otError               error = OT_ERROR_NONE;
+    bool                  recursionDesired;
+    bool                  nat64Synth;
+    static constexpr char kDefaultValue[] = "def";
 
     ClearAllBytes(*aConfig);
 
     VerifyOrExit(!aArgs[0].IsEmpty(), aConfig = nullptr);
-
-    SuccessOrExit(error = ParseToIp6Address(GetInstancePtr(), aArgs[0], aConfig->mServerSockAddr.mAddress, nat64Synth));
-    if (nat64Synth)
+    if (aArgs[0] != kDefaultValue)
     {
-        OutputFormat("Synthesized IPv6 DNS server address: ");
-        OutputIp6AddressLine(aConfig->mServerSockAddr.mAddress);
+        SuccessOrExit(error = ParseOrSynthesizeIp6Address(aArgs[0], aConfig->mServerSockAddr.mAddress, nat64Synth));
+        if (nat64Synth)
+        {
+            OutputFormat("Synthesized IPv6 DNS server address: ");
+            OutputIp6AddressLine(aConfig->mServerSockAddr.mAddress);
+        }
     }
 
     VerifyOrExit(!aArgs[1].IsEmpty());
-    SuccessOrExit(error = aArgs[1].ParseAsUint16(aConfig->mServerSockAddr.mPort));
+    if (aArgs[1] != kDefaultValue)
+    {
+        SuccessOrExit(error = aArgs[1].ParseAsUint16(aConfig->mServerSockAddr.mPort));
+    }
 
     VerifyOrExit(!aArgs[2].IsEmpty());
-    SuccessOrExit(error = aArgs[2].ParseAsUint32(aConfig->mResponseTimeout));
+    if (aArgs[2] != kDefaultValue)
+    {
+        SuccessOrExit(error = aArgs[2].ParseAsUint32(aConfig->mResponseTimeout));
+    }
 
     VerifyOrExit(!aArgs[3].IsEmpty());
-    SuccessOrExit(error = aArgs[3].ParseAsUint8(aConfig->mMaxTxAttempts));
+    if (aArgs[3] != kDefaultValue)
+    {
+        SuccessOrExit(error = aArgs[3].ParseAsUint8(aConfig->mMaxTxAttempts));
+    }
 
     VerifyOrExit(!aArgs[4].IsEmpty());
-    SuccessOrExit(error = aArgs[4].ParseAsBool(recursionDesired));
-    aConfig->mRecursionFlag = recursionDesired ? OT_DNS_FLAG_RECURSION_DESIRED : OT_DNS_FLAG_NO_RECURSION;
+    if (aArgs[4] != kDefaultValue)
+    {
+        SuccessOrExit(error = aArgs[4].ParseAsBool(recursionDesired));
+        aConfig->mRecursionFlag = recursionDesired ? OT_DNS_FLAG_RECURSION_DESIRED : OT_DNS_FLAG_NO_RECURSION;
+    }
 
     VerifyOrExit(!aArgs[5].IsEmpty());
     SuccessOrExit(error = ParseDnsServiceMode(aArgs[5], aConfig->mServiceMode));
 
     VerifyOrExit(!aArgs[6].IsEmpty());
-
     if (aArgs[6] == "tcp")
     {
         aConfig->mTransportProto = OT_DNS_TRANSPORT_TCP;
@@ -462,7 +524,7 @@ otError Dns::GetDnsConfig(Arg aArgs[], otDnsQueryConfig *&aConfig)
     {
         aConfig->mTransportProto = OT_DNS_TRANSPORT_UDP;
     }
-    else
+    else if (aArgs[6] != kDefaultValue)
     {
         error = OT_ERROR_INVALID_ARGS;
     }
@@ -524,28 +586,29 @@ void Dns::HandleDnsAddressResponse(otError aError, const otDnsAddressResponse *a
 
 void Dns::HandleDnsAddressResponse(otError aError, const otDnsAddressResponse *aResponse)
 {
+    otError      error;
     char         hostName[OT_DNS_MAX_NAME_SIZE];
     otIp6Address address;
     uint32_t     ttl;
+    uint16_t     index = 0;
 
-    IgnoreError(otDnsAddressResponseGetHostName(aResponse, hostName, sizeof(hostName)));
-
+    SuccessOrExit(error = otDnsAddressResponseGetHostName(aResponse, hostName, sizeof(hostName)));
     OutputFormat("DNS response for %s - ", hostName);
 
-    if (aError == OT_ERROR_NONE)
-    {
-        uint16_t index = 0;
+    error = aError;
+    SuccessOrExit(error);
 
-        while (otDnsAddressResponseGetAddress(aResponse, index, &address, &ttl) == OT_ERROR_NONE)
-        {
-            OutputIp6Address(address);
-            OutputFormat(" TTL:%lu ", ToUlong(ttl));
-            index++;
-        }
+    while (otDnsAddressResponseGetAddress(aResponse, index, &address, &ttl) == OT_ERROR_NONE)
+    {
+        OutputIp6Address(address);
+        OutputFormat(" TTL:%lu ", ToUlong(ttl));
+        index++;
     }
 
     OutputNewLine();
-    OutputResult(aError);
+
+exit:
+    OutputResult(error);
 }
 
 #if OPENTHREAD_CONFIG_DNS_CLIENT_SERVICE_DISCOVERY_ENABLE
@@ -581,39 +644,39 @@ void Dns::HandleDnsBrowseResponse(otError aError, const otDnsBrowseResponse *aRe
 
 void Dns::HandleDnsBrowseResponse(otError aError, const otDnsBrowseResponse *aResponse)
 {
+    Error            error;
     char             name[OT_DNS_MAX_NAME_SIZE];
     char             label[OT_DNS_MAX_LABEL_SIZE];
     uint8_t          txtBuffer[kMaxTxtDataSize];
     otDnsServiceInfo serviceInfo;
+    uint16_t         index = 0;
 
-    IgnoreError(otDnsBrowseResponseGetServiceName(aResponse, name, sizeof(name)));
-
+    SuccessOrExit(error = otDnsBrowseResponseGetServiceName(aResponse, name, sizeof(name)));
     OutputLine("DNS browse response for %s", name);
 
-    if (aError == OT_ERROR_NONE)
+    error = aError;
+    SuccessOrExit(error);
+
+    while (otDnsBrowseResponseGetServiceInstance(aResponse, index, label, sizeof(label)) == OT_ERROR_NONE)
     {
-        uint16_t index = 0;
+        OutputLine("%s", label);
+        index++;
 
-        while (otDnsBrowseResponseGetServiceInstance(aResponse, index, label, sizeof(label)) == OT_ERROR_NONE)
+        serviceInfo.mHostNameBuffer     = name;
+        serviceInfo.mHostNameBufferSize = sizeof(name);
+        serviceInfo.mTxtData            = txtBuffer;
+        serviceInfo.mTxtDataSize        = sizeof(txtBuffer);
+
+        if (otDnsBrowseResponseGetServiceInfo(aResponse, label, &serviceInfo) == OT_ERROR_NONE)
         {
-            OutputLine("%s", label);
-            index++;
-
-            serviceInfo.mHostNameBuffer     = name;
-            serviceInfo.mHostNameBufferSize = sizeof(name);
-            serviceInfo.mTxtData            = txtBuffer;
-            serviceInfo.mTxtDataSize        = sizeof(txtBuffer);
-
-            if (otDnsBrowseResponseGetServiceInfo(aResponse, label, &serviceInfo) == OT_ERROR_NONE)
-            {
-                OutputDnsServiceInfo(kIndentSize, serviceInfo);
-            }
-
-            OutputNewLine();
+            OutputDnsServiceInfo(kIndentSize, serviceInfo);
         }
+
+        OutputNewLine();
     }
 
-    OutputResult(aError);
+exit:
+    OutputResult(error);
 }
 
 void Dns::HandleDnsServiceResponse(otError aError, const otDnsServiceResponse *aResponse, void *aContext)
@@ -623,33 +686,107 @@ void Dns::HandleDnsServiceResponse(otError aError, const otDnsServiceResponse *a
 
 void Dns::HandleDnsServiceResponse(otError aError, const otDnsServiceResponse *aResponse)
 {
+    otError          error;
     char             name[OT_DNS_MAX_NAME_SIZE];
     char             label[OT_DNS_MAX_LABEL_SIZE];
     uint8_t          txtBuffer[kMaxTxtDataSize];
     otDnsServiceInfo serviceInfo;
 
-    IgnoreError(otDnsServiceResponseGetServiceName(aResponse, label, sizeof(label), name, sizeof(name)));
-
+    SuccessOrExit(error = otDnsServiceResponseGetServiceName(aResponse, label, sizeof(label), name, sizeof(name)));
     OutputLine("DNS service resolution response for %s for service %s", label, name);
 
-    if (aError == OT_ERROR_NONE)
-    {
-        serviceInfo.mHostNameBuffer     = name;
-        serviceInfo.mHostNameBufferSize = sizeof(name);
-        serviceInfo.mTxtData            = txtBuffer;
-        serviceInfo.mTxtDataSize        = sizeof(txtBuffer);
+    error = aError;
+    SuccessOrExit(error);
 
-        if (otDnsServiceResponseGetServiceInfo(aResponse, &serviceInfo) == OT_ERROR_NONE)
-        {
-            OutputDnsServiceInfo(/* aIndentSize */ 0, serviceInfo);
-            OutputNewLine();
-        }
+    serviceInfo.mHostNameBuffer     = name;
+    serviceInfo.mHostNameBufferSize = sizeof(name);
+    serviceInfo.mTxtData            = txtBuffer;
+    serviceInfo.mTxtDataSize        = sizeof(txtBuffer);
+
+    if (otDnsServiceResponseGetServiceInfo(aResponse, &serviceInfo) == OT_ERROR_NONE)
+    {
+        OutputDnsServiceInfo(/* aIndentSize */ 0, serviceInfo);
+        OutputNewLine();
     }
 
-    OutputResult(aError);
+exit:
+    OutputResult(error);
 }
 
 #endif // OPENTHREAD_CONFIG_DNS_CLIENT_SERVICE_DISCOVERY_ENABLE
+
+#if OPENTHREAD_CONFIG_DNS_CLIENT_ARBITRARY_RECORD_QUERY_ENABLE
+void Dns::HandleDnsRecordResponse(otError aError, const otDnsRecordResponse *aResponse, void *aContext)
+{
+    static_cast<Dns *>(aContext)->HandleDnsRecordResponse(aError, aResponse);
+}
+
+void Dns::HandleDnsRecordResponse(otError aError, const otDnsRecordResponse *aResponse)
+{
+    otError         error;
+    char            name[OT_DNS_MAX_NAME_SIZE];
+    uint8_t         data[kMaxRrDataSize];
+    otDnsRecordInfo recordInfo;
+
+    SuccessOrExit(error = otDnsRecordResponseGetQueryName(aResponse, name, sizeof(name)));
+    OutputLine("DNS query response for %s ", name);
+
+    error = aError;
+    SuccessOrExit(error);
+
+    for (uint16_t index = 0;; index++)
+    {
+        ClearAllBytes(recordInfo);
+        recordInfo.mNameBuffer     = name;
+        recordInfo.mNameBufferSize = sizeof(name);
+        recordInfo.mDataBuffer     = data;
+        recordInfo.mDataBufferSize = sizeof(data);
+
+        error = otDnsRecordResponseGetRecordInfo(aResponse, index, &recordInfo);
+
+        if (error == OT_ERROR_NOT_FOUND)
+        {
+            error = OT_ERROR_NONE;
+            ExitNow();
+        }
+
+        SuccessOrExit(error);
+
+        OutputLine("%u)", index);
+        OutputLine(kIndentSize, "RecordType:%u, RecordLength:%u, TTL:%lu, Section:%s", recordInfo.mRecordType,
+                   recordInfo.mRecordLength, ToUlong(recordInfo.mTtl), RecordSectionToString(recordInfo.mSection));
+        OutputLine(kIndentSize, "Name:%s", recordInfo.mNameBuffer);
+        OutputFormat(kIndentSize, "RecordData:[");
+        OutputBytes(recordInfo.mDataBuffer, recordInfo.mDataBufferSize);
+
+        if (recordInfo.mDataBufferSize != recordInfo.mRecordLength)
+        {
+            OutputFormat("...");
+        }
+
+        OutputLine("]");
+    }
+
+exit:
+    OutputResult(error);
+}
+
+const char *Dns::RecordSectionToString(otDnsRecordSection aSection)
+{
+    const char *const kSectionString[] = {
+        "answer",     // (0) OT_DNS_SECTION_ANSWER
+        "authority",  // (1) OT_DNS_SECTION_AUTHORITY
+        "additional", // (2) OT_DNS_SECTION_ADDITIONAL
+    };
+
+    static_assert(0 == OT_DNS_SECTION_ANSWER, "OT_DNS_SECTION_ANSWER value is incorrect");
+    static_assert(1 == OT_DNS_SECTION_AUTHORITY, "OT_DNS_SECTION_AUTHORITY value is incorrect");
+    static_assert(2 == OT_DNS_SECTION_ADDITIONAL, "OT_DNS_SECTION_ADDITIONAL value is incorrect");
+
+    return Stringify(aSection, kSectionString);
+}
+#endif // OPENTHREAD_CONFIG_DNS_CLIENT_ARBITRARY_RECORD_QUERY_ENABLE
+
 #endif // OPENTHREAD_CONFIG_DNS_CLIENT_ENABLE
 
 #if OPENTHREAD_CONFIG_DNSSD_SERVER_ENABLE
@@ -701,10 +838,7 @@ exit:
 
 otError Dns::Process(Arg aArgs[])
 {
-#define CmdEntry(aCommandString)                           \
-    {                                                      \
-        aCommandString, &Dns::Process<Cmd(aCommandString)> \
-    }
+#define CmdEntry(aCommandString) {aCommandString, &Dns::Process<Cmd(aCommandString)>}
 
     static constexpr Command kCommands[] = {
 
@@ -716,6 +850,9 @@ otError Dns::Process(Arg aArgs[])
 #endif
 #if OPENTHREAD_CONFIG_DNS_CLIENT_ENABLE
         CmdEntry("config"),
+#if OPENTHREAD_CONFIG_DNS_CLIENT_ARBITRARY_RECORD_QUERY_ENABLE
+        CmdEntry("query"),
+#endif
         CmdEntry("resolve"),
 #if OPENTHREAD_CONFIG_DNS_CLIENT_NAT64_ENABLE
         CmdEntry("resolve4"),
@@ -725,8 +862,7 @@ otError Dns::Process(Arg aArgs[])
         CmdEntry("server"),
 #endif
 #if OPENTHREAD_CONFIG_DNS_CLIENT_ENABLE && OPENTHREAD_CONFIG_DNS_CLIENT_SERVICE_DISCOVERY_ENABLE
-        CmdEntry("service"),
-        CmdEntry("servicehost"),
+        CmdEntry("service"),     CmdEntry("servicehost"),
 #endif
     };
 

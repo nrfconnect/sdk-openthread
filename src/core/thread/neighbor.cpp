@@ -33,11 +33,6 @@
 
 #include "neighbor.hpp"
 
-#include "common/array.hpp"
-#include "common/code_utils.hpp"
-#include "common/debug.hpp"
-#include "common/locator_getters.hpp"
-#include "common/num_utils.hpp"
 #include "instance/instance.hpp"
 
 namespace ot {
@@ -47,29 +42,25 @@ void Neighbor::SetState(State aState)
     VerifyOrExit(mState != aState);
     mState = static_cast<uint8_t>(aState);
 
-#if OPENTHREAD_CONFIG_UPTIME_ENABLE
     if (mState == kStateValid)
     {
-        mConnectionStart = Uptime::MsecToSec(Get<Uptime>().GetUptime());
+        mConnectionStart = Get<UptimeTracker>().GetUptimeInSeconds();
     }
-#endif
 
 exit:
     return;
 }
 
-#if OPENTHREAD_CONFIG_UPTIME_ENABLE
 uint32_t Neighbor::GetConnectionTime(void) const
 {
-    return IsStateValid() ? Uptime::MsecToSec(Get<Uptime>().GetUptime()) - mConnectionStart : 0;
+    return IsStateValid() ? Get<UptimeTracker>().GetUptimeInSeconds() - mConnectionStart : 0;
 }
-#endif
 
 bool Neighbor::AddressMatcher::Matches(const Neighbor &aNeighbor) const
 {
     bool matches = false;
 
-    VerifyOrExit(aNeighbor.MatchesFilter(mStateFilter));
+    VerifyOrExit(aNeighbor.Matches(mStateFilter));
 
     if (mShortAddress != Mac::kShortAddrInvalid)
     {
@@ -106,9 +97,7 @@ void Neighbor::Info::SetFrom(const Neighbor &aNeighbor)
     mFullThreadDevice = aNeighbor.IsFullThreadDevice();
     mFullNetworkData  = (aNeighbor.GetNetworkDataType() == NetworkData::kFullSet);
     mVersion          = aNeighbor.GetVersion();
-#if OPENTHREAD_CONFIG_UPTIME_ENABLE
-    mConnectionTime = aNeighbor.GetConnectionTime();
-#endif
+    mConnectionTime   = aNeighbor.GetConnectionTime();
 }
 
 void Neighbor::Init(Instance &aInstance)
@@ -141,7 +130,7 @@ bool Neighbor::IsStateValidOrAttaching(void) const
     return rval;
 }
 
-bool Neighbor::MatchesFilter(StateFilter aFilter) const
+bool Neighbor::Matches(StateFilter aFilter) const
 {
     bool matches = false;
 
@@ -173,6 +162,10 @@ bool Neighbor::MatchesFilter(StateFilter aFilter) const
 
     case kInStateAnyExceptValidOrRestoring:
         matches = !IsStateValidOrRestoring();
+        break;
+
+    case kInStateLinkRequest:
+        matches = IsStateLinkRequest();
         break;
 
     case kInStateAny:
@@ -235,27 +228,19 @@ void Neighbor::RemoveAllForwardTrackingSeriesInfo(void)
 
 const char *Neighbor::StateToString(State aState)
 {
-    static const char *const kStateStrings[] = {
-        "Invalid",        // (0) kStateInvalid
-        "Restored",       // (1) kStateRestored
-        "ParentReq",      // (2) kStateParentRequest
-        "ParentRes",      // (3) kStateParentResponse
-        "ChildIdReq",     // (4) kStateChildIdRequest
-        "LinkReq",        // (5) kStateLinkRequest
-        "ChildUpdateReq", // (6) kStateChildUpdateRequest
-        "Valid",          // (7) kStateValid
-    };
+#define StateMapList(_)                           \
+    _(kStateInvalid, "Invalid")                   \
+    _(kStateRestored, "Restored")                 \
+    _(kStateParentRequest, "ParentReq")           \
+    _(kStateParentResponse, "ParentRes")          \
+    _(kStateChildIdRequest, "ChildIdReq")         \
+    _(kStateLinkRequest, "LinkReq")               \
+    _(kStateChildUpdateRequest, "ChildUpdateReq") \
+    _(kStateValid, "Valid")
 
-    static_assert(0 == kStateInvalid, "kStateInvalid value is incorrect");
-    static_assert(1 == kStateRestored, "kStateRestored value is incorrect");
-    static_assert(2 == kStateParentRequest, "kStateParentRequest value is incorrect");
-    static_assert(3 == kStateParentResponse, "kStateParentResponse value is incorrect");
-    static_assert(4 == kStateChildIdRequest, "kStateChildIdRequest value is incorrect");
-    static_assert(5 == kStateLinkRequest, "kStateLinkRequest value is incorrect");
-    static_assert(6 == kStateChildUpdateRequest, "kStateChildUpdateRequest value is incorrect");
-    static_assert(7 == kStateValid, "kStateValid value is incorrect");
+    DefineEnumStringArray(StateMapList);
 
-    return kStateStrings[aState];
+    return kStrings[aState];
 }
 
 } // namespace ot

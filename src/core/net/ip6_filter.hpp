@@ -31,8 +31,8 @@
  *   This file includes definitions for IPv6 datagram filtering.
  */
 
-#ifndef IP6_FILTER_HPP_
-#define IP6_FILTER_HPP_
+#ifndef OT_CORE_NET_IP6_FILTER_HPP_
+#define OT_CORE_NET_IP6_FILTER_HPP_
 
 #include "openthread-core-config.h"
 
@@ -51,12 +51,10 @@ namespace Ip6 {
  *   This module includes definitions for IPv6 datagram filtering.
  *
  * @{
- *
  */
 
 /**
  * Implements an IPv6 datagram filter.
- *
  */
 class Filter : public InstanceLocator, private NonCopyable
 {
@@ -65,23 +63,24 @@ public:
      * Initializes the Filter object.
      *
      * @param[in]  aInstance  A reference to the OpenThread instance.
-     *
      */
     explicit Filter(Instance &aInstance)
         : InstanceLocator(aInstance)
+#if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
+        , mAllowUnsecureWhenDisabled(false)
+#endif
     {
     }
 
     /**
-     * Indicates whether or not the IPv6 datagram passes the filter.
+     * Applies the filter to an IPv6 datagram to determine if it should be dropped.
      *
      * @param[in]  aMessage  The IPv6 datagram to process.
      *
-     * @retval TRUE   Accept the IPv6 datagram.
-     * @retval FALSE  Reject the IPv6 datagram.
-     *
+     * @retval kErrorNone  The message is not filtered and should be accepted.
+     * @retval kErrorDrop  The message matches the filter criteria and should be dropped.
      */
-    bool Accept(Message &aMessage) const;
+    Error Apply(const Message &aMessage) const;
 
     /**
      * Adds a port to the allowed unsecured port list.
@@ -91,7 +90,6 @@ public:
      * @retval kErrorNone         The port was successfully added to the allowed unsecure port list.
      * @retval kErrorInvalidArgs  The port is invalid (value 0 is reserved for internal use).
      * @retval kErrorNoBufs       The unsecure port list is full.
-     *
      */
     Error AddUnsecurePort(uint16_t aPort) { return UpdateUnsecurePorts(kAdd, aPort); }
 
@@ -103,7 +101,6 @@ public:
      * @retval kErrorNone         The port was successfully removed from the allowed unsecure port list.
      * @retval kErrorInvalidArgs  The port is invalid (value 0 is reserved for internal use).
      * @retval kErrorNotFound     The port was not found in the unsecure port list.
-     *
      */
     Error RemoveUnsecurePort(uint16_t aPort) { return UpdateUnsecurePorts(kRemove, aPort); }
 
@@ -113,13 +110,11 @@ public:
      * @param[in]  aPort  The port value.
      *
      * @returns Whether the given port is in the unsecure port list.
-     *
      */
     bool IsUnsecurePort(uint16_t aPort) { return mUnsecurePorts.Contains(aPort); }
 
     /**
      * Removes all ports from the allowed unsecure port list.
-     *
      */
     void RemoveAllUnsecurePorts(void) { mUnsecurePorts.Clear(); }
 
@@ -131,7 +126,6 @@ public:
      * @param[out]  aNumEntries  The number of entries in the list.
      *
      * @returns A pointer to the unsecure port list.
-     *
      */
     const uint16_t *GetUnsecurePorts(uint8_t &aNumEntries) const
     {
@@ -139,6 +133,23 @@ public:
 
         return &mUnsecurePorts[0];
     }
+
+#if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
+    /**
+     * Sets whether to allow link-local unsecure IPv6 datagrams when the Thread role is disabled.
+     *
+     * @param[in] aAllow  TRUE to allow, FALSE otherwise.
+     */
+    void SetAllowUnsecureWhenDisabled(bool aAllow) { mAllowUnsecureWhenDisabled = aAllow; }
+
+    /**
+     * Indicates whether allowing link-local unsecure IPv6 datagrams when the Thread role is disabled is enabled.
+     *
+     * @retval TRUE   Does allow unsecure IPv6 datagrams when the Thread role is disabled.
+     * @retval FALSE  Does not allow unsecure IPv6 datagrams when the Thread role is disabled.
+     */
+    bool IsUnsecureAllowedWhenDisabled(void) const { return mAllowUnsecureWhenDisabled; }
+#endif
 
 private:
     static constexpr uint16_t kMaxUnsecurePorts = 2;
@@ -152,9 +163,12 @@ private:
     Error UpdateUnsecurePorts(Action aAction, uint16_t aPort);
 
     Array<uint16_t, kMaxUnsecurePorts> mUnsecurePorts;
+#if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
+    bool mAllowUnsecureWhenDisabled;
+#endif
 };
 
 } // namespace Ip6
 } // namespace ot
 
-#endif // IP6_FILTER_HPP_
+#endif // OT_CORE_NET_IP6_FILTER_HPP_

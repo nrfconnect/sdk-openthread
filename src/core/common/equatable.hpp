@@ -31,8 +31,8 @@
  *   This file includes definitions for Equatable class for OpenThread objects.
  */
 
-#ifndef EQUATABLE_HPP_
-#define EQUATABLE_HPP_
+#ifndef OT_CORE_COMMON_EQUATABLE_HPP_
+#define OT_CORE_COMMON_EQUATABLE_HPP_
 
 #include "openthread-core-config.h"
 
@@ -47,10 +47,11 @@ namespace ot {
  *
  * Users of this class should follow CRTP-style inheritance, i.e., the `Type` class itself should publicly inherit
  * from `Unequatable<Type>`.
- *
  */
 template <typename Type> class Unequatable
 {
+    friend Type;
+
 public:
     /**
      * Overloads operator `!=` to evaluate whether or not two instances of `Type` are equal.
@@ -61,9 +62,11 @@ public:
      *
      * @retval TRUE   If the two `Type` instances are not equal.
      * @retval FALSE  If the two `Type` instances are equal.
-     *
      */
     bool operator!=(const Type &aOther) const { return !(*static_cast<const Type *>(this) == aOther); }
+
+private:
+    Unequatable(void) = default;
 };
 
 /**
@@ -73,10 +76,11 @@ public:
  *
  * Users of this class should follow CRTP-style inheritance, i.e., the `Type` class itself should publicly inherit
  * from `Equatable<Type>`.
- *
  */
-template <typename Type> class Equatable : public Unequatable<Type>
+template <typename Type> class Equatable
 {
+    friend Type;
+
 public:
     /**
      * Overloads operator `==` to evaluate whether or not two instances of `Type` are equal.
@@ -85,14 +89,26 @@ public:
      *
      * @retval TRUE   If the two `Type` instances are equal.
      * @retval FALSE  If the two `Type` instances are not equal.
-     *
      */
     bool operator==(const Type &aOther) const
     {
         return memcmp(static_cast<const Type *>(this), &aOther, sizeof(Type)) == 0;
     }
+
+    /**
+     * Overloads operator `!=` to evaluate whether or not two instances of `Type` are equal.
+     *
+     * @param[in]  aOther  The other `Type` instance to compare with.
+     *
+     * @retval TRUE   If the two `Type` instances are not equal.
+     * @retval FALSE  If the two `Type` instances are equal.
+     */
+    bool operator!=(const Type &aOther) const { return !(*static_cast<const Type *>(this) == aOther); }
+
+private:
+    Equatable(void) = default;
 };
 
 } // namespace ot
 
-#endif // EQUATABLE_HPP_
+#endif // OT_CORE_COMMON_EQUATABLE_HPP_

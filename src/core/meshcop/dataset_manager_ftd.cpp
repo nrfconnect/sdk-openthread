@@ -29,33 +29,13 @@
 /**
  * @file
  *   This file implements MeshCoP Datasets manager to process commands.
- *
  */
 
 #include "meshcop/dataset_manager.hpp"
 
 #if OPENTHREAD_FTD
 
-#include <stdio.h>
-
-#include <openthread/platform/radio.h>
-
-#include "coap/coap_message.hpp"
-#include "common/as_core_type.hpp"
-#include "common/code_utils.hpp"
-#include "common/debug.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/random.hpp"
-#include "common/timer.hpp"
 #include "instance/instance.hpp"
-#include "meshcop/dataset.hpp"
-#include "meshcop/meshcop.hpp"
-#include "meshcop/meshcop_leader.hpp"
-#include "meshcop/meshcop_tlvs.hpp"
-#include "thread/thread_netif.hpp"
-#include "thread/thread_tlvs.hpp"
-#include "thread/uri_paths.hpp"
 
 namespace ot {
 namespace MeshCoP {
@@ -69,16 +49,12 @@ Error DatasetManager::ProcessSetOrReplaceRequest(MgmtCommand          aCommand,
                                                  const Coap::Message &aMessage,
                                                  RequestInfo         &aInfo) const
 {
-    Error              error = kErrorParse;
-    Dataset            dataset;
-    OffsetRange        offsetRange;
-    Timestamp          activeTimestamp;
-    ChannelTlvValue    channelValue;
-    uint16_t           sessionId;
-    Ip6::NetworkPrefix meshLocalPrefix;
-    NetworkKey         networkKey;
-    uint16_t           panId;
-    uint32_t           delayTimer;
+    Error       error = kErrorParse;
+    Dataset     dataset;
+    OffsetRange offsetRange;
+    Timestamp   activeTimestamp;
+    uint16_t    sessionId;
+    uint32_t    delayTimer;
 
     aInfo.Clear();
 
@@ -106,35 +82,8 @@ Error DatasetManager::ProcessSetOrReplaceRequest(MgmtCommand          aCommand,
     // Determine whether the new Dataset affects connectivity
     // or network key.
 
-    if ((dataset.Read<ChannelTlv>(channelValue) == kErrorNone) &&
-        (channelValue.GetChannel() != Get<Mac::Mac>().GetPanChannel()))
-    {
-        aInfo.mAffectsConnectivity = true;
-    }
-
-    if ((dataset.Read<PanIdTlv>(panId) == kErrorNone) && (panId != Get<Mac::Mac>().GetPanId()))
-    {
-        aInfo.mAffectsConnectivity = true;
-    }
-
-    if ((dataset.Read<MeshLocalPrefixTlv>(meshLocalPrefix) == kErrorNone) &&
-        (meshLocalPrefix != Get<Mle::MleRouter>().GetMeshLocalPrefix()))
-    {
-        aInfo.mAffectsConnectivity = true;
-    }
-
-    if (dataset.Read<NetworkKeyTlv>(networkKey) == kErrorNone)
-    {
-        NetworkKey localNetworkKey;
-
-        Get<KeyManager>().GetNetworkKey(localNetworkKey);
-
-        if (networkKey != localNetworkKey)
-        {
-            aInfo.mAffectsConnectivity = true;
-            aInfo.mAffectsNetworkKey   = true;
-        }
-    }
+    aInfo.mAffectsConnectivity = dataset.AffectsConnectivity(GetInstance());
+    aInfo.mAffectsNetworkKey   = dataset.AffectsNetworkKey(GetInstance());
 
     // Check active timestamp rollback. If there is no change to
     // network key, active timestamp must be ahead of local value.
@@ -198,7 +147,7 @@ Error DatasetManager::ProcessSetOrReplaceRequest(MgmtCommand          aCommand,
         }
         else
         {
-            delayTimer = Max(delayTimer, Get<Leader>().GetDelayTimerMinimal());
+            delayTimer = Max(delayTimer, Get<PendingDatasetManager>().GetDelayTimerMinimal());
         }
 
         IgnoreError(aInfo.mDataset.Write<DelayTimerTlv>(delayTimer));
@@ -208,16 +157,14 @@ exit:
     return error;
 }
 
-Error DatasetManager::HandleSetOrReplace(MgmtCommand             aCommand,
-                                         const Coap::Message    &aMessage,
-                                         const Ip6::MessageInfo &aMessageInfo)
+Error DatasetManager::HandleSetOrReplace(MgmtCommand aCommand, const Coap::Msg &aMsg)
 {
     StateTlv::State state = StateTlv::kReject;
     RequestInfo     info;
 
     VerifyOrExit(Get<Mle::Mle>().IsLeader());
 
-    SuccessOrExit(ProcessSetOrReplaceRequest(aCommand, aMessage, info));
+    SuccessOrExit(ProcessSetOrReplaceRequest(aCommand, aMsg.mMessage, info));
 
     if (IsActiveDataset() && info.mAffectsConnectivity)
     {
@@ -243,34 +190,23 @@ Error DatasetManager::HandleSetOrReplace(MgmtCommand             aCommand,
         Ip6::Address destination;
 
         SuccessOrExit(Get<NetworkData::Leader>().FindCommissioningSessionId(localSessionId));
-        Get<Mle::Mle>().GetCommissionerAloc(localSessionId, destination);
+        Get<Mle::Mle>().ComposeCommissionerAloc(localSessionId, destination);
         Get<Leader>().SendDatasetChanged(destination);
     }
 
 exit:
-    SendSetOrReplaceResponse(aMessage, aMessageInfo, state);
+    SendSetOrReplaceResponse(aMsg, state);
 
     return (state == StateTlv::kAccept) ? kErrorNone : kErrorDrop;
 }
 
-void DatasetManager::SendSetOrReplaceResponse(const Coap::Message    &aRequest,
-                                              const Ip6::MessageInfo &aMessageInfo,
-                                              StateTlv::State         aState)
+void DatasetManager::SendSetOrReplaceResponse(const Coap::Msg &aMsg, StateTlv::State aState)
 {
-    Error          error = kErrorNone;
-    Coap::Message *message;
-
-    message = Get<Tmf::Agent>().NewPriorityResponseMessage(aRequest);
-    VerifyOrExit(message != nullptr, error = kErrorNoBufs);
-
-    SuccessOrExit(error = Tlv::Append<StateTlv>(*message, aState));
-
-    SuccessOrExit(error = Get<Tmf::Agent>().SendMessage(*message, aMessageInfo));
-
+    SuccessOrExit(Get<Tmf::Agent>().SendResponseWithStateTlv(aMsg, aState));
     LogInfo("sent dataset set/replace response");
 
 exit:
-    FreeMessageOnError(message, error);
+    return;
 }
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -282,7 +218,7 @@ Error ActiveDatasetManager::GenerateLocal(void)
     Error   error = kErrorNone;
     Dataset dataset;
 
-    VerifyOrExit(Get<Mle::MleRouter>().IsAttached(), error = kErrorInvalidState);
+    VerifyOrExit(Get<Mle::Mle>().IsAttached(), error = kErrorInvalidState);
     VerifyOrExit(!mLocalTimestamp.IsValid(), error = kErrorAlready);
 
     IgnoreError(Read(dataset));
@@ -313,12 +249,12 @@ Error ActiveDatasetManager::GenerateLocal(void)
 
     if (!dataset.Contains<ExtendedPanIdTlv>())
     {
-        IgnoreError(dataset.Write<ExtendedPanIdTlv>(Get<ExtendedPanIdManager>().GetExtPanId()));
+        IgnoreError(dataset.Write<ExtendedPanIdTlv>(Get<NetworkIdentity>().GetExtPanId()));
     }
 
     if (!dataset.Contains<MeshLocalPrefixTlv>())
     {
-        IgnoreError(dataset.Write<MeshLocalPrefixTlv>(Get<Mle::MleRouter>().GetMeshLocalPrefix()));
+        IgnoreError(dataset.Write<MeshLocalPrefixTlv>(Get<Mle::Mle>().GetMeshLocalPrefix()));
     }
 
     if (!dataset.Contains<NetworkKeyTlv>())
@@ -331,7 +267,7 @@ Error ActiveDatasetManager::GenerateLocal(void)
 
     if (!dataset.Contains<NetworkNameTlv>())
     {
-        NameData nameData = Get<NetworkNameManager>().GetNetworkName().GetAsData();
+        NameData nameData = Get<NetworkIdentity>().GetNetworkName().GetAsData();
 
         IgnoreError(dataset.WriteTlv(Tlv::kNetworkName, nameData.GetBuffer(), nameData.GetLength()));
     }
@@ -380,20 +316,18 @@ void ActiveDatasetManager::StartLeader(void) { IgnoreError(GenerateLocal()); }
 void ActiveDatasetManager::StartLeader(void) {}
 #endif // OPENTHREAD_CONFIG_OPERATIONAL_DATASET_AUTO_INIT
 
-template <>
-void ActiveDatasetManager::HandleTmf<kUriActiveSet>(Coap::Message &aMessage, const Ip6::MessageInfo &aMessageInfo)
+template <> void ActiveDatasetManager::HandleTmf<kUriActiveSet>(Coap::Msg &aMsg)
 {
-    SuccessOrExit(DatasetManager::HandleSetOrReplace(kMgmtSet, aMessage, aMessageInfo));
+    SuccessOrExit(DatasetManager::HandleSetOrReplace(kMgmtSet, aMsg));
     IgnoreError(ApplyConfiguration());
 
 exit:
     return;
 }
 
-template <>
-void ActiveDatasetManager::HandleTmf<kUriActiveReplace>(Coap::Message &aMessage, const Ip6::MessageInfo &aMessageInfo)
+template <> void ActiveDatasetManager::HandleTmf<kUriActiveReplace>(Coap::Msg &aMsg)
 {
-    SuccessOrExit(DatasetManager::HandleSetOrReplace(kMgmtReplace, aMessage, aMessageInfo));
+    SuccessOrExit(DatasetManager::HandleSetOrReplace(kMgmtReplace, aMsg));
     IgnoreError(ApplyConfiguration());
 
 exit:
@@ -405,10 +339,20 @@ exit:
 
 void PendingDatasetManager::StartLeader(void) { StartDelayTimer(); }
 
-template <>
-void PendingDatasetManager::HandleTmf<kUriPendingSet>(Coap::Message &aMessage, const Ip6::MessageInfo &aMessageInfo)
+Error PendingDatasetManager::SetDelayTimerMinimal(uint32_t aDelayTimerMinimal)
 {
-    SuccessOrExit(DatasetManager::HandleSetOrReplace(kMgmtSet, aMessage, aMessageInfo));
+    Error error = kErrorNone;
+
+    VerifyOrExit((aDelayTimerMinimal != 0 && aDelayTimerMinimal < DelayTimerTlv::kMinDelay), error = kErrorInvalidArgs);
+    mDelayTimerMinimal = aDelayTimerMinimal;
+
+exit:
+    return error;
+}
+
+template <> void PendingDatasetManager::HandleTmf<kUriPendingSet>(Coap::Msg &aMsg)
+{
+    SuccessOrExit(DatasetManager::HandleSetOrReplace(kMgmtSet, aMsg));
     StartDelayTimer();
 
 exit:
@@ -423,7 +367,7 @@ void PendingDatasetManager::ApplyActiveDataset(Dataset &aDataset)
 
     SuccessOrExit(aDataset.Read<ActiveTimestampTlv>(activeTimestamp));
     SuccessOrExit(aDataset.Write<PendingTimestampTlv>(activeTimestamp));
-    SuccessOrExit(aDataset.Write<DelayTimerTlv>(Get<Leader>().GetDelayTimerMinimal()));
+    SuccessOrExit(aDataset.Write<DelayTimerTlv>(DelayTimerTlv::kDefaultDelay));
 
     IgnoreError(DatasetManager::Save(aDataset));
     StartDelayTimer(aDataset);

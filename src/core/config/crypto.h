@@ -26,8 +26,8 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CONFIG_CRYPTO_H_
-#define CONFIG_CRYPTO_H_
+#ifndef OT_CORE_CONFIG_CRYPTO_H_
+#define OT_CORE_CONFIG_CRYPTO_H_
 
 /**
  * @addtogroup config-crypto
@@ -36,7 +36,6 @@
  *   This module includes configuration variables for the Crypto Backend Library.
  *
  * @{
- *
  */
 
 /**
@@ -48,7 +47,6 @@
  * - @sa OPENTHREAD_CONFIG_CRYPTO_LIB_MBEDTLS
  * - @sa OPENTHREAD_CONFIG_CRYPTO_LIB_PSA
  * - @sa OPENTHREAD_CONFIG_CRYPTO_LIB_PLATFORM
- *
  */
 #ifndef OPENTHREAD_CONFIG_CRYPTO_LIB
 #define OPENTHREAD_CONFIG_CRYPTO_LIB OPENTHREAD_CONFIG_CRYPTO_LIB_MBEDTLS
@@ -61,13 +59,34 @@
 /** Use platform provided crypto library */
 #define OPENTHREAD_CONFIG_CRYPTO_LIB_PLATFORM 2
 
+/**
+ * @def OPENTHREAD_CONFIG_CRYPTO_PLATFORM_ALLOCS_CONTEXT
+ *
+ * Define to 1 to enable the platform to allocate crypto operation context.
+ */
+#ifndef OPENTHREAD_CONFIG_CRYPTO_PLATFORM_ALLOCS_CONTEXT
+#define OPENTHREAD_CONFIG_CRYPTO_PLATFORM_ALLOCS_CONTEXT 0
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_CRYPTO_PLATFORM_CCM_ONE_SHOT_ENABLE
+ *
+ * Define to 1 to enable platform one-shot AES-CCM* acceleration.
+ *
+ * When enabled, `AesCcm::Engine::ProcessOneShot()` calls
+ * `otPlatCryptoAesCcmProcessOneShot()` instead of the built-in
+ * software CCM engine.
+ */
+#ifndef OPENTHREAD_CONFIG_CRYPTO_PLATFORM_CCM_ONE_SHOT_ENABLE
+#define OPENTHREAD_CONFIG_CRYPTO_PLATFORM_CCM_ONE_SHOT_ENABLE 0
+#endif
+
 #if OPENTHREAD_CONFIG_CRYPTO_LIB == OPENTHREAD_CONFIG_CRYPTO_LIB_PLATFORM
 
 /**
  * @def OPENTHREAD_CONFIG_AES_CONTEXT_SIZE
  *
  * The size of the AES context byte array. Only applicable with OPENTHREAD_CONFIG_CRYPTO_LIB_PLATFORM.
- *
  */
 #ifndef OPENTHREAD_CONFIG_AES_CONTEXT_SIZE
 #error "OPENTHREAD_CONFIG_AES_CONTEXT_SIZE is missing"
@@ -77,7 +96,6 @@
  * @def OPENTHREAD_CONFIG_HMAC_SHA256_CONTEXT_SIZE
  *
  * The size of the HMAC_SHA256 context byte array. Only applicable with OPENTHREAD_CONFIG_CRYPTO_LIB_PLATFORM.
- *
  */
 #ifndef OPENTHREAD_CONFIG_HMAC_SHA256_CONTEXT_SIZE
 #error "OPENTHREAD_CONFIG_HMAC_SHA256_CONTEXT_SIZE is missing"
@@ -87,7 +105,6 @@
  * @def OPENTHREAD_CONFIG_HKDF_CONTEXT_SIZE
  *
  * The size of the HKDF context byte array. Only applicable with OPENTHREAD_CONFIG_CRYPTO_LIB_PLATFORM.
- *
  */
 #ifndef OPENTHREAD_CONFIG_HKDF_CONTEXT_SIZE
 #error "OPENTHREAD_CONFIG_HKDF_CONTEXT_SIZE is missing"
@@ -97,7 +114,6 @@
  * @def OPENTHREAD_CONFIG_SHA256_CONTEXT_SIZE
  *
  * The size of the SHA256 context byte array. Only applicable with OPENTHREAD_CONFIG_CRYPTO_LIB_PLATFORM.
- *
  */
 #ifndef OPENTHREAD_CONFIG_SHA256_CONTEXT_SIZE
 #error "OPENTHREAD_CONFIG_SHA256_CONTEXT_SIZE is missing"
@@ -107,7 +123,6 @@
 
 /**
  * @}
- *
  */
 
-#endif // CONFIG_CRYPTO_H_
+#endif // OT_CORE_CONFIG_CRYPTO_H_

@@ -70,10 +70,7 @@ struct Config
     const char *mNetifName;
 };
 
-enum
-{
-    kLineBufferSize = OPENTHREAD_CONFIG_CLI_MAX_LINE_LENGTH,
-};
+static constexpr uint16_t kLineBufferSize = OPENTHREAD_CONFIG_CLI_MAX_LINE_LENGTH;
 
 static_assert(kLineBufferSize >= sizeof("> "), "kLineBufferSize is too small");
 static_assert(kLineBufferSize >= sizeof("Done\r\n"), "kLineBufferSize is too small");
@@ -208,15 +205,15 @@ exit:
     return ok;
 }
 
-enum
-{
-    kOptInterfaceName = 'I',
-    kOptHelp          = 'h',
-};
+constexpr char kOptInterfaceName = 'I';
+constexpr char kOptHelp          = 'h';
+constexpr char kOptVersion       = 'V';
 
 const struct option kOptions[] = {
-    {"interface-name", required_argument, NULL, kOptInterfaceName},
-    {"help", required_argument, NULL, kOptHelp},
+    {"interface-name", required_argument, nullptr, kOptInterfaceName},
+    {"help", no_argument, nullptr, kOptHelp},
+    {"version", no_argument, nullptr, kOptVersion},
+    {nullptr, 0, nullptr, 0},
 };
 
 void PrintUsage(const char *aProgramName, FILE *aStream, int aExitCode)
@@ -226,7 +223,8 @@ void PrintUsage(const char *aProgramName, FILE *aStream, int aExitCode)
             "    %s [Options] [--] ...\n"
             "Options:\n"
             "    -h  --help                    Display this usage information.\n"
-            "    -I  --interface-name name     Thread network interface name.\n",
+            "    -I  --interface-name name     Thread network interface name.\n"
+            "    -V  --version                 Display version information.\n",
             aProgramName);
     exit(aExitCode);
 }
@@ -242,7 +240,7 @@ Config ParseArg(int &aArgCount, char **&aArgVector)
 
     optind = 1;
 
-    for (int index, option; (option = getopt_long(aArgCount, aArgVector, "+I:h", kOptions, &index)) != -1;)
+    for (int index, option; (option = getopt_long(aArgCount, aArgVector, "+I:hV", kOptions, &index)) != -1;)
     {
         switch (option)
         {
@@ -251,6 +249,10 @@ Config ParseArg(int &aArgCount, char **&aArgVector)
             break;
         case kOptHelp:
             PrintUsage(aArgVector[0], stdout, OT_EXIT_SUCCESS);
+            break;
+        case kOptVersion:
+            printf("%s\n", PACKAGE_VERSION);
+            exit(OT_EXIT_SUCCESS);
             break;
         default:
             PrintUsage(aArgVector[0], stderr, OT_EXIT_FAILURE);

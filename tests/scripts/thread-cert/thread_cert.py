@@ -97,7 +97,7 @@ class TestCase(NcpSupportMixin, unittest.TestCase):
     """
 
     USE_MESSAGE_FACTORY = True
-    TOPOLOGY = None
+    TOPOLOGY = {}
     CASE_WIRESHARK_PREFS = None
     SUPPORT_THREAD_1_1 = True
     PACKET_VERIFICATION = config.PACKET_VERIFICATION_DEFAULT
@@ -142,7 +142,10 @@ class TestCase(NcpSupportMixin, unittest.TestCase):
         """
         self._clean_up_tmp()
 
-        self.simulator = config.create_default_simulator(use_message_factory=self.USE_MESSAGE_FACTORY)
+        key_manager = config.create_default_thread_key_manager()
+
+        self.simulator = config.create_default_simulator(
+            config.create_default_thread_message_factory(key_manager) if self.USE_MESSAGE_FACTORY else None)
         self.nodes = {}
 
         os.environ['LD_LIBRARY_PATH'] = '/tmp/thread-wireshark'
@@ -255,7 +258,7 @@ class TestCase(NcpSupportMixin, unittest.TestCase):
             'channel_mask': config.CHANNEL_MASK,
             'extended_panid': config.EXTENDED_PANID,
             'mesh_local_prefix': config.MESH_LOCAL_PREFIX.split('/')[0],
-            'network_key': binascii.hexlify(config.DEFAULT_NETWORK_KEY).decode(),
+            'network_key': config.DEFAULT_NETWORK_KEY,
             'network_name': config.NETWORK_NAME,
             'panid': config.PANID,
             'pskc': config.PSKC,
@@ -264,8 +267,8 @@ class TestCase(NcpSupportMixin, unittest.TestCase):
 
         if 'channel' in params:
             dataset['channel'] = params['channel']
-        if 'networkkey' in params:
-            dataset['network_key'] = params['networkkey']
+        if 'network_key' in params:
+            dataset['network_key'] = params['network_key']
         if 'network_name' in params:
             dataset['network_name'] = params['network_name']
         if 'panid' in params:
@@ -407,19 +410,6 @@ class TestCase(NcpSupportMixin, unittest.TestCase):
 
             test_info['omrs'][i] = node.get_ip6_address(config.ADDRESS_TYPE.OMR)
 
-    def collect_duas(self):
-        if not self._do_packet_verification:
-            return
-
-        test_info = self._test_info
-        test_info['duas'] = {}
-
-        for i, node in self.nodes.items():
-            if node.is_host:
-                continue
-
-            test_info['duas'][i] = node.get_ip6_address(config.ADDRESS_TYPE.DUA)
-
     def collect_leader_aloc(self, node):
         if not self._do_packet_verification:
             return
@@ -458,7 +448,6 @@ class TestCase(NcpSupportMixin, unittest.TestCase):
                 'interface': config.BACKBONE_DOCKER_NETWORK_NAME,
                 'prefix': config.BACKBONE_PREFIX,
             },
-            'domain_prefix': config.DOMAIN_PREFIX,
             'env': {
                 'PORT_OFFSET': config.PORT_OFFSET,
             },

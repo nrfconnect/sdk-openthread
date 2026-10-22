@@ -35,13 +35,7 @@
 
 #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_BACKBONE_ROUTER_ENABLE
 
-#include "common/code_utils.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/random.hpp"
 #include "instance/instance.hpp"
-#include "thread/mle_types.hpp"
-#include "thread/thread_netif.hpp"
 
 namespace ot {
 
@@ -53,17 +47,14 @@ Local::Local(Instance &aInstance)
     : InstanceLocator(aInstance)
     , mIsServiceAdded(false)
     , mState(kStateDisabled)
-    , mSequenceNumber(Random::NonCrypto::GetUint8() % 127)
+    , mSequenceNumber(Random::NonCrypto::GenerateUpToExcluding<uint8_t>(127))
     , mRegistrationJitter(kDefaultRegistrationJitter)
     , mReregistrationDelay(kDefaultRegistrationDelay)
     , mRegistrationTimeout(0)
     , mMlrTimeout(kDefaultMlrTimeout)
 {
-    mDomainPrefixConfig.GetPrefix().SetLength(0);
-
     // Primary Backbone Router Aloc
     mBbrPrimaryAloc.InitAsThreadOriginMeshLocal();
-    mBbrPrimaryAloc.GetAddress().GetIid().SetToLocator(Mle::kAloc16BackboneRouterPrimary);
 
     // All Network Backbone Routers Multicast Address.
     mAllNetworkBackboneRouters.Clear();
@@ -71,13 +62,6 @@ Local::Local(Instance &aInstance)
     mAllNetworkBackboneRouters.mFields.m8[0]  = 0xff; // Multicast
     mAllNetworkBackboneRouters.mFields.m8[1]  = 0x32; // Flags = 3, Scope = 2
     mAllNetworkBackboneRouters.mFields.m8[15] = 3;    // Group ID = 3
-
-    // All Domain Backbone Routers Multicast Address.
-    mAllDomainBackboneRouters.Clear();
-
-    mAllDomainBackboneRouters.mFields.m8[0]  = 0xff; // Multicast
-    mAllDomainBackboneRouters.mFields.m8[1]  = 0x32; // Flags = 3, Scope = 2
-    mAllDomainBackboneRouters.mFields.m8[15] = 3;    // Group ID = 3
 }
 
 void Local::SetEnabled(bool aEnable)
@@ -87,12 +71,10 @@ void Local::SetEnabled(bool aEnable)
     if (aEnable)
     {
         SetState(kStateSecondary);
-        AddDomainPrefixToNetworkData();
         IgnoreError(AddService(kDecideBasedOnState));
     }
     else
     {
-        RemoveDomainPrefixFromNetworkData();
         RemoveService();
         SetState(kStateDisabled);
     }
@@ -182,7 +164,7 @@ Error Local::AddService(RegisterMode aMode)
     {
     case kDecideBasedOnState:
         VerifyOrExit(!Get<BackboneRouter::Leader>().HasPrimary() ||
-                     Get<BackboneRouter::Leader>().GetServer16() == Get<Mle::MleRouter>().GetRloc16());
+                     Get<BackboneRouter::Leader>().GetServer16() == Get<Mle::Mle>().GetRloc16());
         break;
     case kForceRegistration:
         break;
@@ -219,7 +201,7 @@ void Local::SetState(State aState)
     {
     case kStateDisabled:
         // Update All Network Backbone Routers Multicast Address for both Secondary and Primary state.
-        mAllNetworkBackboneRouters.SetMulticastNetworkPrefix(Get<Mle::MleRouter>().GetMeshLocalPrefix());
+        mAllNetworkBackboneRouters.SetMulticastNetworkPrefix(Get<Mle::Mle>().GetMeshLocalPrefix());
         break;
     case kStateSecondary:
         break;
@@ -231,7 +213,7 @@ void Local::SetState(State aState)
     if (aState == kStatePrimary)
     {
         // Add Primary Backbone Router ALOC for Primary Backbone Router.
-        mBbrPrimaryAloc.GetAddress().SetPrefix(Get<Mle::MleRouter>().GetMeshLocalPrefix());
+        Get<Mle::Mle>().ComposeAloc(Mle::Aloc16::ForPrimaryBackboneRouter(), mBbrPrimaryAloc.GetAddress());
         Get<ThreadNetif>().AddUnicastAddress(mBbrPrimaryAloc);
     }
 
@@ -243,26 +225,40 @@ exit:
     return;
 }
 
-void Local::HandleBackboneRouterPrimaryUpdate(Leader::State aState, const Config &aConfig)
+void Local::HandleBackboneRouterPrimaryUpdate(PrimaryEvent aEvent)
 {
-    OT_UNUSED_VARIABLE(aState);
+    OT_UNUSED_VARIABLE(aEvent);
+    UpdateState();
+}
 
-    VerifyOrExit(IsEnabled() && Get<Mle::MleRouter>().IsAttached());
+void Local::HandleNotifierEvents(Events aEvents)
+{
+    if (aEvents.Contains(kEventThreadRoleChanged))
+    {
+        UpdateState();
+    }
+}
+
+void Local::UpdateState(void)
+{
+    VerifyOrExit(IsEnabled() && Get<Mle::Mle>().IsAttached());
 
     // Wait some jitter before trying to Register.
-    if (aConfig.mServer16 == Mle::kInvalidRloc16)
+    if (!Get<Leader>().HasPrimary())
     {
-        mRegistrationTimeout = 1;
-
-        if (!Get<Mle::MleRouter>().IsLeader())
+        if (Get<Mle::Mle>().IsLeader())
         {
-            mRegistrationTimeout +=
-                Random::NonCrypto::GetUint16InRange(0, static_cast<uint16_t>(mRegistrationJitter) + 1);
+            mRegistrationTimeout = 0;
+            Get<TimeTicker>().UnregisterReceiver(TimeTicker::kBbrLocal);
+            IgnoreError(AddService(kDecideBasedOnState));
         }
-
-        Get<TimeTicker>().RegisterReceiver(TimeTicker::kBbrLocal);
+        else
+        {
+            mRegistrationTimeout = Random::NonCrypto::GenerateInClosedRange<uint16_t>(1, mRegistrationJitter);
+            Get<TimeTicker>().RegisterReceiver(TimeTicker::kBbrLocal);
+        }
     }
-    else if (aConfig.mServer16 != Get<Mle::MleRouter>().GetRloc16())
+    else if (!Get<Mle::Mle>().HasRloc16(Get<Leader>().GetConfig().GetServer16()))
     {
         Reset();
     }
@@ -270,9 +266,9 @@ void Local::HandleBackboneRouterPrimaryUpdate(Leader::State aState, const Config
     {
         // Here original PBBR restores its Backbone Router Service from Thread Network,
         // Intentionally skips the state update as PBBR will refresh its service.
-        mSequenceNumber      = aConfig.mSequenceNumber;
-        mReregistrationDelay = aConfig.mReregistrationDelay;
-        mMlrTimeout          = aConfig.mMlrTimeout;
+        mSequenceNumber      = Get<Leader>().GetConfig().mSequenceNumber;
+        mReregistrationDelay = Get<Leader>().GetConfig().mReregistrationDelay;
+        mMlrTimeout          = Get<Leader>().GetConfig().mMlrTimeout;
         IncrementSequenceNumber();
         Get<Notifier>().Signal(kEventThreadBackboneRouterLocalChanged);
         IgnoreError(AddService(kForceRegistration));
@@ -291,7 +287,7 @@ void Local::HandleTimeTick(void)
     // Delay registration while router role transition is pending
     // (i.e., device may soon switch from REED to router role).
 
-    VerifyOrExit(!Get<Mle::MleRouter>().IsRouterRoleTransitionPending());
+    VerifyOrExit(!Get<Mle::Mle>().IsRouterRoleTransitionPending());
 
     if (mRegistrationTimeout > 0)
     {
@@ -310,109 +306,16 @@ exit:
     }
 }
 
-Error Local::GetDomainPrefix(NetworkData::OnMeshPrefixConfig &aConfig)
-{
-    Error error = kErrorNone;
-
-    VerifyOrExit(mDomainPrefixConfig.GetPrefix().GetLength() > 0, error = kErrorNotFound);
-
-    aConfig = mDomainPrefixConfig;
-
-exit:
-    return error;
-}
-
-Error Local::RemoveDomainPrefix(const Ip6::Prefix &aPrefix)
-{
-    Error error = kErrorNone;
-
-    VerifyOrExit(aPrefix.GetLength() > 0, error = kErrorInvalidArgs);
-    VerifyOrExit(mDomainPrefixConfig.GetPrefix() == aPrefix, error = kErrorNotFound);
-
-    if (IsEnabled())
-    {
-        RemoveDomainPrefixFromNetworkData();
-    }
-
-    mDomainPrefixConfig.GetPrefix().SetLength(0);
-
-exit:
-    return error;
-}
-
-Error Local::SetDomainPrefix(const NetworkData::OnMeshPrefixConfig &aConfig)
-{
-    Error error = kErrorNone;
-
-    VerifyOrExit(aConfig.IsValid(GetInstance()), error = kErrorInvalidArgs);
-
-    if (IsEnabled())
-    {
-        RemoveDomainPrefixFromNetworkData();
-    }
-
-    mDomainPrefixConfig = aConfig;
-    LogDomainPrefix(kActionSet, kErrorNone);
-
-    if (IsEnabled())
-    {
-        AddDomainPrefixToNetworkData();
-    }
-
-exit:
-    return error;
-}
-
 void Local::ApplyNewMeshLocalPrefix(void)
 {
     VerifyOrExit(IsEnabled());
 
     Get<BackboneTmfAgent>().UnsubscribeMulticast(mAllNetworkBackboneRouters);
-    mAllNetworkBackboneRouters.SetMulticastNetworkPrefix(Get<Mle::MleRouter>().GetMeshLocalPrefix());
+    mAllNetworkBackboneRouters.SetMulticastNetworkPrefix(Get<Mle::Mle>().GetMeshLocalPrefix());
     Get<BackboneTmfAgent>().SubscribeMulticast(mAllNetworkBackboneRouters);
 
 exit:
     return;
-}
-
-void Local::HandleDomainPrefixUpdate(DomainPrefixEvent aEvent)
-{
-    if (!IsEnabled())
-    {
-        ExitNow();
-    }
-
-    if (aEvent == kDomainPrefixRemoved || aEvent == kDomainPrefixRefreshed)
-    {
-        Get<BackboneTmfAgent>().UnsubscribeMulticast(mAllDomainBackboneRouters);
-    }
-
-    if (aEvent == kDomainPrefixAdded || aEvent == kDomainPrefixRefreshed)
-    {
-        mAllDomainBackboneRouters.SetMulticastNetworkPrefix(*Get<Leader>().GetDomainPrefix());
-        Get<BackboneTmfAgent>().SubscribeMulticast(mAllDomainBackboneRouters);
-    }
-
-    if (aEvent != kDomainPrefixUnchanged)
-    {
-        mDomainPrefixCallback.InvokeIfSet(static_cast<otBackboneRouterDomainPrefixEvent>(aEvent),
-                                          Get<Leader>().GetDomainPrefix());
-    }
-
-exit:
-    return;
-}
-
-void Local::RemoveDomainPrefixFromNetworkData(void)
-{
-    Error error = kErrorNotFound; // only used for logging.
-
-    if (mDomainPrefixConfig.mPrefix.mLength > 0)
-    {
-        error = Get<NetworkData::Local>().RemoveOnMeshPrefix(mDomainPrefixConfig.GetPrefix());
-    }
-
-    LogDomainPrefix(kActionRemove, error);
 }
 
 void Local::IncrementSequenceNumber(void)
@@ -433,39 +336,18 @@ void Local::IncrementSequenceNumber(void)
     }
 }
 
-void Local::AddDomainPrefixToNetworkData(void)
-{
-    Error error = kErrorNotFound; // only used for logging.
-
-    if (mDomainPrefixConfig.GetPrefix().GetLength() > 0)
-    {
-        error = Get<NetworkData::Local>().AddOnMeshPrefix(mDomainPrefixConfig);
-    }
-
-    LogDomainPrefix(kActionAdd, error);
-}
-
 #if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_INFO)
 
 const char *Local::ActionToString(Action aAction)
 {
-    static const char *const kActionStrings[] = {
-        "Set",    // (0) kActionSet
-        "Add",    // (1) kActionAdd
-        "Remove", // (2) kActionRemove
-    };
+#define ActionMapList(_) \
+    _(kActionSet, "Set") \
+    _(kActionAdd, "Add") \
+    _(kActionRemove, "Remove")
 
-    static_assert(0 == kActionSet, "kActionSet value is incorrect");
-    static_assert(1 == kActionAdd, "kActionAdd value is incorrect");
-    static_assert(2 == kActionRemove, "kActionRemove value is incorrect");
+    DefineEnumStringArray(ActionMapList);
 
-    return kActionStrings[aAction];
-}
-
-void Local::LogDomainPrefix(Action aAction, Error aError)
-{
-    LogInfo("%s Domain Prefix: %s, %s", ActionToString(aAction), mDomainPrefixConfig.GetPrefix().ToString().AsCString(),
-            ErrorToString(aError));
+    return kStrings[aAction];
 }
 
 void Local::LogService(Action aAction, Error aError)

@@ -38,81 +38,92 @@
 #include <openthread/border_agent.h>
 
 #include "common/as_core_type.hpp"
-#include "common/locator_getters.hpp"
+#include "instance/instance.hpp"
 
 using namespace ot;
+
+void otBorderAgentSetEnabled(otInstance *aInstance, bool aEnabled)
+{
+    AsCoreType(aInstance).Get<MeshCoP::BorderAgent::Manager>().SetEnabled(aEnabled);
+}
+
+bool otBorderAgentIsEnabled(otInstance *aInstance)
+{
+    return AsCoreType(aInstance).Get<MeshCoP::BorderAgent::Manager>().IsEnabled();
+}
+
+bool otBorderAgentIsActive(otInstance *aInstance)
+{
+    return AsCoreType(aInstance).Get<MeshCoP::BorderAgent::Manager>().IsRunning();
+}
+
+#if OPENTHREAD_CONFIG_BORDER_AGENT_MESHCOP_SERVICE_ENABLE
+otError otBorderAgentSetMeshCoPServiceBaseName(otInstance *aInstance, const char *aBaseName)
+{
+    AssertPointerIsNotNull(aBaseName);
+
+    return AsCoreType(aInstance).Get<MeshCoP::BorderAgent::Manager>().SetServiceBaseName(aBaseName);
+}
+
+void otBorderAgentSetVendorTxtData(otInstance *aInstance, const uint8_t *aVendorData, uint16_t aVendorDataLength)
+{
+    AsCoreType(aInstance).Get<MeshCoP::BorderAgent::TxtData>().SetVendorData(aVendorData, aVendorDataLength);
+}
+#endif
 
 #if OPENTHREAD_CONFIG_BORDER_AGENT_ID_ENABLE
 otError otBorderAgentGetId(otInstance *aInstance, otBorderAgentId *aId)
 {
-    return AsCoreType(aInstance).Get<MeshCoP::BorderAgent>().GetId(AsCoreType(aId));
+    AsCoreType(aInstance).Get<MeshCoP::BorderAgent::Manager>().GetId(AsCoreType(aId));
+    return kErrorNone;
 }
 
 otError otBorderAgentSetId(otInstance *aInstance, const otBorderAgentId *aId)
 {
-    return AsCoreType(aInstance).Get<MeshCoP::BorderAgent>().SetId(AsCoreType(aId));
+    AsCoreType(aInstance).Get<MeshCoP::BorderAgent::Manager>().SetId(AsCoreType(aId));
+    return kErrorNone;
 }
 #endif
 
-otBorderAgentState otBorderAgentGetState(otInstance *aInstance)
-{
-    otBorderAgentState state = OT_BORDER_AGENT_STATE_STOPPED;
-
-    switch (AsCoreType(aInstance).Get<MeshCoP::BorderAgent>().GetState())
-    {
-    case MeshCoP::BorderAgent::kStateStopped:
-        break;
-    case MeshCoP::BorderAgent::kStateStarted:
-        state = OT_BORDER_AGENT_STATE_STARTED;
-        break;
-    case MeshCoP::BorderAgent::kStateConnected:
-    case MeshCoP::BorderAgent::kStateAccepted:
-        state = OT_BORDER_AGENT_STATE_ACTIVE;
-        break;
-    }
-
-    return state;
-}
-
 uint16_t otBorderAgentGetUdpPort(otInstance *aInstance)
 {
-    return AsCoreType(aInstance).Get<MeshCoP::BorderAgent>().GetUdpPort();
+    return AsCoreType(aInstance).Get<MeshCoP::BorderAgent::Manager>().GetUdpPort();
 }
 
-#if OPENTHREAD_CONFIG_BORDER_AGENT_EPHEMERAL_KEY_ENABLE
-
-otError otBorderAgentSetEphemeralKey(otInstance *aInstance,
-                                     const char *aKeyString,
-                                     uint32_t    aTimeout,
-                                     uint16_t    aUdpPort)
+void otBorderAgentInitSessionIterator(otInstance *aInstance, otBorderAgentSessionIterator *aIterator)
 {
-    AssertPointerIsNotNull(aKeyString);
-
-    return AsCoreType(aInstance).Get<MeshCoP::BorderAgent>().SetEphemeralKey(aKeyString, aTimeout, aUdpPort);
+    AsCoreType(aIterator).Init(AsCoreType(aInstance));
 }
 
-void otBorderAgentClearEphemeralKey(otInstance *aInstance)
+otError otBorderAgentGetNextSessionInfo(otBorderAgentSessionIterator *aIterator, otBorderAgentSessionInfo *aSessionInfo)
 {
-    AsCoreType(aInstance).Get<MeshCoP::BorderAgent>().ClearEphemeralKey();
+    AssertPointerIsNotNull(aSessionInfo);
+
+    return AsCoreType(aIterator).GetNextSessionInfo(*aSessionInfo);
 }
 
-bool otBorderAgentIsEphemeralKeyActive(otInstance *aInstance)
+void otBorderAgentSetMeshCoPServiceChangedCallback(otInstance                                *aInstance,
+                                                   otBorderAgentMeshCoPServiceChangedCallback aCallback,
+                                                   void                                      *aContext)
 {
-    return AsCoreType(aInstance).Get<MeshCoP::BorderAgent>().IsEphemeralKeyActive();
+    AsCoreType(aInstance).Get<MeshCoP::BorderAgent::TxtData>().SetChangedCallback(aCallback, aContext);
 }
 
-void otBorderAgentSetEphemeralKeyCallback(otInstance                       *aInstance,
-                                          otBorderAgentEphemeralKeyCallback aCallback,
-                                          void                             *aContext)
+otError otBorderAgentGetMeshCoPServiceTxtData(otInstance *aInstance, otBorderAgentMeshCoPServiceTxtData *aTxtData)
 {
-    AsCoreType(aInstance).Get<MeshCoP::BorderAgent>().SetEphemeralKeyCallback(aCallback, aContext);
+    return AsCoreType(aInstance).Get<MeshCoP::BorderAgent::TxtData>().Prepare(*aTxtData);
 }
-
-#endif // OPENTHREAD_CONFIG_BORDER_AGENT_EPHEMERAL_KEY_ENABLE
 
 const otBorderAgentCounters *otBorderAgentGetCounters(otInstance *aInstance)
 {
-    return AsCoreType(aInstance).Get<MeshCoP::BorderAgent>().GetCounters();
+    return &AsCoreType(aInstance).Get<MeshCoP::BorderAgent::Manager>().GetCounters();
 }
+
+#if OPENTHREAD_CONFIG_BORDER_AGENT_COMMISSIONER_EVICTION_API_ENABLE
+otError otBorderAgentEvictActiveCommissioner(otInstance *aInstance)
+{
+    return AsCoreType(aInstance).Get<MeshCoP::BorderAgent::Manager>().EvictActiveCommissioner();
+}
+#endif
 
 #endif // OPENTHREAD_CONFIG_BORDER_AGENT_ENABLE

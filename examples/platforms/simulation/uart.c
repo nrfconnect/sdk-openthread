@@ -41,16 +41,19 @@
 #include <openthread/platform/debug_uart.h>
 
 #include "simul_utils.h"
+#include "lib/platform/exit_code.h"
 #include "utils/code_utils.h"
 #include "utils/uart.h"
 
-#if OPENTHREAD_SIMULATION_VIRTUAL_TIME_UART == 0
+#if OPENTHREAD_SIMULATION_VIRTUAL_TIME
+bool gVirtualUart = ((OPENTHREAD_SIMULATION_VIRTUAL_TIME_UART) == 1);
+#endif
 
 static uint8_t        s_receive_buffer[128];
 static const uint8_t *s_write_buffer;
 static uint16_t       s_write_length;
-static int            s_in_fd;
-static int            s_out_fd;
+static int            s_in_fd  = -1;
+static int            s_out_fd = -1;
 
 static struct termios original_stdin_termios;
 static struct termios original_stdout_termios;
@@ -61,15 +64,28 @@ static void restore_stdout_termios(void) { tcsetattr(s_out_fd, TCSAFLUSH, &origi
 
 void platformUartRestore(void)
 {
+#if OPENTHREAD_SIMULATION_VIRTUAL_TIME
+    otEXPECT(!gVirtualUart);
+#endif
+
     restore_stdin_termios();
     restore_stdout_termios();
     dup2(s_out_fd, STDOUT_FILENO);
+
+#if OPENTHREAD_SIMULATION_VIRTUAL_TIME
+exit:
+    return;
+#endif
 }
 
 otError otPlatUartEnable(void)
 {
     otError        error = OT_ERROR_NONE;
     struct termios termios;
+
+#if OPENTHREAD_SIMULATION_VIRTUAL_TIME
+    otEXPECT(!gVirtualUart);
+#endif
 
     s_in_fd  = dup(STDIN_FILENO);
     s_out_fd = dup(STDOUT_FILENO);
@@ -143,8 +159,14 @@ otError otPlatUartEnable(void)
     return error;
 
 exit:
-    close(s_in_fd);
-    close(s_out_fd);
+    if (s_in_fd != -1)
+    {
+        close(s_in_fd);
+    }
+    if (s_out_fd != -1)
+    {
+        close(s_out_fd);
+    }
     return error;
 }
 
@@ -152,15 +174,26 @@ otError otPlatUartDisable(void)
 {
     otError error = OT_ERROR_NONE;
 
+#if OPENTHREAD_SIMULATION_VIRTUAL_TIME
+    otEXPECT(!gVirtualUart);
+#endif
+
     close(s_in_fd);
     close(s_out_fd);
 
+#if OPENTHREAD_SIMULATION_VIRTUAL_TIME
+exit:
+#endif
     return error;
 }
 
 otError otPlatUartSend(const uint8_t *aBuf, uint16_t aBufLength)
 {
     otError error = OT_ERROR_NONE;
+
+#if OPENTHREAD_SIMULATION_VIRTUAL_TIME
+    otEXPECT_ACTION(!gVirtualUart, error = platformUartSendVirtual(aBuf, aBufLength));
+#endif
 
     otEXPECT_ACTION(s_write_length == 0, error = OT_ERROR_BUSY);
 
@@ -173,6 +206,10 @@ exit:
 
 void platformUartUpdateFdSet(fd_set *aReadFdSet, fd_set *aWriteFdSet, fd_set *aErrorFdSet, int *aMaxFd)
 {
+#if OPENTHREAD_SIMULATION_VIRTUAL_TIME
+    otEXPECT(!gVirtualUart);
+#endif
+
     utilsAddFdToFdSet(s_in_fd, aReadFdSet, aMaxFd);
     utilsAddFdToFdSet(s_in_fd, aErrorFdSet, aMaxFd);
 
@@ -181,12 +218,21 @@ void platformUartUpdateFdSet(fd_set *aReadFdSet, fd_set *aWriteFdSet, fd_set *aE
         utilsAddFdToFdSet(s_out_fd, aWriteFdSet, aMaxFd);
         utilsAddFdToFdSet(s_out_fd, aErrorFdSet, aMaxFd);
     }
+
+#if OPENTHREAD_SIMULATION_VIRTUAL_TIME
+exit:
+    return;
+#endif
 }
 
 otError otPlatUartFlush(void)
 {
     otError error = OT_ERROR_NONE;
     ssize_t count;
+
+#if OPENTHREAD_SIMULATION_VIRTUAL_TIME
+    otEXPECT(!gVirtualUart);
+#endif
 
     otEXPECT_ACTION(s_write_buffer != NULL && s_write_length > 0, error = OT_ERROR_INVALID_STATE);
 
@@ -203,7 +249,7 @@ otError otPlatUartFlush(void)
     else
     {
         perror("write(UART)");
-        exit(EXIT_FAILURE);
+        DieNow(OT_EXIT_ERROR_ERRNO);
     }
 
 exit:
@@ -215,9 +261,13 @@ void platformUartProcess(void)
     ssize_t       rval;
     const int     error_flags = POLLERR | POLLNVAL | POLLHUP;
     struct pollfd pollfd[]    = {
-           {s_in_fd, POLLIN | error_flags, 0},
-           {s_out_fd, POLLOUT | error_flags, 0},
+        {s_in_fd, POLLIN | error_flags, 0},
+        {s_out_fd, POLLOUT | error_flags, 0},
     };
+
+#if OPENTHREAD_SIMULATION_VIRTUAL_TIME
+    otEXPECT(!gVirtualUart);
+#endif
 
     errno = 0;
 
@@ -226,7 +276,7 @@ void platformUartProcess(void)
     if (rval < 0)
     {
         perror("poll");
-        exit(EXIT_FAILURE);
+        DieNow(OT_EXIT_ERROR_ERRNO);
     }
 
     if (rval > 0)
@@ -234,13 +284,13 @@ void platformUartProcess(void)
         if ((pollfd[0].revents & error_flags) != 0)
         {
             perror("s_in_fd");
-            exit(EXIT_FAILURE);
+            DieNow(OT_EXIT_ERROR_ERRNO);
         }
 
         if ((pollfd[1].revents & error_flags) != 0)
         {
             perror("s_out_fd");
-            exit(EXIT_FAILURE);
+            DieNow(OT_EXIT_ERROR_ERRNO);
         }
 
         if (pollfd[0].revents & POLLIN)
@@ -250,7 +300,7 @@ void platformUartProcess(void)
             if (rval <= 0)
             {
                 perror("read");
-                exit(EXIT_FAILURE);
+                DieNow(OT_EXIT_ERROR_ERRNO);
             }
 
             otPlatUartReceived(s_receive_buffer, (uint16_t)rval);
@@ -273,12 +323,15 @@ void platformUartProcess(void)
             else if (errno != EINTR)
             {
                 perror("write");
-                exit(EXIT_FAILURE);
+                DieNow(OT_EXIT_ERROR_ERRNO);
             }
         }
     }
+#if OPENTHREAD_SIMULATION_VIRTUAL_TIME
+exit:
+    return;
+#endif
 }
-#endif // OPENTHREAD_SIMULATION_VIRTUAL_TIME_UART == 0
 
 #if OPENTHREAD_CONFIG_ENABLE_DEBUG_UART && (OPENTHREAD_CONFIG_LOG_OUTPUT == OPENTHREAD_CONFIG_LOG_OUTPUT_DEBUG_UART)
 

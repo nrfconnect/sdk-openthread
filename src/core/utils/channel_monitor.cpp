@@ -35,10 +35,7 @@
 
 #if OPENTHREAD_CONFIG_CHANNEL_MONITOR_ENABLE
 
-#include "common/code_utils.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
-#include "common/random.hpp"
+#include "instance/instance.hpp"
 
 namespace ot {
 namespace Utils {
@@ -107,7 +104,7 @@ uint16_t ChannelMonitor::GetChannelOccupancy(uint8_t aChannel) const
 {
     uint16_t occupancy = 0;
 
-    VerifyOrExit((Radio::kChannelMin <= aChannel) && (aChannel <= Radio::kChannelMax));
+    VerifyOrExit(Radio::IsChannelValid(aChannel));
     occupancy = mChannelOccupancy[aChannel - Radio::kChannelMin];
 
 exit:

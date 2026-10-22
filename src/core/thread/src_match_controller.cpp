@@ -35,16 +35,7 @@
 
 #if OPENTHREAD_FTD
 
-#include "common/code_utils.hpp"
-#include "common/debug.hpp"
-#include "common/locator_getters.hpp"
-#include "common/log.hpp"
 #include "instance/instance.hpp"
-#include "mac/mac_types.hpp"
-#include "radio/radio.hpp"
-#include "thread/child.hpp"
-#include "thread/mesh_forwarder.hpp"
-#include "thread/thread_netif.hpp"
 
 namespace ot {
 
@@ -113,15 +104,15 @@ exit:
 
 void SourceMatchController::ClearTable(void)
 {
-    Get<Radio>().ClearSrcMatchShortEntries();
-    Get<Radio>().ClearSrcMatchExtEntries();
+    Get<Radio::Radio>().ClearSrcMatchShortEntries();
+    Get<Radio::Radio>().ClearSrcMatchExtEntries();
     LogDebg("Cleared all entries");
 }
 
 void SourceMatchController::Enable(bool aEnable)
 {
     mEnabled = aEnable;
-    Get<Radio>().EnableSrcMatch(mEnabled);
+    Get<Radio::Radio>().EnableSrcMatch(mEnabled);
     LogDebg("%sabling", mEnabled ? "En" : "Dis");
 }
 
@@ -150,16 +141,13 @@ Error SourceMatchController::AddAddress(const Child &aChild)
 
     if (aChild.IsIndirectSourceMatchShort())
     {
-        error = Get<Radio>().AddSrcMatchShortEntry(aChild.GetRloc16());
+        error = Get<Radio::Radio>().AddSrcMatchShortEntry(aChild.GetRloc16());
 
         LogDebg("Adding short addr: 0x%04x -- %s (%d)", aChild.GetRloc16(), ErrorToString(error), error);
     }
     else
     {
-        Mac::ExtAddress address;
-
-        address.Set(aChild.GetExtAddress().m8, Mac::ExtAddress::kReverseByteOrder);
-        error = Get<Radio>().AddSrcMatchExtEntry(address);
+        error = Get<Radio::Radio>().AddSrcMatchExtEntry(aChild.GetExtAddress());
 
         LogDebg("Adding addr: %s -- %s (%d)", aChild.GetExtAddress().ToString().AsCString(), ErrorToString(error),
                 error);
@@ -181,16 +169,13 @@ void SourceMatchController::ClearEntry(Child &aChild)
 
     if (aChild.IsIndirectSourceMatchShort())
     {
-        error = Get<Radio>().ClearSrcMatchShortEntry(aChild.GetRloc16());
+        error = Get<Radio::Radio>().ClearSrcMatchShortEntry(aChild.GetRloc16());
 
         LogDebg("Clearing short addr: 0x%04x -- %s (%d)", aChild.GetRloc16(), ErrorToString(error), error);
     }
     else
     {
-        Mac::ExtAddress address;
-
-        address.Set(aChild.GetExtAddress().m8, Mac::ExtAddress::kReverseByteOrder);
-        error = Get<Radio>().ClearSrcMatchExtEntry(address);
+        error = Get<Radio::Radio>().ClearSrcMatchExtEntry(aChild.GetExtAddress());
 
         LogDebg("Clearing addr: %s -- %s (%d)", aChild.GetExtAddress().ToString().AsCString(), ErrorToString(error),
                 error);
